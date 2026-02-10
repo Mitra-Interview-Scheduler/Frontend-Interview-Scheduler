@@ -20,7 +20,7 @@ const adminLinks = [
 const hrLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/hr/dashboard' },
   { icon: Users, label: 'Candidates', path: '/hr/candidates' },
-  { icon: Calendar, label: 'Schedule Interview', path: '/hr/schedule' },
+
   { icon: UserCheck, label: 'Interviewer Availability', path: '/hr/availability' },
   { icon: Bell, label: 'Urgent Requests', path: '/hr/urgent' },
   { icon: Shield, label: 'Designations', path: '/hr/designations' },
