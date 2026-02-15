@@ -262,7 +262,7 @@ const HRDashboard = () => {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => navigate('/hr/schedule')}
+                  onClick={() => navigate('/hr/availability')}
                 >
                   Schedule New
                 </Button>
@@ -355,7 +355,7 @@ const HRDashboard = () => {
           {/* Quick Actions & Recent Candidates */}
           <div className="space-y-6">
             {/* Quick Actions */}
-            <Card className="shadow-elegant">
+            {/* <Card className="shadow-elegant">
               <CardHeader className="border-b bg-muted/30">
                 <CardTitle>Quick Actions</CardTitle>
                 <CardDescription>Frequently used functions</CardDescription>
@@ -363,7 +363,7 @@ const HRDashboard = () => {
               <CardContent className="pt-6">
                 <div className="space-y-3">
                   {[
-                    { label: 'Schedule Interview', icon: Calendar, path: '/hr/schedule', color: 'text-primary' },
+                   
                     { label: 'View Availability', icon: Clock, path: '/hr/availability', color: 'text-secondary' },
                     { label: 'Manage Candidates', icon: Users, path: '/hr/candidates', color: 'text-success' },
                   ].map((action, index) => {
@@ -388,7 +388,7 @@ const HRDashboard = () => {
                   })}
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Recent Candidates */}
             <Card className="shadow-elegant">
