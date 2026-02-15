@@ -340,9 +340,17 @@ const AvailabilityPage = () => {
               Manage your interview availability calendar
             </p>
           </div>
-          <Button
-            className="gap-2 shadow-lg hover:shadow-xl transition-all"
-            size="lg"
+         <Button
+            className="
+              gap-2
+              px-6 py-3
+              text-base font-semibold
+              rounded-2xl
+              shadow-md hover:shadow-xl
+              transition-all duration-200
+              hover:scale-105
+              active:scale-95
+            "
             onClick={() => {
               const today = new Date();
               setSelectedDate(today);
@@ -354,6 +362,7 @@ const AvailabilityPage = () => {
             <Plus className="w-5 h-5" />
             Add Time Slot
           </Button>
+
         </motion.div>
 
         {/* Stats Cards */}
