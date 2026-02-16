@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Plus, X, Loader2, Search, ChevronDown } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Plus, X, Loader2, Search, ChevronDown, TrendingUp } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -43,7 +43,10 @@ const ProfilePage = () => {
   const [technologies, setTechnologies] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [tiers, setTiers] = useState([]);
   const [interviewerTechs, setInterviewerTechs] = useState([]);
+  const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
+  const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
 
   useEffect(() => {
     loadProfileData();
@@ -64,14 +67,34 @@ const ProfilePage = () => {
     }
   }, [newSkill, technologies, interviewerTechs]);
 
+  // Load tiers when department changes
+  useEffect(() => {
+    if (profile?.department?.id) {
+      loadTiersForDepartment(profile.department.id);
+    } else {
+      setTiersForSelectedDept([]);
+      setDesignationsForSelectedTier([]);
+    }
+  }, [profile?.department?.id]);
+
+  // Load designations when tier changes
+  useEffect(() => {
+    if (profile?.currentDesignation?.tier?.id) {
+      loadDesignationsForTier(profile.currentDesignation.tier.id);
+    } else {
+      setDesignationsForSelectedTier([]);
+    }
+  }, [profile?.currentDesignation?.tier?.id]);
+
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, techList, deptList, desList, interviewerTechList] = await Promise.all([
+      const [profileData, techList, deptList, desList, tierList, interviewerTechList] = await Promise.all([
         profileAPI.getProfile(),
         profileAPI.getAllTechnologies(),
         profileAPI.getDepartments(),
         profileAPI.getDesignations(),
+        profileAPI.getTiers(),
         profileAPI.getInterviewerTechnologies()
       ]);
 
@@ -79,12 +102,41 @@ const ProfilePage = () => {
       setTechnologies(techList);
       setDepartments(deptList);
       setDesignations(desList);
+      setTiers(tierList);
       setInterviewerTechs(interviewerTechList);
+
+      // Load tiers and designations for current department/tier
+      if (profileData.department?.id) {
+        await loadTiersForDepartment(profileData.department.id);
+      }
+      if (profileData.currentDesignation?.tier?.id) {
+        await loadDesignationsForTier(profileData.currentDesignation.tier.id);
+      }
     } catch (error) {
       console.error('Error loading profile:', error);
       toast.error('Failed to load profile data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTiersForDepartment = async (departmentId) => {
+    try {
+      const tiersData = await profileAPI.getTiersByDepartment(departmentId);
+      setTiersForSelectedDept(tiersData.sort((a, b) => a.tierOrder - b.tierOrder));
+    } catch (error) {
+      console.error('Failed to load tiers:', error);
+      setTiersForSelectedDept([]);
+    }
+  };
+
+  const loadDesignationsForTier = async (tierId) => {
+    try {
+      const designationsData = await profileAPI.getDesignationsByTier(tierId);
+      setDesignationsForSelectedTier(designationsData.sort((a, b) => a.levelOrder - b.levelOrder));
+    } catch (error) {
+      console.error('Failed to load designations:', error);
+      setDesignationsForSelectedTier([]);
     }
   };
 
@@ -104,6 +156,9 @@ const ProfilePage = () => {
       
       setIsEditing(false);
       toast.success('Profile updated successfully!');
+      
+      // Reload profile to get updated data
+      await loadProfileData();
     } catch (error) {
       console.error('Error saving profile:', error);
       toast.error('Failed to update profile');
@@ -114,6 +169,67 @@ const ProfilePage = () => {
 
   const handleChange = (field, value) => {
     setProfile({ ...profile, [field]: value });
+  };
+
+  const handleDepartmentChange = async (deptId) => {
+    if (deptId === "NONE") {
+      setProfile({ 
+        ...profile, 
+        department: null,
+        currentDesignation: null
+      });
+      setTiersForSelectedDept([]);
+      setDesignationsForSelectedTier([]);
+      return;
+    }
+
+    const department = departments.find(d => d.id === parseInt(deptId));
+    setProfile({ 
+      ...profile, 
+      department,
+      currentDesignation: null // Reset designation when department changes
+    });
+    
+    // Load tiers for new department
+    if (deptId) {
+      await loadTiersForDepartment(parseInt(deptId));
+    } else {
+      setTiersForSelectedDept([]);
+      setDesignationsForSelectedTier([]);
+    }
+  };
+
+  const handleTierChange = async (tierId) => {
+    if (tierId === "NONE" || !tierId) {
+      setProfile({
+        ...profile,
+        currentDesignation: null
+      });
+      setDesignationsForSelectedTier([]);
+      return;
+    }
+
+    const tier = tiersForSelectedDept.find(t => t.id === parseInt(tierId));
+    
+    // Load designations for this tier
+    await loadDesignationsForTier(parseInt(tierId));
+    
+    // Keep current designation if it's in the new tier, otherwise reset
+    if (profile.currentDesignation?.tier?.id !== parseInt(tierId)) {
+      setProfile({
+        ...profile,
+        currentDesignation: null
+      });
+    }
+  };
+
+  const handleDesignationChange = (designationId) => {
+    if (designationId === "NONE") {
+      setProfile({ ...profile, currentDesignation: null });
+      return;
+    }
+    const designation = designationsForSelectedTier.find(d => d.id === parseInt(designationId));
+    setProfile({ ...profile, currentDesignation: designation });
   };
 
   const getInitials = () => {
@@ -133,7 +249,6 @@ const ProfilePage = () => {
     setShowSkillDropdown(false);
     
     try {
-      // Check if exact match exists in dropdown
       const exactMatch = technologies.find(
         t => t.name.toLowerCase() === newSkill.trim().toLowerCase()
       );
@@ -142,7 +257,6 @@ const ProfilePage = () => {
         await addSkillById(exactMatch.id);
         setNewSkill('');
       } else {
-        // Show modal to categorize new skill
         setShowNewSkillModal(true);
       }
     } catch (error) {
@@ -155,12 +269,10 @@ const ProfilePage = () => {
     if (!newSkill.trim()) return;
 
     try {
-      // Create new technology with category
       const newTech = await profileAPI.createTechnology(newSkill.trim(), newSkillCategory);
       setTechnologies([...technologies, newTech]);
       await addSkillById(newTech.id);
       
-      // Reset form
       setNewSkill('');
       setNewSkillCategory('Other');
       setShowNewSkillModal(false);
@@ -174,7 +286,6 @@ const ProfilePage = () => {
 
   const addSkillById = async (technologyId) => {
     try {
-      // Check if already added
       if (interviewerTechs.some(it => it.technology.id === technologyId)) {
         toast.warning('This skill is already added');
         return;
@@ -202,10 +313,8 @@ const ProfilePage = () => {
 
   const handleShowAllSkills = () => {
     if (showSkillDropdown) {
-      // If already showing, close it
       setShowSkillDropdown(false);
     } else {
-      // Show all available skills
       setFilteredTechnologies(
         technologies.filter(tech => 
           !interviewerTechs.some(it => it.technology.id === tech.id)
@@ -284,6 +393,11 @@ const ProfilePage = () => {
                   <p className="text-muted-foreground">
                     {profile.currentDesignation?.name || 'No designation'}
                   </p>
+                  {profile.currentDesignation?.tier && (
+                    <p className="text-sm text-muted-foreground">
+                      Tier {profile.currentDesignation.tier.tierOrder} - {profile.currentDesignation.tier.name}
+                    </p>
+                  )}
                   <Badge className="mt-2 bg-primary-light text-primary">
                     {profile.email}
                   </Badge>
@@ -384,70 +498,115 @@ const ProfilePage = () => {
             <Card className="shadow-elegant">
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
-                <CardDescription>Your role and department information</CardDescription>
+                <CardDescription>Your role, department, tier, and designation information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Department</Label>
-                    {isEditing ? (
-                      <Select
-                        value={profile.department?.id?.toString()}
-                        onValueChange={(value) =>
-                          handleChange('department', departments.find(d => d.id === parseInt(value)))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {departments.map((dept) => (
-                            <SelectItem key={dept.id} value={dept.id.toString()}>
-                              {dept.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        value={profile.department?.name || 'Not set'}
-                        disabled
-                        className="bg-muted"
-                      />
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Designation</Label>
-                    {isEditing ? (
-                      <Select
-                        value={profile.currentDesignation?.id?.toString()}
-                        onValueChange={(value) =>
-                          handleChange(
-                            'currentDesignation',
-                            designations.find(d => d.id === parseInt(value))
-                          )
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select designation" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {designations.map((des) => (
-                            <SelectItem key={des.id} value={des.id.toString()}>
-                              {des.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        value={profile.currentDesignation?.name || 'Not set'}
-                        disabled
-                        className="bg-muted"
-                      />
-                    )}
-                  </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Briefcase className="w-4 h-4" />
+                    Department
+                  </Label>
+                  {isEditing ? (
+                    <Select
+                      value={profile.department?.id?.toString() || "NONE"}
+                      onValueChange={handleDepartmentChange}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">None</SelectItem>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id.toString()}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={profile.department?.name || 'Not set'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  )}
                 </div>
+
+                {profile.department && (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Tier
+                      </Label>
+                      {isEditing ? (
+                        <Select
+                          value={profile.currentDesignation?.tier?.id?.toString() || "NONE"}
+                          onValueChange={handleTierChange}
+                          disabled={!profile.department?.id}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={profile.department?.id ? "Select tier" : "Select department first"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NONE">None</SelectItem>
+                            {tiersForSelectedDept.map((tier) => (
+                              <SelectItem key={tier.id} value={tier.id.toString()}>
+                                Tier {tier.tierOrder} - {tier.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={profile.currentDesignation?.tier 
+                            ? `Tier ${profile.currentDesignation.tier.tierOrder} - ${profile.currentDesignation.tier.name}` 
+                            : 'Not set'}
+                          disabled
+                          className="bg-muted"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Award className="w-4 h-4" />
+                        Designation
+                      </Label>
+                      {isEditing ? (
+                        <Select
+                          value={profile.currentDesignation?.id?.toString() || "NONE"}
+                          onValueChange={handleDesignationChange}
+                          disabled={!profile.currentDesignation?.tier?.id && designationsForSelectedTier.length === 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={
+                              profile.currentDesignation?.tier?.id 
+                                ? "Select designation" 
+                                : "Select tier first"
+                            } />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NONE">None</SelectItem>
+                            {designationsForSelectedTier.map((des) => (
+                              <SelectItem key={des.id} value={des.id.toString()}>
+                                Level {des.levelOrder} - {des.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={profile.currentDesignation?.name 
+                            ? `Level ${profile.currentDesignation.levelOrder} - ${profile.currentDesignation.name}` 
+                            : 'Not set'}
+                          disabled
+                          className="bg-muted"
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-2">
                   <Label>Years of Experience</Label>
@@ -493,7 +652,6 @@ const ProfilePage = () => {
                             }
                           }}
                           onBlur={() => {
-                            // Delay to allow click on dropdown items
                             setTimeout(() => setShowSkillDropdown(false), 200);
                           }}
                           className="pr-10"

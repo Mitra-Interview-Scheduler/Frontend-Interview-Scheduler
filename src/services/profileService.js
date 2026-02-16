@@ -55,6 +55,30 @@ export const profileAPI = {
   getDesignations: async () => {
     const response = await api.get('/designations');
     return response.data;
+  },
+
+  // Get designations by department
+  getDesignationsByDepartment: async (departmentId) => {
+    const response = await api.get(`/designations/department/${departmentId}`);
+    return response.data;
+  },
+
+  // Get designations by tier
+  getDesignationsByTier: async (tierId) => {
+    const response = await api.get(`/designations/tier/${tierId}`);
+    return response.data;
+  },
+
+  // Get all tiers
+  getTiers: async () => {
+    const response = await api.get('/tiers');
+    return response.data;
+  },
+
+  // Get tiers by department
+  getTiersByDepartment: async (departmentId) => {
+    const response = await api.get(`/tiers/department/${departmentId}`);
+    return response.data;
   }
 };
 

@@ -1,4 +1,4 @@
-// src/pages/hr/AvailabilityViewPage.jsx - UPDATED WITH CANDIDATE SELECTION
+// src/pages/hr/AvailabilityViewPage.jsx - UPDATED WITH FIXED TIER FILTERING
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
-import { Calendar as CalendarIcon, Filter, X, User, Mail, Briefcase, Code, Clock, Send, TrendingUp, Award, Search } from 'lucide-react';
+import { Calendar as CalendarIcon, Filter, X, User, Mail, Briefcase, Code, Clock, Send, TrendingUp, Award, Search, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
@@ -48,8 +48,10 @@ const AvailabilityViewPage = () => {
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [selectedDeptForDesignation, setSelectedDeptForDesignation] = useState('');
   const [minDesignationLevel, setMinDesignationLevel] = useState('');
-  const [minTierOrder, setMinTierOrder] = useState('');
+  const [selectedTierInDept, setSelectedTierInDept] = useState('');
   const [designationsForSelectedDept, setDesignationsForSelectedDept] = useState([]);
+  const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
+  const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   
   // Dialog states
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
@@ -70,16 +72,29 @@ const AvailabilityViewPage = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [filterDept, filterTech, minExperience, dateRange, selectedDeptForDesignation, minDesignationLevel, minTierOrder]);
+  }, [filterDept, filterTech, minExperience, dateRange, selectedDeptForDesignation, selectedTierInDept, minDesignationLevel]);
 
   useEffect(() => {
     if (selectedDeptForDesignation) {
-      loadDesignationsForDepartment(selectedDeptForDesignation);
+      loadTiersAndDesignationsForDepartment(selectedDeptForDesignation);
     } else {
+      setTiersForSelectedDept([]);
       setDesignationsForSelectedDept([]);
+      setSelectedTierInDept('');
       setMinDesignationLevel('');
     }
   }, [selectedDeptForDesignation]);
+
+  useEffect(() => {
+    if (selectedTierInDept) {
+      // selectedTierInDept now contains tier ID, not tierOrder
+      const tierId = parseInt(selectedTierInDept);
+      loadDesignationsForTier(tierId);
+    } else {
+      setDesignationsForSelectedTier([]);
+      setMinDesignationLevel('');
+    }
+  }, [selectedTierInDept]);
 
   const loadInitialData = async () => {
     try {
@@ -127,12 +142,31 @@ const AvailabilityViewPage = () => {
     }
   };
 
-  const loadDesignationsForDepartment = async (departmentId) => {
+  const loadTiersAndDesignationsForDepartment = async (departmentId) => {
     try {
-      const designations = await designationAPI.getDesignationsByDepartment(parseInt(departmentId));
-      setDesignationsForSelectedDept(designations.sort((a, b) => a.levelOrder - b.levelOrder));
+      const [tiersData, designationsData] = await Promise.all([
+        tierAPI.getTiersByDepartment(parseInt(departmentId)),
+        designationAPI.getDesignationsByDepartment(parseInt(departmentId))
+      ]);
+      setTiersForSelectedDept(tiersData.sort((a, b) => a.tierOrder - b.tierOrder));
+      setDesignationsForSelectedDept(designationsData.sort((a, b) => {
+        // Sort by tier first, then by level within tier
+        if (a.tierOrder !== b.tierOrder) {
+          return a.tierOrder - b.tierOrder;
+        }
+        return a.levelOrder - b.levelOrder;
+      }));
     } catch (error) {
-      console.error('Failed to load designations:', error);
+      console.error('Failed to load tiers and designations:', error);
+    }
+  };
+
+  const loadDesignationsForTier = async (tierId) => {
+    try {
+      const designationsData = await designationAPI.getDesignationsByTier(parseInt(tierId));
+      setDesignationsForSelectedTier(designationsData.sort((a, b) => a.levelOrder - b.levelOrder));
+    } catch (error) {
+      console.error('Failed to load designations for tier:', error);
     }
   };
 
@@ -140,6 +174,13 @@ const AvailabilityViewPage = () => {
     if (loading) return;
 
     try {
+      // Get tierOrder from selected tier ID
+      let tierOrderToSend = null;
+      if (selectedTierInDept) {
+        const selectedTier = tiersForSelectedDept.find(t => t.id.toString() === selectedTierInDept);
+        tierOrderToSend = selectedTier ? selectedTier.tierOrder : null;
+      }
+
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
@@ -147,11 +188,15 @@ const AvailabilityViewPage = () => {
         startDateTime: dateRange.start ? dateRange.start.toISOString() : null,
         endDateTime: dateRange.end ? dateRange.end.toISOString() : null,
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
-        minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null,
-        minTierId: minTierOrder ? parseInt(minTierOrder) : null
+        minTierId: tierOrderToSend,  // Send tierOrder, not tier ID
+        minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null
       };
 
+      console.log('Applying filters:', filters);
+
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
+
+      console.log('Received data:', data);
 
       const formattedEvents = data.map(slot => ({
         id: slot.slotId,
@@ -172,6 +217,11 @@ const AvailabilityViewPage = () => {
       setEvents(formattedEvents);
     } catch (error) {
       console.error('Filter error:', error);
+      toast({
+        title: 'Error applying filters',
+        description: error.response?.data?.message || 'Failed to filter availability',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -258,8 +308,10 @@ const AvailabilityViewPage = () => {
     setDateRange({ start: null, end: null });
     setSelectedDeptForDesignation('');
     setMinDesignationLevel('');
-    setMinTierOrder('');
+    setSelectedTierInDept('');
     setDesignationsForSelectedDept([]);
+    setTiersForSelectedDept([]);
+    setDesignationsForSelectedTier([]);
   };
 
   const eventStyleGetter = () => {
@@ -370,15 +422,19 @@ const AvailabilityViewPage = () => {
                 />
               </div>
 
-              {/* Department for Designation Filter */}
+              {/* Department for Tier/Designation Filter */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Award className="w-4 h-4" />
-                  Filter by Designation Level - Department
+                  <Briefcase className="w-4 h-4" />
+                  Department for Tier/Level Filter
                 </Label>
                 <Select
                   value={selectedDeptForDesignation || "NONE"}
-                  onValueChange={(value) => setSelectedDeptForDesignation(value === "NONE" ? "" : value)}
+                  onValueChange={(value) => {
+                    setSelectedDeptForDesignation(value === "NONE" ? "" : value);
+                    setSelectedTierInDept('');
+                    setMinDesignationLevel('');
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select Department" />
@@ -394,53 +450,71 @@ const AvailabilityViewPage = () => {
                 </Select>
               </div>
 
-              {/* Min Designation Level Filter */}
+              {/* Min Tier Filter - Only shows tiers for selected department */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Award className="w-4 h-4" />
+                  Min. Tier in Department
+                </Label>
+                <Select
+                  value={selectedTierInDept || "ANY"}
+                  onValueChange={(value) => {
+                    if (value === "ANY") {
+                      setSelectedTierInDept('');
+                      setMinDesignationLevel('');
+                    } else {
+                      // Store tier ID (for API call) and tierOrder (for filter)
+                      setSelectedTierInDept(value);
+                      setMinDesignationLevel('');
+                    }
+                  }}
+                  disabled={!selectedDeptForDesignation}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedDeptForDesignation ? "Select Tier" : "Select Department First"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ANY">Any Tier</SelectItem>
+                    {tiersForSelectedDept.map((tier) => (
+                      <SelectItem key={tier.id} value={tier.id.toString()} data-tier-order={tier.tierOrder}>
+                        Tier {tier.tierOrder} - {tier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground flex items-start gap-1">
+                  <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>Shows interviewers in this tier or higher within the selected department</span>
+                </p>
+              </div>
+
+              {/* Min Designation Level Filter - Shows levels for selected tier */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
-                  Min. Designation Level
+                  Min. Level in Tier
                 </Label>
                 <Select
                   value={minDesignationLevel || "ANY"}
                   onValueChange={(value) => setMinDesignationLevel(value === "ANY" ? "" : value)}
-                  disabled={!selectedDeptForDesignation}
+                  disabled={!selectedTierInDept}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={selectedDeptForDesignation ? "Select Level" : "Select Department First"} />
+                    <SelectValue placeholder={selectedTierInDept ? "Select Level" : "Select Tier First"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ANY">Any Level</SelectItem>
-                    {designationsForSelectedDept.map((desig) => (
+                    {designationsForSelectedTier.map((desig) => (
                       <SelectItem key={desig.id} value={desig.levelOrder.toString()}>
                         Level {desig.levelOrder} - {desig.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Min Tier Filter */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Award className="w-4 h-4" />
-                  Min. Tier
-                </Label>
-                <Select
-                  value={minTierOrder || "ANY"}
-                  onValueChange={(value) => setMinTierOrder(value === "ANY" ? "" : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Any Tier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ANY">Any Tier</SelectItem>
-                    {tiers.sort((a, b) => a.tierOrder - b.tierOrder).map((tier) => (
-                      <SelectItem key={tier.id} value={tier.tierOrder.toString()}>
-                        Tier {tier.tierOrder} - {tier.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <p className="text-xs text-muted-foreground flex items-start gap-1">
+                  <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>Within the selected tier, shows this level or higher. Note: Any level in higher tier also passes.</span>
+                </p>
               </div>
             </div>
 
@@ -659,13 +733,14 @@ const AvailabilityViewPage = () => {
                 <div className="space-y-2">
                   <Label htmlFor="designation">Designation (Optional)</Label>
                   <Select
-                    value={requestForm.candidateDesignationId?.toString() || ""}
-                    onValueChange={(value) => setRequestForm({ ...requestForm, candidateDesignationId: parseInt(value) })}
+                    value={requestForm.candidateDesignationId?.toString() || "NONE"}
+                    onValueChange={(value) => setRequestForm({ ...requestForm, candidateDesignationId: value === "NONE" ? '' : parseInt(value) })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select designation" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="NONE">None</SelectItem>
                       {designations.map((desig) => (
                         <SelectItem key={desig.id} value={desig.id.toString()}>
                           {desig.name}
