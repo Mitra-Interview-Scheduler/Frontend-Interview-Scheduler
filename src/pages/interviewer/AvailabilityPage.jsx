@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -24,6 +24,13 @@ const localizer = dateFnsLocalizer({
   getDay,
   locales: { 'en-US': enUS },
 });
+
+// Status → colour mapping (used in both eventStyleGetter and the legend)
+const STATUS_COLORS = {
+  available: { bg: '#6366f1', border: '#4f46e5', label: 'Available' },
+  booked:    { bg: '#10b981', border: '#059669', label: 'Booked' },
+  blocked:   { bg: '#f59e0b', border: '#d97706', label: 'Blocked' },
+};
 
 const AvailabilityPage = () => {
   const [events, setEvents] = useState([]);
@@ -44,17 +51,21 @@ const AvailabilityPage = () => {
     try {
       setLoading(true);
       const data = await availabilityAPI.getMyAvailability();
-      
+
       const formattedEvents = data.map(slot => ({
         id: slot.id,
-        title: slot.description || (slot.status === 'BOOKED' ? 'Interview Scheduled' : 'Available'),
+        // Show candidate name on booked slots when available
+        title: slot.status === 'BOOKED'
+          ? `🔒 ${slot.candidateName ? slot.candidateName : 'Interview Scheduled'}`
+          : slot.description || 'Available',
         start: new Date(slot.startDateTime),
         end: new Date(slot.endDateTime),
         status: slot.status.toLowerCase(),
         description: slot.description,
-        interviewScheduleId: slot.interviewScheduleId
+        candidateName: slot.candidateName,
+        interviewScheduleId: slot.interviewScheduleId,
       }));
-      
+
       setEvents(formattedEvents);
     } catch (error) {
       toast({
@@ -78,8 +89,6 @@ const AvailabilityPage = () => {
 
   const handleSelectSlot = ({ start }) => {
     const now = new Date();
-    
-    // Check if selected date/time is in the past
     if (start < now) {
       toast({
         title: 'Cannot select past time',
@@ -93,58 +102,57 @@ const AvailabilityPage = () => {
 
     if (start instanceof Date) {
       const isMonthViewClick = start.getHours() === 0 && start.getMinutes() === 0;
-      
       let startDate = new Date(start);
-      if (isMonthViewClick) {
-        startDate.setHours(9, 0, 0, 0);
-      }
-      
-      // Double check the adjusted time isn't in the past
+      if (isMonthViewClick) startDate.setHours(9, 0, 0, 0);
+
       if (startDate < now) {
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(9, 0, 0, 0);
         startDate = tomorrow;
       }
-      
+
       const end = new Date(startDate.getTime() + 60 * 60 * 1000);
       setStartTime(format(startDate, 'HH:mm'));
       setEndTime(format(end, 'HH:mm'));
 
       toast({
-        title: 'Time range selected',
+        title: 'Date selected',
         description: `${format(startDate, 'MMM dd, yyyy')} • ${format(startDate, 'HH:mm')} - ${format(end, 'HH:mm')}`,
+      });
+    }
+  };
+
+  /** Clicking a BOOKED event shows its info; available events do nothing extra. */
+  const handleEventClick = (event) => {
+    if (event.status === 'booked') {
+      toast({
+        title: '🔒 Interview Scheduled',
+        description: event.candidateName
+          ? `Candidate: ${event.candidateName} • ${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`
+          : `${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`,
       });
     }
   };
 
   const handleStartTimeChange = (newStartTime) => {
     setStartTime(newStartTime);
-    
-    const [startHour, startMin] = newStartTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
-    
-    if (endMinutes - startMinutes < 60) {
-      const newEndHour = Math.floor((startMinutes + 60) / 60);
-      const newEndMin = (startMinutes + 60) % 60;
-      
-      if (newEndHour < 19) {
-        setEndTime(`${newEndHour.toString().padStart(2, '0')}:${newEndMin.toString().padStart(2, '0')}`);
+    const [sh, sm] = newStartTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    const endMins   = eh * 60 + em;
+    if (endMins - startMins < 60) {
+      const newEnd = startMins + 60;
+      if (Math.floor(newEnd / 60) < 19) {
+        setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
       }
     }
   };
 
   const handleEndTimeChange = (newEndTime) => {
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = newEndTime.split(':').map(Number);
-    
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
-    
-    if (endMinutes - startMinutes >= 60) {
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = newEndTime.split(':').map(Number);
+    if ((eh * 60 + em) - (sh * 60 + sm) >= 60) {
       setEndTime(newEndTime);
     } else {
       toast({
@@ -157,39 +165,23 @@ const AvailabilityPage = () => {
 
   const handleAddSlot = async () => {
     if (!selectedDate) {
-      toast({
-        title: 'No date selected',
-        description: 'Please select a date on the calendar first',
-        variant: 'destructive',
-      });
+      toast({ title: 'No date selected', description: 'Please click a date on the calendar first', variant: 'destructive' });
       return;
     }
 
-    const baseDate = new Date(selectedDate);
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-
-    const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), startHour, startMin, 0, 0);
-    const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), endHour, endMin, 0, 0);
-
-    // Validate that the slot is not in the past
+    const base = new Date(selectedDate);
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh, sm, 0, 0);
+    const end   = new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh, em, 0, 0);
     const now = new Date();
+
     if (start < now) {
-      toast({
-        title: 'Cannot add past time slot',
-        description: 'The selected time is in the past. Please choose a future date and time.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Cannot add past time slot', description: 'Choose a future date and time.', variant: 'destructive' });
       return;
     }
-
-    // Validate that end time is after start time
     if (end <= start) {
-      toast({
-        title: 'Invalid time range',
-        description: 'End time must be after start time',
-        variant: 'destructive',
-      });
+      toast({ title: 'Invalid time range', description: 'End time must be after start time.', variant: 'destructive' });
       return;
     }
 
@@ -197,24 +189,22 @@ const AvailabilityPage = () => {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
         startDateTime: start.toISOString(),
         endDateTime: end.toISOString(),
-        description: description || null
+        description: description || null,
       });
 
-      const newEvent = {
+      setEvents([...events, {
         id: newSlot.id,
         title: newSlot.description || 'Available',
         start: new Date(newSlot.startDateTime),
         end: new Date(newSlot.endDateTime),
         status: newSlot.status.toLowerCase(),
-        description: newSlot.description
-      };
+        description: newSlot.description,
+      }]);
 
-      setEvents([...events, newEvent]);
       setSelectedDate(null);
       setStartTime('09:00');
       setEndTime('10:00');
       setDescription('');
-
       await loadStats();
 
       toast({
@@ -235,11 +225,7 @@ const AvailabilityPage = () => {
       await availabilityAPI.deleteAvailabilitySlot(eventId);
       setEvents(events.filter(e => e.id !== eventId));
       await loadStats();
-      
-      toast({
-        title: '✓ Time slot deleted',
-        description: 'The availability slot has been removed',
-      });
+      toast({ title: '✓ Time slot deleted', description: 'Availability slot removed.' });
     } catch (error) {
       toast({
         title: 'Failed to delete slot',
@@ -250,75 +236,46 @@ const AvailabilityPage = () => {
   };
 
   const eventStyleGetter = (event) => {
-    let backgroundColor = '#6366f1';
-    let borderColor = '#4f46e5';
-    
-    if (event.status === 'booked') {
-      backgroundColor = '#10b981';
-      borderColor = '#059669';
-    } else if (event.status === 'blocked') {
-      backgroundColor = '#f59e0b';
-      borderColor = '#d97706';
-    }
-
+    const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
     return {
       style: {
-        backgroundColor,
+        backgroundColor: colors.bg,
         borderRadius: '6px',
-        opacity: 0.95,
+        opacity: event.status === 'booked' ? 0.85 : 0.95,
         color: 'white',
-        border: `2px solid ${borderColor}`,
+        border: `2px solid ${colors.border}`,
         display: 'block',
         padding: '6px 10px',
         fontSize: '13px',
         fontWeight: '500',
         boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+        cursor: event.status === 'booked' ? 'default' : 'pointer',
       },
     };
   };
 
   const slotPropGetter = (date) => {
-    const now = new Date();
-    const isPast = date < now;
-    
-    if (isPast) {
-      return {
-        className: 'past-time-slot',
-        style: {
-          backgroundColor: 'rgba(0, 0, 0, 0.02)',
-          cursor: 'not-allowed',
-          pointerEvents: 'none',
-        }
-      };
-    }
-    
+    const isPast = date < new Date();
+    if (isPast) return {
+      className: 'past-time-slot',
+      style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed', pointerEvents: 'none' },
+    };
     return {};
   };
 
   const dayPropGetter = (date) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const isPast = checkDate < today;
-    
-    if (isPast) {
-      return {
-        className: 'past-day',
-        style: {
-          backgroundColor: 'rgba(0, 0, 0, 0.02)',
-          cursor: 'not-allowed',
-        }
-      };
-    }
-    
+    const check = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (check < today) return {
+      className: 'past-day',
+      style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' },
+    };
     return {};
   };
 
   const timeSlots = [];
-  for (let hour = 7; hour < 19; hour++) {
-    const time = `${hour.toString().padStart(2, '0')}:00`;
-    timeSlots.push(time);
-  }
+  for (let h = 7; h < 19; h++) timeSlots.push(`${String(h).padStart(2, '0')}:00`);
 
   const upcomingEvents = events
     .filter(e => new Date(e.start) >= new Date())
@@ -329,31 +286,17 @@ const AvailabilityPage = () => {
     <Layout>
       <div className="space-y-6 pb-8">
         {/* Header */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
-            <p className="text-muted-foreground text-lg">
-              Manage your interview availability calendar
-            </p>
+            <p className="text-muted-foreground text-lg">Manage your interview availability calendar</p>
           </div>
-         <Button
-            className="
-              gap-2
-              px-6 py-3
-              text-base font-semibold
-              rounded-2xl
-              shadow-md hover:shadow-xl
-              transition-all duration-200
-              hover:scale-105
-              active:scale-95
-            "
+          <Button
+            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md hover:shadow-xl
+              transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => {
-              const today = new Date();
-              setSelectedDate(today);
+              setSelectedDate(new Date());
               setStartTime('09:00');
               setEndTime('10:00');
               setDescription('');
@@ -362,135 +305,76 @@ const AvailabilityPage = () => {
             <Plus className="w-5 h-5" />
             Add Time Slot
           </Button>
-
         </motion.div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="shadow-lg border-primary/20 hover:shadow-xl transition-shadow overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16" />
-              <CardContent className="pt-6 relative">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Available Slots</p>
-                    <p className="text-4xl font-bold text-primary mt-1">{stats.availableSlots}</p>
+          {[
+            { label: 'Available Slots', value: stats.availableSlots, color: 'text-primary', bg: 'bg-primary/10', icon: CalendarIcon },
+            { label: 'Booked Slots',    value: stats.bookedSlots,    color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Clock },
+            { label: 'Total Hours',     value: Math.round((stats.availableSlots + stats.bookedSlots) * 1.5), color: 'text-secondary', bg: 'bg-secondary/10', icon: AlertCircle },
+          ].map(({ label, value, color, bg, icon: Icon }, i) => (
+            <motion.div key={label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * (i + 1) }}>
+              <Card className="shadow-lg hover:shadow-xl transition-shadow overflow-hidden">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
+                      <p className={`text-4xl font-bold ${color} mt-1`}>{value}</p>
+                    </div>
+                    <div className={`p-4 ${bg} rounded-xl`}>
+                      <Icon className={`w-7 h-7 ${color}`} />
+                    </div>
                   </div>
-                  <div className="p-4 bg-primary/10 rounded-xl">
-                    <CalendarIcon className="w-7 h-7 text-primary" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="shadow-lg border-success/20 hover:shadow-xl transition-shadow overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-success/5 rounded-full -mr-16 -mt-16" />
-              <CardContent className="pt-6 relative">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Booked Slots</p>
-                    <p className="text-4xl font-bold text-success mt-1">{stats.bookedSlots}</p>
-                  </div>
-                  <div className="p-4 bg-success/10 rounded-xl">
-                    <Clock className="w-7 h-7 text-success" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="shadow-lg border-secondary/20 hover:shadow-xl transition-shadow overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/5 rounded-full -mr-16 -mt-16" />
-              <CardContent className="pt-6 relative">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Total Hours</p>
-                    <p className="text-4xl font-bold text-secondary mt-1">
-                      {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-secondary/10 rounded-xl">
-                    <AlertCircle className="w-7 h-7 text-secondary" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
         </div>
 
-        {/* Main Calendar Section */}
+        {/* Calendar + Sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Calendar Card */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="lg:col-span-3"
-          >
+          {/* Calendar */}
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
+            className="lg:col-span-3">
             <Card className="shadow-xl border-t-4 border-t-primary/50">
               <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <CalendarIcon className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-2xl">Availability Calendar</CardTitle>
-                      <CardDescription className="mt-1">
-                        Click on a date to add availability slots. Green slots are already booked for interviews.
-                      </CardDescription>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <CalendarIcon className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl">Availability Calendar</CardTitle>
+                    <CardDescription className="mt-1">
+                      Click a date to add availability. Green = already booked for an interview.
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
                 <AnimatePresence mode="wait">
                   {loading ? (
-                    <motion.div
-                      key="loading"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="h-[700px] flex items-center justify-center"
-                    >
+                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="h-[700px] flex items-center justify-center">
                       <div className="text-center">
                         <div className="relative w-16 h-16 mx-auto mb-6">
-                          <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
-                          <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin"></div>
+                          <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
+                          <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
                         </div>
-                        <p className="text-muted-foreground text-lg font-medium">Loading calendar...</p>
+                        <p className="text-muted-foreground text-lg font-medium">Loading calendar…</p>
                       </div>
                     </motion.div>
                   ) : (
-                    <motion.div
-                      key="calendar"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
+                    <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="availability-calendar-container bg-gradient-to-br from-background to-muted/20 rounded-xl p-6 border-2 shadow-inner"
-                      style={{ height: '700px', display: 'flex', flexDirection: 'column' }}
-                    >
+                      style={{ height: '700px', display: 'flex', flexDirection: 'column' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
                         startAccessor="start"
                         endAccessor="end"
                         onSelectSlot={handleSelectSlot}
+                        onSelectEvent={handleEventClick}
                         onView={(view) => setCurrentView(view)}
                         selectable
                         eventPropGetter={eventStyleGetter}
@@ -508,9 +392,9 @@ const AvailabilityPage = () => {
                         showMultiDayTimes
                         formats={{
                           timeGutterFormat: 'HH:mm',
-                          eventTimeRangeFormat: ({ start, end }) => 
+                          eventTimeRangeFormat: ({ start, end }) =>
                             `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`,
-                          agendaTimeRangeFormat: ({ start, end }) => 
+                          agendaTimeRangeFormat: ({ start, end }) =>
                             `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`,
                         }}
                       />
@@ -522,33 +406,25 @@ const AvailabilityPage = () => {
           </motion.div>
 
           {/* Sidebar */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-            className="space-y-6"
-          >
-            {/* Add Slot Card */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
+            className="space-y-6">
+
+            {/* Add Slot */}
             <Card className="shadow-lg border-t-4 border-t-primary hover:shadow-xl transition-shadow">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl flex items-center gap-2">
                   <Plus className="w-5 h-5 text-primary" />
                   Add Availability Slot
                 </CardTitle>
-                <CardDescription>
-                  Select time range when you're available
-                </CardDescription>
+                <CardDescription>Select time range when you're available</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4 py-2">
                   <AnimatePresence>
                     {selectedDate && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20"
-                      >
+                        className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20">
                         <p className="text-sm font-semibold text-primary flex items-center gap-2">
                           <CalendarIcon className="w-4 h-4" />
                           {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
@@ -571,31 +447,18 @@ const AvailabilityPage = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Start Time</Label>
                       <Select value={startTime} onValueChange={handleStartTimeChange}>
-                        <SelectTrigger className="border-2">
-                          <SelectValue placeholder="Start" />
-                        </SelectTrigger>
+                        <SelectTrigger className="border-2"><SelectValue placeholder="Start" /></SelectTrigger>
                         <SelectContent>
-                          {timeSlots.map((time) => (
-                            <SelectItem key={time} value={time}>
-                              {time}
-                            </SelectItem>
-                          ))}
+                          {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">End Time</Label>
                       <Select value={endTime} onValueChange={handleEndTimeChange}>
-                        <SelectTrigger className="border-2">
-                          <SelectValue placeholder="End" />
-                        </SelectTrigger>
+                        <SelectTrigger className="border-2"><SelectValue placeholder="End" /></SelectTrigger>
                         <SelectContent>
-                          {timeSlots.map((time) => (
-                            <SelectItem key={time} value={time}>
-                              {time}
-                            </SelectItem>
-                          ))}
+                          {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -603,49 +466,32 @@ const AvailabilityPage = () => {
                 </div>
               </CardContent>
               <div className="flex justify-end gap-2 px-6 pb-6">
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setSelectedDate(null);
-                    setStartTime('09:00');
-                    setEndTime('10:00');
-                    setDescription('');
-                  }}
-                  className="border-2"
-                >
+                <Button variant="outline" className="border-2"
+                  onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); }}>
                   Clear
                 </Button>
-                <Button 
-                  onClick={handleAddSlot} 
-                  className="shadow-md hover:shadow-lg transition-all"
-                >
+                <Button onClick={handleAddSlot} className="shadow-md hover:shadow-lg transition-all">
                   Add Slot
                 </Button>
               </div>
             </Card>
 
-            {/* Legend Card */}
+            {/* Legend */}
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Status Legend</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                  <div className="w-5 h-5 rounded-md shadow-sm" style={{ backgroundColor: '#6366f1' }}></div>
-                  <span className="text-sm font-medium">Available Slots</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                  <div className="w-5 h-5 rounded-md shadow-sm" style={{ backgroundColor: '#10b981' }}></div>
-                  <span className="text-sm font-medium">Booked Slots</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                  <div className="w-5 h-5 rounded-md shadow-sm" style={{ backgroundColor: '#f59e0b' }}></div>
-                  <span className="text-sm font-medium">Blocked Slots</span>
-                </div>
+                {Object.entries(STATUS_COLORS).map(([key, { bg, label }]) => (
+                  <div key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
+                    <div className="w-5 h-5 rounded-md shadow-sm" style={{ backgroundColor: bg }} />
+                    <span className="text-sm font-medium">{label}</span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
-            {/* Upcoming Slots Card */}
+            {/* Upcoming Slots */}
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -657,42 +503,41 @@ const AvailabilityPage = () => {
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                   {upcomingEvents.length === 0 ? (
                     <div className="text-center py-8">
-                      <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-muted/50 flex items-center justify-center">
-                        <Clock className="w-8 h-8 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm text-muted-foreground font-medium">
-                        No upcoming slots
-                      </p>
+                      <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground font-medium">No upcoming slots</p>
                     </div>
                   ) : (
                     upcomingEvents.map((event, index) => (
-                      <motion.div
-                        key={event.id}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
+                      <motion.div key={event.id}
+                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="group flex items-start justify-between p-3 rounded-lg border-2 hover:border-primary/50 hover:bg-accent/50 transition-all"
-                      >
+                        className="group flex items-start justify-between p-3 rounded-lg border-2 hover:border-primary/50 hover:bg-accent/50 transition-all">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-1">
                             <Clock className="w-4 h-4 text-muted-foreground" />
                             <span className="text-sm font-semibold">
                               {format(event.start, 'MMM dd, yyyy')}
                             </span>
                           </div>
-                          {event.description && (
-                            <p className="text-sm font-medium mb-2 text-foreground">{event.description}</p>
+                          {event.status === 'booked' && event.candidateName && (
+                            <div className="flex items-center gap-1 mb-1">
+                              <User className="w-3 h-3 text-emerald-600" />
+                              <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
+                            </div>
+                          )}
+                          {event.description && !event.description.startsWith('Interview:') && !event.description.startsWith('Panel Interview:') && (
+                            <p className="text-sm font-medium mb-1 text-foreground">{event.description}</p>
                           )}
                           <p className="text-xs text-muted-foreground font-medium">
-                            {format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}
+                            {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
                           </p>
                           <Badge
                             className={`mt-2 text-xs ${
                               event.status === 'available'
                                 ? 'bg-primary/10 text-primary border-primary/20'
                                 : event.status === 'booked'
-                                ? 'bg-success/10 text-success border-success/20'
-                                : 'bg-warning/10 text-warning border-warning/20'
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-100 text-amber-700 border-amber-200'
                             }`}
                             variant="outline"
                           >
@@ -700,12 +545,9 @@ const AvailabilityPage = () => {
                           </Badge>
                         </div>
                         {event.status === 'available' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <Button variant="ghost" size="sm"
                             onClick={() => handleDeleteSlot(event.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
+                            className="opacity-0 group-hover:opacity-100 transition-opacity">
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
