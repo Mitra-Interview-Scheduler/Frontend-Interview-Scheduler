@@ -1,3 +1,12 @@
+// src/pages/interviewer/AvailabilityPage.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// FIXED VERSION — same CSS engine as HR calendar:
+//   • plain height container (no flex fighting RBC layout)
+//   • no custom toolbar (let RBC measure correctly)
+//   • gradient event colors for available / booked / blocked
+//   • events stay inside 7am–7pm bounds, positioned correctly
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useState, useEffect } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
@@ -25,22 +34,36 @@ const localizer = dateFnsLocalizer({
   locales: { 'en-US': enUS },
 });
 
-// Status → colour mapping (used in both eventStyleGetter and the legend)
+// Status → colour mapping (gradient pairs)
 const STATUS_COLORS = {
-  available: { bg: '#6366f1', border: '#4f46e5', label: 'Available' },
-  booked:    { bg: '#10b981', border: '#059669', label: 'Booked' },
-  blocked:   { bg: '#f59e0b', border: '#d97706', label: 'Blocked' },
+  available: {
+    bg:     'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+    border: '#312e81',
+    solid:  '#6366f1',
+    label:  'Available',
+  },
+  booked: {
+    bg:     'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    border: '#065f46',
+    solid:  '#10b981',
+    label:  'Booked',
+  },
+  blocked: {
+    bg:     'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border: '#92400e',
+    solid:  '#f59e0b',
+    label:  'Blocked',
+  },
 };
 
 const AvailabilityPage = () => {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents]           = useState([]);
+  const [loading, setLoading]         = useState(true);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:00');
+  const [startTime, setStartTime]     = useState('09:00');
+  const [endTime, setEndTime]         = useState('10:00');
   const [description, setDescription] = useState('');
-  const [stats, setStats] = useState({ availableSlots: 0, bookedSlots: 0 });
-  const [currentView, setCurrentView] = useState('week');
+  const [stats, setStats]             = useState({ availableSlots: 0, bookedSlots: 0 });
 
   useEffect(() => {
     loadAvailability();
@@ -51,22 +74,18 @@ const AvailabilityPage = () => {
     try {
       setLoading(true);
       const data = await availabilityAPI.getMyAvailability();
-
-      const formattedEvents = data.map(slot => ({
-        id: slot.id,
-        // Show candidate name on booked slots when available
+      setEvents(data.map(slot => ({
+        id:                  slot.id,
         title: slot.status === 'BOOKED'
-          ? `🔒 ${slot.candidateName ? slot.candidateName : 'Interview Scheduled'}`
+          ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
           : slot.description || 'Available',
-        start: new Date(slot.startDateTime),
-        end: new Date(slot.endDateTime),
-        status: slot.status.toLowerCase(),
-        description: slot.description,
-        candidateName: slot.candidateName,
+        start:               new Date(slot.startDateTime),
+        end:                 new Date(slot.endDateTime),
+        status:              slot.status.toLowerCase(),
+        description:         slot.description,
+        candidateName:       slot.candidateName,
         interviewScheduleId: slot.interviewScheduleId,
-      }));
-
-      setEvents(formattedEvents);
+      })));
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -92,38 +111,33 @@ const AvailabilityPage = () => {
     if (start < now) {
       toast({
         title: 'Cannot select past time',
-        description: 'Please select a future date and time for availability',
+        description: 'Please select a future date and time',
         variant: 'destructive',
       });
       return;
     }
 
-    setSelectedDate(start);
-
-    if (start instanceof Date) {
-      const isMonthViewClick = start.getHours() === 0 && start.getMinutes() === 0;
-      let startDate = new Date(start);
-      if (isMonthViewClick) startDate.setHours(9, 0, 0, 0);
-
-      if (startDate < now) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(9, 0, 0, 0);
-        startDate = tomorrow;
-      }
-
-      const end = new Date(startDate.getTime() + 60 * 60 * 1000);
-      setStartTime(format(startDate, 'HH:mm'));
-      setEndTime(format(end, 'HH:mm'));
-
-      toast({
-        title: 'Date selected',
-        description: `${format(startDate, 'MMM dd, yyyy')} • ${format(startDate, 'HH:mm')} - ${format(end, 'HH:mm')}`,
-      });
+    let startDate = new Date(start);
+    const isMonthClick = startDate.getHours() === 0 && startDate.getMinutes() === 0;
+    if (isMonthClick) startDate.setHours(9, 0, 0, 0);
+    if (startDate < now) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+      startDate = tomorrow;
     }
+
+    const end = new Date(startDate.getTime() + 60 * 60 * 1000);
+    setSelectedDate(startDate);
+    setStartTime(format(startDate, 'HH:mm'));
+    setEndTime(format(end, 'HH:mm'));
+
+    toast({
+      title: 'Date selected',
+      description: `${format(startDate, 'MMM dd, yyyy')} • ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
+    });
   };
 
-  /** Clicking a BOOKED event shows its info; available events do nothing extra. */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
       toast({
@@ -135,25 +149,25 @@ const AvailabilityPage = () => {
     }
   };
 
-  const handleStartTimeChange = (newStartTime) => {
-    setStartTime(newStartTime);
-    const [sh, sm] = newStartTime.split(':').map(Number);
+  const handleStartTimeChange = (newStart) => {
+    setStartTime(newStart);
+    const [sh, sm] = newStart.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
-    const startMins = sh * 60 + sm;
-    const endMins   = eh * 60 + em;
-    if (endMins - startMins < 60) {
-      const newEnd = startMins + 60;
-      if (Math.floor(newEnd / 60) < 19) {
-        setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
+    if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
+      const newEndMins = sh * 60 + sm + 60;
+      if (Math.floor(newEndMins / 60) < 19) {
+        setEndTime(
+          `${String(Math.floor(newEndMins / 60)).padStart(2, '0')}:${String(newEndMins % 60).padStart(2, '0')}`
+        );
       }
     }
   };
 
-  const handleEndTimeChange = (newEndTime) => {
+  const handleEndTimeChange = (newEnd) => {
     const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = newEndTime.split(':').map(Number);
+    const [eh, em] = newEnd.split(':').map(Number);
     if ((eh * 60 + em) - (sh * 60 + sm) >= 60) {
-      setEndTime(newEndTime);
+      setEndTime(newEnd);
     } else {
       toast({
         title: 'Invalid time range',
@@ -165,16 +179,15 @@ const AvailabilityPage = () => {
 
   const handleAddSlot = async () => {
     if (!selectedDate) {
-      toast({ title: 'No date selected', description: 'Please click a date on the calendar first', variant: 'destructive' });
+      toast({ title: 'No date selected', description: 'Click a date on the calendar first', variant: 'destructive' });
       return;
     }
-
     const base = new Date(selectedDate);
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
     const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh, sm, 0, 0);
     const end   = new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh, em, 0, 0);
-    const now = new Date();
+    const now   = new Date();
 
     if (start < now) {
       toast({ title: 'Cannot add past time slot', description: 'Choose a future date and time.', variant: 'destructive' });
@@ -188,28 +201,25 @@ const AvailabilityPage = () => {
     try {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
         startDateTime: start.toISOString(),
-        endDateTime: end.toISOString(),
-        description: description || null,
+        endDateTime:   end.toISOString(),
+        description:   description || null,
       });
-
-      setEvents([...events, {
-        id: newSlot.id,
-        title: newSlot.description || 'Available',
-        start: new Date(newSlot.startDateTime),
-        end: new Date(newSlot.endDateTime),
-        status: newSlot.status.toLowerCase(),
+      setEvents(prev => [...prev, {
+        id:          newSlot.id,
+        title:       newSlot.description || 'Available',
+        start:       new Date(newSlot.startDateTime),
+        end:         new Date(newSlot.endDateTime),
+        status:      newSlot.status.toLowerCase(),
         description: newSlot.description,
       }]);
-
       setSelectedDate(null);
       setStartTime('09:00');
       setEndTime('10:00');
       setDescription('');
       await loadStats();
-
       toast({
         title: '✓ Time slot added',
-        description: `${format(start, 'MMM dd, yyyy')} • ${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`,
+        description: `${format(start, 'MMM dd, yyyy')} • ${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
       });
     } catch (error) {
       toast({
@@ -223,9 +233,9 @@ const AvailabilityPage = () => {
   const handleDeleteSlot = async (eventId) => {
     try {
       await availabilityAPI.deleteAvailabilitySlot(eventId);
-      setEvents(events.filter(e => e.id !== eventId));
+      setEvents(prev => prev.filter(e => e.id !== eventId));
       await loadStats();
-      toast({ title: '✓ Time slot deleted', description: 'Availability slot removed.' });
+      toast({ title: '✓ Time slot deleted' });
     } catch (error) {
       toast({
         title: 'Failed to delete slot',
@@ -235,42 +245,48 @@ const AvailabilityPage = () => {
     }
   };
 
+  // ── Event styling — gradients, left border accent, no position overrides ──
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
     return {
       style: {
-        backgroundColor: colors.bg,
-        borderRadius: '6px',
-        opacity: event.status === 'booked' ? 0.85 : 0.95,
-        color: 'white',
-        border: `2px solid ${colors.border}`,
-        display: 'block',
-        padding: '6px 10px',
-        fontSize: '13px',
-        fontWeight: '500',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
-        cursor: event.status === 'booked' ? 'default' : 'pointer',
+        background:    colors.bg,
+        borderRadius:  '5px',
+        opacity:       event.status === 'booked' ? 0.88 : 0.96,
+        color:         'white',
+        borderLeft:    `3px solid ${colors.border}`,
+        borderTop:     'none',
+        borderRight:   'none',
+        borderBottom:  'none',
+        padding:       '4px 8px',
+        fontSize:      '12px',
+        fontWeight:    '500',
+        boxShadow:     `0 2px 6px ${colors.solid}40`,
+        cursor:        event.status === 'booked' ? 'default' : 'pointer',
+        overflow:      'hidden',
       },
     };
   };
 
+  // Dim past slots — no pointer events
   const slotPropGetter = (date) => {
-    const isPast = date < new Date();
-    if (isPast) return {
-      className: 'past-time-slot',
-      style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed', pointerEvents: 'none' },
-    };
+    if (date < new Date()) {
+      return {
+        className: 'past-time-slot',
+        style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed', pointerEvents: 'none' },
+      };
+    }
     return {};
   };
 
+  // Dim past days in month view
   const dayPropGetter = (date) => {
-    const now = new Date();
+    const now   = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const check = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    if (check < today) return {
-      className: 'past-day',
-      style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' },
-    };
+    if (check < today) {
+      return { className: 'past-day', style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' } };
+    }
     return {};
   };
 
@@ -285,7 +301,8 @@ const AvailabilityPage = () => {
   return (
     <Layout>
       <div className="space-y-6 pb-8">
-        {/* Header */}
+
+        {/* ── Header ──────────────────────────────────────────────── */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between">
           <div>
@@ -293,8 +310,8 @@ const AvailabilityPage = () => {
             <p className="text-muted-foreground text-lg">Manage your interview availability calendar</p>
           </div>
           <Button
-            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md hover:shadow-xl
-              transition-all duration-200 hover:scale-105 active:scale-95"
+            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md
+              hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => {
               setSelectedDate(new Date());
               setStartTime('09:00');
@@ -302,17 +319,18 @@ const AvailabilityPage = () => {
               setDescription('');
             }}
           >
-            <Plus className="w-5 h-5" />
-            Add Time Slot
+            <Plus className="w-5 h-5" /> Add Time Slot
           </Button>
         </motion.div>
 
-        {/* Stats */}
+        {/* ── Stats ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
-            { label: 'Available Slots', value: stats.availableSlots, color: 'text-primary', bg: 'bg-primary/10', icon: CalendarIcon },
-            { label: 'Booked Slots',    value: stats.bookedSlots,    color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Clock },
-            { label: 'Total Hours',     value: Math.round((stats.availableSlots + stats.bookedSlots) * 1.5), color: 'text-secondary', bg: 'bg-secondary/10', icon: AlertCircle },
+            { label: 'Available Slots', value: stats.availableSlots,  color: 'text-indigo-600',  bg: 'bg-indigo-50',  icon: CalendarIcon },
+            { label: 'Booked Slots',    value: stats.bookedSlots,     color: 'text-emerald-600', bg: 'bg-emerald-50', icon: Clock },
+            { label: 'Total Hours',
+              value: Math.round((stats.availableSlots + stats.bookedSlots) * 1.5),
+              color: 'text-amber-600', bg: 'bg-amber-50', icon: AlertCircle },
           ].map(({ label, value, color, bg, icon: Icon }, i) => (
             <motion.div key={label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * (i + 1) }}>
               <Card className="shadow-lg hover:shadow-xl transition-shadow overflow-hidden">
@@ -332,25 +350,38 @@ const AvailabilityPage = () => {
           ))}
         </div>
 
-        {/* Calendar + Sidebar */}
+        {/* ── Calendar + Sidebar ──────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Calendar */}
+
+          {/* Calendar — 3/4 width */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
             className="lg:col-span-3">
-            <Card className="shadow-xl border-t-4 border-t-primary/50">
+            <Card className="shadow-xl border-t-4 border-t-indigo-400">
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <CalendarIcon className="w-6 h-6 text-primary" />
+                  <div className="p-2 bg-indigo-50 rounded-lg">
+                    <CalendarIcon className="w-6 h-6 text-indigo-600" />
                   </div>
                   <div>
                     <CardTitle className="text-2xl">Availability Calendar</CardTitle>
                     <CardDescription className="mt-1">
-                      Click a date to add availability. Green = already booked for an interview.
+                      Click a date to add availability. Emerald = already booked for an interview.
                     </CardDescription>
                   </div>
                 </div>
+
+                {/* Legend */}
+                <div className="flex items-center gap-5 mt-3 flex-wrap">
+                  {Object.entries(STATUS_COLORS).map(([key, { solid, label }]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-md shadow-sm"
+                        style={{ background: `linear-gradient(135deg, ${solid}, ${solid}cc)` }} />
+                      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+                    </div>
+                  ))}
+                </div>
               </CardHeader>
+
               <CardContent className="p-6">
                 <AnimatePresence mode="wait">
                   {loading ? (
@@ -358,16 +389,16 @@ const AvailabilityPage = () => {
                       className="h-[700px] flex items-center justify-center">
                       <div className="text-center">
                         <div className="relative w-16 h-16 mx-auto mb-6">
-                          <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-                          <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
+                          <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
+                          <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
                         </div>
                         <p className="text-muted-foreground text-lg font-medium">Loading calendar…</p>
                       </div>
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container bg-gradient-to-br from-background to-muted/20 rounded-xl p-6 border-2 shadow-inner"
-                      style={{ height: '700px', display: 'flex', flexDirection: 'column' }}>
+                      className="availability-calendar-container"
+                      style={{ height: '700px' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
@@ -375,12 +406,11 @@ const AvailabilityPage = () => {
                         endAccessor="end"
                         onSelectSlot={handleSelectSlot}
                         onSelectEvent={handleEventClick}
-                        onView={(view) => setCurrentView(view)}
                         selectable
                         eventPropGetter={eventStyleGetter}
                         slotPropGetter={slotPropGetter}
                         dayPropGetter={dayPropGetter}
-                        style={{ height: '100%', flex: 1 }}
+                        style={{ height: '100%' }}
                         views={['month', 'week', 'day']}
                         defaultView="week"
                         step={60}
@@ -390,12 +420,17 @@ const AvailabilityPage = () => {
                         scrollToTime={new Date(1970, 0, 1, 8, 0)}
                         popup
                         showMultiDayTimes
+                        tooltipAccessor={(event) => {
+                          if (event.status === 'booked')
+                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
+                          return `${event.title}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
+                        }}
                         formats={{
                           timeGutterFormat: 'HH:mm',
                           eventTimeRangeFormat: ({ start, end }) =>
-                            `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`,
+                            `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
                           agendaTimeRangeFormat: ({ start, end }) =>
-                            `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`,
+                            `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
                         }}
                       />
                     </motion.div>
@@ -405,16 +440,15 @@ const AvailabilityPage = () => {
             </Card>
           </motion.div>
 
-          {/* Sidebar */}
+          {/* ── Sidebar ─────────────────────────────────────────── */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
             className="space-y-6">
 
-            {/* Add Slot */}
-            <Card className="shadow-lg border-t-4 border-t-primary hover:shadow-xl transition-shadow">
+            {/* Add slot card */}
+            <Card className="shadow-lg border-t-4 border-t-indigo-500 hover:shadow-xl transition-shadow">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-primary" />
-                  Add Availability Slot
+                  <Plus className="w-5 h-5 text-indigo-500" /> Add Availability Slot
                 </CardTitle>
                 <CardDescription>Select time range when you're available</CardDescription>
               </CardHeader>
@@ -424,8 +458,8 @@ const AvailabilityPage = () => {
                     {selectedDate && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20">
-                        <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                        className="p-4 bg-gradient-to-r from-indigo-50 to-indigo-100/50 rounded-lg border-2 border-indigo-200">
+                        <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
                           <CalendarIcon className="w-4 h-4" />
                           {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
                         </p>
@@ -439,7 +473,7 @@ const AvailabilityPage = () => {
                       placeholder="e.g., Technical Interview, Code Review"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="border-2 focus:border-primary transition-colors"
+                      className="border-2 focus:border-indigo-400 transition-colors"
                     />
                   </div>
 
@@ -447,7 +481,7 @@ const AvailabilityPage = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Start Time</Label>
                       <Select value={startTime} onValueChange={handleStartTimeChange}>
-                        <SelectTrigger className="border-2"><SelectValue placeholder="Start" /></SelectTrigger>
+                        <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
@@ -456,7 +490,7 @@ const AvailabilityPage = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">End Time</Label>
                       <Select value={endTime} onValueChange={handleEndTimeChange}>
-                        <SelectTrigger className="border-2"><SelectValue placeholder="End" /></SelectTrigger>
+                        <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
@@ -470,33 +504,34 @@ const AvailabilityPage = () => {
                   onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); }}>
                   Clear
                 </Button>
-                <Button onClick={handleAddSlot} className="shadow-md hover:shadow-lg transition-all">
+                <Button onClick={handleAddSlot}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all">
                   Add Slot
                 </Button>
               </div>
             </Card>
 
-            {/* Legend */}
+            {/* Legend card */}
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Status Legend</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {Object.entries(STATUS_COLORS).map(([key, { bg, label }]) => (
+                {Object.entries(STATUS_COLORS).map(([key, { bg, solid, label }]) => (
                   <div key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                    <div className="w-5 h-5 rounded-md shadow-sm" style={{ backgroundColor: bg }} />
+                    <div className="w-5 h-5 rounded-md shadow-sm"
+                      style={{ background: bg }} />
                     <span className="text-sm font-medium">{label}</span>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            {/* Upcoming Slots */}
+            {/* Upcoming slots */}
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  Upcoming Slots
+                  <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -506,15 +541,17 @@ const AvailabilityPage = () => {
                       <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground font-medium">No upcoming slots</p>
                     </div>
-                  ) : (
-                    upcomingEvents.map((event, index) => (
+                  ) : upcomingEvents.map((event, index) => {
+                    const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
+                    return (
                       <motion.div key={event.id}
                         initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="group flex items-start justify-between p-3 rounded-lg border-2 hover:border-primary/50 hover:bg-accent/50 transition-all">
+                        className="group flex items-start justify-between p-3 rounded-lg border-2 hover:border-indigo-200 hover:bg-accent/50 transition-all">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <div className="w-2.5 h-2.5 rounded-full flex-none"
+                              style={{ backgroundColor: colors.solid }} />
                             <span className="text-sm font-semibold">
                               {format(event.start, 'MMM dd, yyyy')}
                             </span>
@@ -525,21 +562,22 @@ const AvailabilityPage = () => {
                               <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
                             </div>
                           )}
-                          {event.description && !event.description.startsWith('Interview:') && !event.description.startsWith('Panel Interview:') && (
-                            <p className="text-sm font-medium mb-1 text-foreground">{event.description}</p>
-                          )}
+                          {event.description &&
+                            !event.description.startsWith('Interview:') &&
+                            !event.description.startsWith('Panel Interview:') && (
+                              <p className="text-sm font-medium mb-1 text-foreground">{event.description}</p>
+                            )}
                           <p className="text-xs text-muted-foreground font-medium">
                             {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
                           </p>
                           <Badge
-                            className={`mt-2 text-xs ${
-                              event.status === 'available'
-                                ? 'bg-primary/10 text-primary border-primary/20'
-                                : event.status === 'booked'
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                : 'bg-amber-100 text-amber-700 border-amber-200'
-                            }`}
+                            className="mt-2 text-xs capitalize"
                             variant="outline"
+                            style={{
+                              borderColor: colors.solid + '40',
+                              color: colors.solid,
+                              backgroundColor: colors.solid + '10',
+                            }}
                           >
                             {event.status}
                           </Badge>
@@ -547,16 +585,17 @@ const AvailabilityPage = () => {
                         {event.status === 'available' && (
                           <Button variant="ghost" size="sm"
                             onClick={() => handleDeleteSlot(event.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
                       </motion.div>
-                    ))
-                  )}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
+
           </motion.div>
         </div>
       </div>
