@@ -1,12 +1,9 @@
+// src/services/hrAvailabilityAPI.js
 import api from './api';
 
 export const hrAvailabilityAPI = {
   /**
    * Get all available interviewer slots, with optional filters.
-   * If filters are provided, uses POST /hr/availability/filter
-   * Otherwise falls back to GET /hr/availability
-   * @param {Object|null} filters - AvailabilityFilterDto fields (optional)
-   * @returns {Promise<Array>} List of available slots
    */
   getAllAvailability: async (filters = null) => {
     if (filters && Object.values(filters).some(v => v !== null && v !== undefined)) {
@@ -19,9 +16,6 @@ export const hrAvailabilityAPI = {
 
   /**
    * Schedule a single-interviewer interview.
-   * Supports sub-slot booking (backend handles slot splitting).
-   * @param {Object} data - CreateInterviewRequestDto
-   * @returns {Promise<Object>} Created interview request
    */
   createInterviewRequest: async (data) => {
     const response = await api.post('/hr/interviews', data);
@@ -30,17 +24,15 @@ export const hrAvailabilityAPI = {
 
   /**
    * Cancel a single-interviewer interview request.
-   * Backend restores the slot to AVAILABLE status.
-   * @param {string|number} requestId 
+   * Backend: DELETE /api/hr/interviews/{requestId}
+   * This restores the slot to AVAILABLE and notifies the interviewer.
    */
   cancelInterviewRequest: async (requestId) => {
     await api.delete(`/hr/interviews/${requestId}`);
-    // no content expected → no return
   },
 
   /**
    * Get all interview requests created by the current HR user.
-   * @returns {Promise<Array>} List of interview requests
    */
   getHRRequests: async () => {
     const response = await api.get('/hr/interviews/my-requests');
@@ -48,9 +40,7 @@ export const hrAvailabilityAPI = {
   },
 
   /**
-   * Create a panel interview (one candidate, multiple interviewers, same time slot).
-   * @param {Object} data - CreatePanelInterviewDto
-   * @returns {Promise<Object>} Created panel interview
+   * Create a panel interview.
    */
   createPanelInterview: async (data) => {
     const response = await api.post('/hr/panels', data);
@@ -59,17 +49,15 @@ export const hrAvailabilityAPI = {
 
   /**
    * Cancel a panel interview.
-   * Cancels all associated single requests and restores slots.
-   * @param {string|number} panelId 
+   * Backend: DELETE /api/hr/panels/{panelId}
+   * Cancels all associated requests and restores all slots.
    */
   cancelPanelInterview: async (panelId) => {
     await api.delete(`/hr/panels/${panelId}`);
-    // no content expected
   },
 
   /**
    * Get all panel interviews created by the current HR user.
-   * @returns {Promise<Array>} List of panel interviews
    */
   getMyPanels: async () => {
     const response = await api.get('/hr/panels/my-panels');
@@ -78,8 +66,6 @@ export const hrAvailabilityAPI = {
 
   /**
    * Get all panel interviews for a specific candidate.
-   * @param {string|number} candidateId 
-   * @returns {Promise<Array>} List of panels for this candidate
    */
   getPanelsByCandidateId: async (candidateId) => {
     const response = await api.get(`/hr/panels/candidate/${candidateId}`);
@@ -87,9 +73,7 @@ export const hrAvailabilityAPI = {
   },
 
   /**
-   * Get all interview requests (both single and panel-derived) for a candidate.
-   * @param {string|number} candidateId 
-   * @returns {Promise<Array>} List of interviews for this candidate
+   * Get all interview requests for a candidate.
    */
   getInterviewsForCandidate: async (candidateId) => {
     const response = await api.get(`/hr/interviews/candidate/${candidateId}`);

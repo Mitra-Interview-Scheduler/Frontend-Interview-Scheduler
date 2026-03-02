@@ -1,22 +1,6 @@
 /* ============================================================
    AVAILABILITY CALENDAR — SHARED STYLES
    Used by: InterviewerAvailabilityPage  +  HRAvailabilityViewPage
-   ============================================================
-   KEY RULES that keep week/day view working correctly:
-
-   1. Container is a plain height block — no flex/column on it.
-      RBC measures the container height and calculates px-per-minute
-      from that. If the wrapper is a flex child it miscalculates.
-
-   2. .rbc-day-slot has NO overflow:hidden.
-      RBC positions events with position:absolute + inline top/height.
-      Clipping the column cuts tall events.
-
-   3. .rbc-events-container has NO explicit height.
-      RBC sets its height inline. We must not fight that.
-
-   4. We NEVER override position / top / left / width / height on
-      .rbc-event — those come from RBC inline. We only set visuals.
    ============================================================ */
 
 /* ── Base ────────────────────────────────────────────────── */
@@ -28,13 +12,11 @@
 
 .availability-calendar-container {
   width: 100%;
-  /* height is set inline on the element — 700px or 720px */
   position: relative;
   font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* RBC root — must fill the container and lay out as a column */
 .availability-calendar-container .rbc-calendar {
   font-family: inherit;
   background: transparent;
@@ -47,7 +29,7 @@
    TOOLBAR
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-toolbar {
-  flex: none;           /* don't stretch — fixed height */
+  flex: none;
   padding: 10px 16px;
   margin-bottom: 12px;
   background: linear-gradient(135deg,
@@ -105,23 +87,21 @@
 
 /* ══════════════════════════════════════════════════════════
    TIME VIEW SHELL
-   overflow:hidden here is fine — it just rounds the corners.
-   The inner rbc-day-slot must NOT have overflow:hidden.
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-time-view {
-  flex: 1;           /* fills remaining height after toolbar */
-  min-height: 0;     /* allow shrinking in flex context */
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border: 1px solid hsl(var(--border, 214 31.8% 91.4%));
   border-radius: 12px;
-  overflow: hidden;  /* cosmetic clip — rounded corners only */
+  overflow: hidden;
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* ══════════════════════════════════════════════════════════
-   TIME HEADER (day-name row + corner gutter)
+   TIME HEADER
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-time-header {
   flex: none;
@@ -133,7 +113,6 @@
     hsl(var(--muted, 210 40% 96.1%) / 0.65) 100%);
 }
 
-/* Top-left blank corner — MUST equal the gutter width below */
 .availability-calendar-container .rbc-time-header-gutter {
   flex: none;
   width: 70px;
@@ -143,7 +122,6 @@
   border-right: 1px solid hsl(var(--border, 214 31.8% 91.4%));
 }
 
-/* Wrapper for all day-header cells */
 .availability-calendar-container .rbc-time-header-content {
   flex: 1;
   min-width: 0;
@@ -158,7 +136,6 @@
   min-width: 0;
 }
 
-/* Individual day header */
 .availability-calendar-container .rbc-time-header-cell .rbc-header {
   flex: 1;
   min-width: 0;
@@ -178,7 +155,6 @@
   border-left: none;
 }
 
-/* Hide all-day row — availability slots are never all-day */
 .availability-calendar-container .rbc-allday-cell {
   display: none;
 }
@@ -197,7 +173,7 @@
   position: relative;
 }
 
-/* ── Time gutter (hour labels on left) ───────────────── */
+/* ── Time gutter ──────────────────────────────────────── */
 .availability-calendar-container .rbc-time-gutter {
   flex: none;
   width: 70px;
@@ -214,7 +190,6 @@
   border-left: none;
 }
 
-/* Hour labels */
 .availability-calendar-container .rbc-label {
   padding: 4px 10px;
   font-size: 11px;
@@ -228,24 +203,19 @@
 
 /* ══════════════════════════════════════════════════════════
    DAY COLUMNS
+   CRITICAL: position:relative, NO overflow:hidden
    ══════════════════════════════════════════════════════════ */
-
-/* Each day's column — MUST be position:relative, MUST NOT have
-   overflow:hidden (events overflow their column in some layouts) */
 .availability-calendar-container .rbc-day-slot {
   flex: 1;
   min-width: 0;
   position: relative;
-  /* NO overflow:hidden here — this is the #1 cause of broken layouts */
 }
 
-/* Grid-line column inside each day */
 .availability-calendar-container .rbc-time-column {
   width: 100%;
   position: relative;
 }
 
-/* Hourly slot group */
 .availability-calendar-container .rbc-timeslot-group {
   min-height: 60px;
   border-left: 1px solid hsl(var(--border, 214 31.8% 91.4%) / 0.5);
@@ -255,11 +225,10 @@
 }
 
 .availability-calendar-container .rbc-timeslot-group:hover {
-  background-color: hsl(var(--accent, 210 40% 96.1%) / 0.25);
+  background-color: hsl(var(--accent, 210 40% 96.1%) / 0.18);
   transition: background-color 0.1s;
 }
 
-/* 30-min (or step) dividers */
 .availability-calendar-container .rbc-day-slot .rbc-time-slot {
   flex: 1;
   border-top: 1px solid hsl(var(--border, 214 31.8% 91.4%) / 0.2);
@@ -272,41 +241,36 @@
 
 /* ══════════════════════════════════════════════════════════
    EVENTS CONTAINER
-   RBC sets position:absolute + inline height on this element.
-   We must NOT set height or overflow:hidden on it.
+   RBC sets position:absolute + inline height.
+   DO NOT set height or overflow:hidden here.
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-events-container {
   position: absolute;
   top: 0;
   left: 2px;
   right: 2px;
-  /* height — set inline by RBC, do not touch */
-  /* NO overflow:hidden */
 }
 
 /* ══════════════════════════════════════════════════════════
-   EVENTS
-   RBC sets position:absolute + top + height + left + width
-   inline. We only style visuals — never override layout props.
+   EVENTS — HR view needs tighter padding for dense columns
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-event {
   border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 3px 6px;
+  font-size: 11px;
   font-weight: 500;
   font-family: inherit;
-  line-height: 1.3;
+  line-height: 1.25;
   cursor: pointer;
   overflow: hidden;
-  transition: filter 0.12s ease, box-shadow 0.12s ease;
-  /* border is handled by inline style (border-left accent) */
+  transition: filter 0.12s ease, box-shadow 0.12s ease, z-index 0s;
   border: none !important;
 }
 
 .availability-calendar-container .rbc-event:hover {
   filter: brightness(1.1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22) !important;
-  z-index: 10 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.26) !important;
+  z-index: 20 !important;
 }
 
 .availability-calendar-container .rbc-event:focus {
@@ -314,9 +278,9 @@
   outline-offset: 1px;
 }
 
-/* Time range label shown above title in week/day view */
+/* Time label inside event (week/day views) */
 .availability-calendar-container .rbc-event-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.03em;
   opacity: 0.82;
@@ -327,9 +291,8 @@
   margin-bottom: 1px;
 }
 
-/* Event title text */
 .availability-calendar-container .rbc-event-content {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -337,9 +300,45 @@
   display: block;
 }
 
-/* Selected ring */
 .availability-calendar-container .rbc-event.rbc-selected {
   box-shadow: 0 0 0 2px white, 0 0 0 4px #6366f1 !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   HR-SPECIFIC: Overlapping events — make them all visible
+   RBC renders overlapping events side by side automatically
+   when they share the same column. These rules improve the
+   narrowed layout for dense multi-interviewer days.
+   ══════════════════════════════════════════════════════════ */
+
+/* When multiple events overlap, RBC narrows each one.
+   Ensure minimum readable width and always show name. */
+.availability-calendar-container.hr-calendar .rbc-event {
+  min-width: 40px;
+  padding: 2px 4px;
+}
+
+/* Show full name on hover even in narrow state */
+.availability-calendar-container.hr-calendar .rbc-event:hover .rbc-event-content {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* HR Overlap indicator — thin right border to visually
+   separate adjacent events of same interviewer */
+.availability-calendar-container.hr-calendar .rbc-event + .rbc-event {
+  border-left: 1px solid rgba(255,255,255,0.3) !important;
+}
+
+/* Day view shows one column → more room for each event */
+.availability-calendar-container .rbc-time-view.rbc-view-day .rbc-event {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.availability-calendar-container .rbc-time-view.rbc-view-day .rbc-event-content {
+  font-size: 12px;
+  white-space: normal;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -393,7 +392,6 @@
   flex: none;
 }
 
-/* Month header cells (shared with time view header) */
 .availability-calendar-container .rbc-header {
   padding: 10px 6px;
   font-size: 11px;
@@ -421,15 +419,8 @@
   overflow: visible;
 }
 
-.availability-calendar-container .rbc-row-bg {
-  display: flex;
-  flex: 1;
-}
-
-.availability-calendar-container .rbc-row-content {
-  position: relative;
-  flex: 1;
-}
+.availability-calendar-container .rbc-row-bg { display: flex; flex: 1; }
+.availability-calendar-container .rbc-row-content { position: relative; flex: 1; }
 
 .availability-calendar-container .rbc-day-bg {
   flex: 1;
@@ -438,14 +429,10 @@
   transition: background 0.1s;
 }
 
-.availability-calendar-container .rbc-day-bg:first-child {
-  border-left: none;
-}
-
+.availability-calendar-container .rbc-day-bg:first-child { border-left: none; }
 .availability-calendar-container .rbc-day-bg:hover {
   background: hsl(var(--accent, 210 40% 96.1%) / 0.35);
 }
-
 .availability-calendar-container .rbc-off-range-bg {
   background: hsl(var(--muted, 210 40% 96.1%) / 0.25);
 }
@@ -499,7 +486,7 @@
   padding: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
   z-index: 200;
-  max-width: 300px;
+  max-width: 320px;
 }
 
 .availability-calendar-container .rbc-overlay-header {
@@ -512,7 +499,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   PAST TIME SLOTS (interviewer view)
+   PAST TIME / DAY SLOTS
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .past-time-slot {
   background-color: rgba(0, 0, 0, 0.02) !important;
@@ -528,39 +515,69 @@
 /* ══════════════════════════════════════════════════════════
    SCROLLBAR
    ══════════════════════════════════════════════════════════ */
-.availability-calendar-container .rbc-time-content::-webkit-scrollbar {
-  width: 8px;
-}
-
+.availability-calendar-container .rbc-time-content::-webkit-scrollbar { width: 8px; }
 .availability-calendar-container .rbc-time-content::-webkit-scrollbar-track {
   background: hsl(var(--muted, 210 40% 96.1%) / 0.3);
   border-radius: 8px;
 }
-
 .availability-calendar-container .rbc-time-content::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground, 215.4 16.3% 46.9%) / 0.3);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-
 .availability-calendar-container .rbc-time-content::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground, 215.4 16.3% 46.9%) / 0.5);
   background-clip: content-box;
 }
 
 /* ══════════════════════════════════════════════════════════
-   SELECTION HIGHLIGHT (when selectable=true, HR doesn't use
-   selectable but interviewer does)
+   SELECTION HIGHLIGHT
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-slot-selection {
   background: rgba(99, 102, 241, 0.12);
   border: 1px solid rgba(99, 102, 241, 0.4);
   border-radius: 4px;
 }
-
 .availability-calendar-container .rbc-selected-cell {
   background: rgba(99, 102, 241, 0.06);
+}
+
+/* ══════════════════════════════════════════════════════════
+   HR CALENDAR — INTERVIEWER GROUPING HEADER
+   Shown above the week/day grid so HR can see who owns each
+   column of events at a glance.
+   ══════════════════════════════════════════════════════════ */
+.hr-interviewer-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.hr-interviewer-legend-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1.5px solid;
+  white-space: nowrap;
+  cursor: default;
+  transition: box-shadow 0.15s;
+}
+
+.hr-interviewer-legend-chip:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+}
+
+.hr-interviewer-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -569,34 +586,18 @@
 @media (max-width: 1024px) {
   .availability-calendar-container .rbc-time-header-gutter,
   .availability-calendar-container .rbc-time-gutter {
-    width: 58px;
-    min-width: 58px;
-    max-width: 58px;
+    width: 58px; min-width: 58px; max-width: 58px;
   }
 }
 
 @media (max-width: 768px) {
   .availability-calendar-container .rbc-time-header-gutter,
   .availability-calendar-container .rbc-time-gutter {
-    width: 48px;
-    min-width: 48px;
-    max-width: 48px;
+    width: 48px; min-width: 48px; max-width: 48px;
   }
-
-  .availability-calendar-container .rbc-label {
-    font-size: 10px;
-    padding: 3px 6px;
-  }
-
-  .availability-calendar-container .rbc-event {
-    font-size: 11px;
-    padding: 3px 5px;
-  }
-
-  .availability-calendar-container .rbc-toolbar button {
-    padding: 5px 10px;
-    font-size: 12px;
-  }
+  .availability-calendar-container .rbc-label { font-size: 10px; padding: 3px 6px; }
+  .availability-calendar-container .rbc-event { font-size: 10px; padding: 2px 4px; }
+  .availability-calendar-container .rbc-toolbar button { padding: 5px 10px; font-size: 12px; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -606,7 +607,6 @@
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 .availability-calendar-container .rbc-calendar {
   animation: calFadeIn 0.25s ease-out;
 }

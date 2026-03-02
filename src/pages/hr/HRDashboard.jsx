@@ -1,52 +1,101 @@
 // src/pages/hr/HRDashboard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calendar,
-  Users,
-  ClipboardList,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ArrowRight,
-  Briefcase,
-  UserCheck,
-  Building2,
-  RefreshCw,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Calendar, Users, ClipboardList, TrendingUp, Clock, CheckCircle2,
+  AlertCircle, ArrowRight, Briefcase, UserCheck, Building2, RefreshCw,
+  Trash2, X, User, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidateAPI } from '@/services/candidateAPI';
+import { toast } from '@/hooks/use-toast';
 
-// ─────────────────────────────────────────────────────────────
-// Safe array helper — prevents "x.filter is not a function"
-// even if the API returns null, an error object, or undefined
-// ─────────────────────────────────────────────────────────────
-const safeArray = (value) => (Array.isArray(value) ? value : []);
+// ─── Safe array helper ────────────────────────────────────────────────────────
+const safeArray = (v) => (Array.isArray(v) ? v : []);
 
+// ─── Unified "scheduled interview" record ─────────────────────────────────────
+// Merges single requests and panels into one shape for the schedule list.
+const buildScheduleItems = (requests, panels) => {
+  const items = [];
+
+  // Panel items — one record per panel
+  const panelIds = new Set();
+  safeArray(panels).forEach((panel) => {
+    panelIds.add(panel.id);
+    items.push({
+      id: `panel-${panel.id}`,
+      type: 'panel',
+      panelId: panel.id,
+      candidateName: panel.candidateName,
+      candidateId: panel.candidate?.id ?? null,
+      startDateTime: panel.startDateTime,
+      endDateTime: panel.endDateTime,
+      status: 'ACCEPTED', // panels are always accepted
+      isUrgent: panel.isUrgent,
+      notes: panel.notes,
+      interviewers: safeArray(panel.panelRequests).map((r) => ({
+        name: r.assignedInterviewerName || r.assignedInterviewer?.fullName || '—',
+        requestId: r.id,
+      })),
+      requestIds: safeArray(panel.panelRequests).map((r) => r.id),
+      technologies: safeArray(panel.panelRequests[0]?.requiredTechnologies),
+    });
+  });
+
+  // Single-interview items (exclude any that belong to a panel)
+  safeArray(requests)
+    .filter((r) => !r.panelId)
+    .forEach((req) => {
+      items.push({
+        id: `req-${req.id}`,
+        type: 'single',
+        requestId: req.id,
+        candidateName: req.candidateName,
+        candidateId: req.candidate?.id ?? null,
+        startDateTime: req.preferredStartDateTime,
+        endDateTime: req.preferredEndDateTime,
+        status: req.status,
+        isUrgent: req.isUrgent,
+        notes: req.notes,
+        interviewers: [{ name: req.assignedInterviewerName || '—', requestId: req.id }],
+        technologies: safeArray(req.requiredTechnologies),
+      });
+    });
+
+  // Sort upcoming first, then by start time
+  return items.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const HRDashboard = () => {
   const navigate = useNavigate();
 
-  // ── Data ────────────────────────────────────────────────────
   const [candidates, setCandidates] = useState([]);
   const [requests, setRequests] = useState([]);
   const [panels, setPanels] = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
-
-  // ── UI State ────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
-  // ── Load Data ────────────────────────────────────────────────
-  const loadDashboardData = async () => {
+  // Cancel dialog state
+  const [cancelTarget, setCancelTarget] = useState(null); // { item, confirmOpen }
+  const [cancelling, setCancelling] = useState(false);
+
+  // Expanded interviewers panel
+  const [expandedItems, setExpandedItems] = useState(new Set());
+
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -56,173 +105,178 @@ const HRDashboard = () => {
         hrAvailabilityAPI.getMyPanels(),
         hrAvailabilityAPI.getAllAvailability(),
       ]);
+      const [candidatesRes, requestsRes, panelsRes, slotsRes] = results;
 
-      // Use settled results so one failure doesn't kill the whole dashboard
-      const [candidatesResult, requestsResult, panelsResult, slotsResult] = results;
-
-      setCandidates(safeArray(candidatesResult.status === 'fulfilled' ? candidatesResult.value : []));
-      setRequests(safeArray(requestsResult.status === 'fulfilled' ? requestsResult.value : []));
-      setPanels(safeArray(panelsResult.status === 'fulfilled' ? panelsResult.value : []));
-      setAvailabilitySlots(safeArray(slotsResult.status === 'fulfilled' ? slotsResult.value : []));
-
-      // Report any individual failures as warnings (not full errors)
-      const failures = results.filter(r => r.status === 'rejected');
-      if (failures.length > 0) {
-        console.warn('Some dashboard data failed to load:', failures.map(f => f.reason));
-      }
-
+      setCandidates(safeArray(candidatesRes.status === 'fulfilled' ? candidatesRes.value : []));
+      setRequests(safeArray(requestsRes.status === 'fulfilled' ? requestsRes.value : []));
+      setPanels(safeArray(panelsRes.status === 'fulfilled' ? panelsRes.value : []));
+      setAvailabilitySlots(safeArray(slotsRes.status === 'fulfilled' ? slotsRes.value : []));
       setLastRefreshed(new Date());
     } catch (err) {
-      console.error('Error loading dashboard data:', err);
+      console.error(err);
       setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadDashboardData();
   }, []);
 
-  // ── Derived Stats ────────────────────────────────────────────
+  useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
 
-  // Candidates
+  // ── Cancel logic ────────────────────────────────────────────────────────────
+  const openCancelDialog = (item) => setCancelTarget(item);
+  const closeCancelDialog = () => { if (!cancelling) setCancelTarget(null); };
+
+  const handleCancelConfirm = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      if (cancelTarget.type === 'panel') {
+        await hrAvailabilityAPI.cancelPanelInterview(cancelTarget.panelId);
+        toast({
+          title: '✓ Panel interview cancelled',
+          description: `All ${cancelTarget.interviewers.length} interviewer slots restored to available.`,
+        });
+      } else {
+        await hrAvailabilityAPI.cancelInterviewRequest(cancelTarget.requestId);
+        toast({
+          title: '✓ Interview cancelled',
+          description: `${cancelTarget.interviewers[0]?.name}'s slot has been restored to available.`,
+        });
+      }
+      setCancelTarget(null);
+      await loadDashboardData();
+    } catch (err) {
+      toast({
+        title: 'Failed to cancel',
+        description: err.response?.data?.message || err.message || 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // ── Derived stats ───────────────────────────────────────────────────────────
   const totalCandidates = candidates.length;
   const candidatesByStatus = candidates.reduce((acc, c) => {
     const s = c.status || 'UNKNOWN';
     acc[s] = (acc[s] || 0) + 1;
     return acc;
   }, {});
-  const scheduledCandidates = candidatesByStatus['SCHEDULED'] || 0;
-  const appliedCandidates = candidatesByStatus['APPLIED'] || 0;
-  const screeningCandidates = candidatesByStatus['SCREENING'] || 0;
 
-  // Interviews (requests)
-  const acceptedRequests = requests.filter(r => r.status === 'ACCEPTED');
-  const totalInterviews = acceptedRequests.length;
-
-  const todayInterviews = acceptedRequests.filter(r => {
+  const acceptedRequests = requests.filter((r) => r.status === 'ACCEPTED');
+  const todayInterviews = acceptedRequests.filter((r) => {
     try { return isToday(parseISO(r.preferredStartDateTime)); } catch { return false; }
   });
-
-  const tomorrowInterviews = acceptedRequests.filter(r => {
+  const tomorrowInterviews = acceptedRequests.filter((r) => {
     try { return isTomorrow(parseISO(r.preferredStartDateTime)); } catch { return false; }
   });
-
-  const thisWeekInterviews = acceptedRequests.filter(r => {
+  const thisWeekInterviews = acceptedRequests.filter((r) => {
     try { return isThisWeek(parseISO(r.preferredStartDateTime), { weekStartsOn: 1 }); } catch { return false; }
   });
-
-  // Panels
-  const totalPanels = panels.length;
-  const upcomingPanels = panels.filter(p => {
+  const upcomingPanels = panels.filter((p) => {
     try { return new Date(p.startDateTime) > new Date(); } catch { return false; }
   });
-
-  // Availability
   const availableSlots = availabilitySlots.length;
 
-  // Recent requests (last 5, sorted by created date)
+  // Build unified schedule items
+  const scheduleItems = buildScheduleItems(requests, panels);
+  const upcomingSchedule = scheduleItems.filter((item) => {
+    try { return new Date(item.startDateTime) > new Date() && item.status === 'ACCEPTED'; } catch { return false; }
+  });
   const recentRequests = [...requests]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);
 
-  // Upcoming interviews (next 5, sorted by start time)
-  const upcomingInterviews = acceptedRequests
-    .filter(r => {
-      try { return new Date(r.preferredStartDateTime) > new Date(); } catch { return false; }
-    })
-    .sort((a, b) => new Date(a.preferredStartDateTime) - new Date(b.preferredStartDateTime))
-    .slice(0, 5);
-
-  // ── Helpers ──────────────────────────────────────────────────
-  const getStatusBadge = (status) => {
-    const variants = {
-      ACCEPTED:  { label: 'Accepted',  class: 'bg-green-100 text-green-800 border-green-200' },
-      PENDING:   { label: 'Pending',   class: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-      CANCELLED: { label: 'Cancelled', class: 'bg-red-100 text-red-800 border-red-200' },
-      REJECTED:  { label: 'Rejected',  class: 'bg-gray-100 text-gray-700 border-gray-200' },
-    };
-    const v = variants[status] || { label: status, class: 'bg-gray-100 text-gray-700 border-gray-200' };
-    return <Badge className={`${v.class} border text-xs font-medium`}>{v.label}</Badge>;
-  };
-
-  const getCandidateStatusBadge = (status) => {
-    const variants = {
-      APPLIED:     { label: 'Applied',     class: 'bg-blue-100 text-blue-800' },
-      SCREENING:   { label: 'Screening',   class: 'bg-purple-100 text-purple-800' },
-      SCHEDULED:   { label: 'Scheduled',   class: 'bg-green-100 text-green-800' },
-      INTERVIEWED: { label: 'Interviewed', class: 'bg-teal-100 text-teal-800' },
-      OFFERED:     { label: 'Offered',     class: 'bg-amber-100 text-amber-800' },
-      HIRED:       { label: 'Hired',       class: 'bg-emerald-100 text-emerald-800' },
-      REJECTED:    { label: 'Rejected',    class: 'bg-red-100 text-red-800' },
-    };
-    const v = variants[status] || { label: status, class: 'bg-gray-100 text-gray-700' };
-    return <Badge className={`${v.class} text-xs font-medium`}>{v.label}</Badge>;
-  };
-
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   const formatInterviewTime = (dateStr) => {
     try {
       const d = parseISO(dateStr);
       if (isToday(d)) return `Today, ${format(d, 'h:mm a')}`;
       if (isTomorrow(d)) return `Tomorrow, ${format(d, 'h:mm a')}`;
       return format(d, 'MMM d, h:mm a');
-    } catch {
-      return dateStr || '—';
-    }
+    } catch { return dateStr || '—'; }
   };
 
-  // ── Animation Variants ────────────────────────────────────────
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
-  };
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
+  const getStatusBadge = (status) => {
+    const map = {
+      ACCEPTED:  'bg-green-100 text-green-800 border-green-200',
+      PENDING:   'bg-yellow-100 text-yellow-800 border-yellow-200',
+      CANCELLED: 'bg-red-100 text-red-800 border-red-200',
+      REJECTED:  'bg-gray-100 text-gray-700 border-gray-200',
+    };
+    return (
+      <Badge className={`${map[status] || map.REJECTED} border text-xs font-medium`}>
+        {status}
+      </Badge>
+    );
   };
 
-  // ── Stats Cards Config ────────────────────────────────────────
+  const getCandidateStatusBadge = (status) => {
+    const map = {
+      APPLIED:     'bg-blue-100 text-blue-800',
+      SCREENING:   'bg-purple-100 text-purple-800',
+      SCHEDULED:   'bg-green-100 text-green-800',
+      INTERVIEWED: 'bg-teal-100 text-teal-800',
+      OFFERED:     'bg-amber-100 text-amber-800',
+      HIRED:       'bg-emerald-100 text-emerald-800',
+      REJECTED:    'bg-red-100 text-red-800',
+    };
+    return (
+      <Badge className={`${map[status] || 'bg-gray-100 text-gray-700'} text-xs font-medium`}>
+        {status}
+      </Badge>
+    );
+  };
+
+  const toggleExpanded = (id) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // ── Stats cards ─────────────────────────────────────────────────────────────
   const statsCards = [
     {
       title: 'Total Candidates',
       value: totalCandidates,
-      subtext: `${appliedCandidates} applied · ${screeningCandidates} screening`,
-      icon: Users,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      subtext: `${candidatesByStatus.APPLIED || 0} applied · ${candidatesByStatus.SCREENING || 0} screening`,
+      icon: Users, color: 'text-blue-600', bg: 'bg-blue-50',
       onClick: () => navigate('/hr/candidates'),
     },
     {
       title: 'Scheduled Interviews',
-      value: scheduledCandidates,
+      value: candidatesByStatus.SCHEDULED || 0,
       subtext: `${todayInterviews.length} today · ${tomorrowInterviews.length} tomorrow`,
-      icon: Calendar,
-      color: 'text-green-600',
-      bg: 'bg-green-50',
+      icon: Calendar, color: 'text-green-600', bg: 'bg-green-50',
       onClick: () => navigate('/hr/availability'),
     },
     {
       title: 'This Week',
       value: thisWeekInterviews.length,
-      subtext: `${totalInterviews} total scheduled`,
-      icon: TrendingUp,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
+      subtext: `${acceptedRequests.length} total scheduled`,
+      icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50',
       onClick: () => navigate('/hr/availability'),
     },
     {
       title: 'Available Slots',
       value: availableSlots,
-      subtext: `${totalPanels} panel interview${totalPanels !== 1 ? 's' : ''} created`,
-      icon: Clock,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      subtext: `${upcomingPanels.length} panel interview${upcomingPanels.length !== 1 ? 's' : ''} upcoming`,
+      icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50',
       onClick: () => navigate('/hr/availability'),
     },
   ];
 
-  // ── Render ────────────────────────────────────────────────────
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
+  };
+  const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
+
+  // ── Loading ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <Layout>
@@ -239,15 +293,12 @@ const HRDashboard = () => {
     );
   }
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <Layout>
-      <motion.div
-        className="space-y-6"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {/* ── Header ── */}
+      <motion.div className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
+
+        {/* Header */}
         <motion.div variants={itemVariants} className="flex items-start justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">HR Dashboard</h1>
@@ -261,12 +312,11 @@ const HRDashboard = () => {
             )}
           </div>
           <Button variant="outline" size="sm" onClick={loadDashboardData} className="gap-2 mt-1">
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+            <RefreshCw className="w-4 h-4" /> Refresh
           </Button>
         </motion.div>
 
-        {/* ── Error Banner ── */}
+        {/* Error Banner */}
         {error && (
           <motion.div variants={itemVariants}>
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -281,7 +331,7 @@ const HRDashboard = () => {
           </motion.div>
         )}
 
-        {/* ── Stats Cards ── */}
+        {/* Stats Cards */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {statsCards.map((card) => {
             const Icon = card.icon;
@@ -307,7 +357,7 @@ const HRDashboard = () => {
           })}
         </motion.div>
 
-        {/* ── Quick Actions ── */}
+        {/* Quick Actions */}
         <motion.div variants={itemVariants}>
           <Card>
             <CardHeader className="pb-3">
@@ -315,117 +365,188 @@ const HRDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                  onClick={() => navigate('/hr/availability')}
-                >
-                  <Calendar className="w-5 h-5 text-primary" />
-                  <span className="text-xs font-medium">View Availability</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                  onClick={() => navigate('/hr/candidates')}
-                >
-                  <Users className="w-5 h-5 text-primary" />
-                  <span className="text-xs font-medium">Manage Candidates</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                  onClick={() => navigate('/hr/availability')}
-                >
-                  <UserCheck className="w-5 h-5 text-primary" />
-                  <span className="text-xs font-medium">Schedule Interview</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                  onClick={() => navigate('/hr/candidates/add')}
-                >
-                  <ClipboardList className="w-5 h-5 text-primary" />
-                  <span className="text-xs font-medium">Add Candidate</span>
-                </Button>
+                {[
+                  { label: 'View Availability', icon: Calendar, path: '/hr/availability' },
+                  { label: 'Manage Candidates', icon: Users, path: '/hr/candidates' },
+                  { label: 'Schedule Interview', icon: UserCheck, path: '/hr/availability' },
+                  { label: 'Add Candidate', icon: ClipboardList, path: '/hr/candidates/add' },
+                ].map(({ label, icon: Icon, path }) => (
+                  <Button
+                    key={label}
+                    variant="outline"
+                    className="h-auto py-3 flex flex-col gap-1.5 items-center"
+                    onClick={() => navigate(path)}
+                  >
+                    <Icon className="w-5 h-5 text-primary" />
+                    <span className="text-xs font-medium">{label}</span>
+                  </Button>
+                ))}
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* ── Main Content Grid ── */}
+        {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Upcoming Interviews */}
+          {/* ── UPCOMING SCHEDULE (unified single + panel) ── */}
           <motion.div variants={itemVariants}>
             <Card className="h-full">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-primary" />
-                    Upcoming Interviews
+                    Upcoming Schedule
                   </CardTitle>
                   <Button
-                    variant="ghost"
-                    size="sm"
+                    variant="ghost" size="sm"
                     onClick={() => navigate('/hr/availability')}
                     className="text-xs gap-1"
                   >
-                    View all <ArrowRight className="w-3 h-3" />
+                    View calendar <ArrowRight className="w-3 h-3" />
                   </Button>
                 </div>
                 <CardDescription>
-                  {upcomingInterviews.length} upcoming interview{upcomingInterviews.length !== 1 ? 's' : ''}
+                  {upcomingSchedule.length} upcoming interview{upcomingSchedule.length !== 1 ? 's' : ''} ·{' '}
+                  click <Trash2 className="w-3 h-3 inline text-red-400" /> to cancel &amp; restore slot
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {upcomingInterviews.length === 0 ? (
+                {upcomingSchedule.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground">
                     <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm">No upcoming interviews scheduled</p>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="mt-2 text-primary"
-                      onClick={() => navigate('/hr/availability')}
-                    >
+                    <Button variant="link" size="sm" className="mt-2 text-primary"
+                      onClick={() => navigate('/hr/availability')}>
                       Schedule one →
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {upcomingInterviews.map((req) => (
-                      <div
-                        key={req.id}
-                        className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="p-2 bg-primary/10 rounded-lg shrink-0 mt-0.5">
-                          <Clock className="w-4 h-4 text-primary" />
+                  <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                    {upcomingSchedule.map((item) => {
+                      const isPanel = item.type === 'panel';
+                      const isExpanded = expandedItems.has(item.id);
+                      return (
+                        <div
+                          key={item.id}
+                          className={`rounded-xl border-2 transition-all ${
+                            isPanel
+                              ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20'
+                              : 'border-border bg-accent/20 hover:border-primary/30'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 p-3">
+                            {/* Icon */}
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                              isPanel ? 'bg-emerald-100' : 'bg-primary/10'
+                            }`}>
+                              {isPanel
+                                ? <Users className="w-4 h-4 text-emerald-600" />
+                                : <User className="w-4 h-4 text-primary" />
+                              }
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-sm truncate">{item.candidateName}</p>
+                                  <p className="text-xs text-primary font-medium mt-0.5">
+                                    {formatInterviewTime(item.startDateTime)}
+                                    {item.endDateTime && ` – ${format(parseISO(item.endDateTime), 'h:mm a')}`}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {isPanel && (
+                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 border text-xs">
+                                      Panel · {item.interviewers.length}
+                                    </Badge>
+                                  )}
+                                  {item.isUrgent && (
+                                    <Badge variant="destructive" className="text-xs">Urgent</Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Interviewers row */}
+                              <div className="mt-1.5">
+                                {isPanel ? (
+                                  <button
+                                    onClick={() => toggleExpanded(item.id)}
+                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    {isExpanded
+                                      ? <ChevronUp className="w-3 h-3" />
+                                      : <ChevronDown className="w-3 h-3" />
+                                    }
+                                    {item.interviewers.map((i) => i.name).join(', ')}
+                                  </button>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">
+                                    with {item.interviewers[0]?.name}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Expanded panel interviewers */}
+                              <AnimatePresence>
+                                {isPanel && isExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {item.interviewers.map((iv, idx) => (
+                                        <span
+                                          key={idx}
+                                          className="text-xs bg-white border border-emerald-200 rounded-md px-2 py-0.5 text-emerald-800"
+                                        >
+                                          {iv.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+
+                              {/* Technologies */}
+                              {item.technologies.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {item.technologies.slice(0, 3).map((t, i) => (
+                                    <Badge key={i} variant="outline" className="text-xs px-1.5 py-0">
+                                      {t.name || t}
+                                    </Badge>
+                                  ))}
+                                  {item.technologies.length > 3 && (
+                                    <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                      +{item.technologies.length - 3}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Cancel button */}
+                            <button
+                              onClick={() => openCancelDialog(item)}
+                              title="Cancel interview & restore slot"
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-all ml-1 shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{req.candidateName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            with {req.assignedInterviewerName || 'Unassigned'}
-                          </p>
-                          <p className="text-xs text-primary font-medium mt-0.5">
-                            {formatInterviewTime(req.preferredStartDateTime)}
-                            {req.preferredEndDateTime && ` – ${format(parseISO(req.preferredEndDateTime), 'h:mm a')}`}
-                          </p>
-                          {req.panelId && (
-                            <Badge className="mt-1 text-xs bg-emerald-100 text-emerald-800">
-                              Panel Interview
-                            </Badge>
-                          )}
-                        </div>
-                        {getStatusBadge(req.status)}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Recent Candidates */}
+          {/* ── RECENT CANDIDATES ── */}
           <motion.div variants={itemVariants}>
             <Card className="h-full">
               <CardHeader>
@@ -434,12 +555,7 @@ const HRDashboard = () => {
                     <Users className="w-5 h-5 text-primary" />
                     Recent Candidates
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/hr/candidates')}
-                    className="text-xs gap-1"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/hr/candidates')} className="text-xs gap-1">
                     View all <ArrowRight className="w-3 h-3" />
                   </Button>
                 </div>
@@ -450,12 +566,8 @@ const HRDashboard = () => {
                   <div className="text-center py-10 text-muted-foreground">
                     <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm">No candidates in the system yet</p>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="mt-2 text-primary"
-                      onClick={() => navigate('/hr/candidates/add')}
-                    >
+                    <Button variant="link" size="sm" className="mt-2 text-primary"
+                      onClick={() => navigate('/hr/candidates/add')}>
                       Add first candidate →
                     </Button>
                   </div>
@@ -463,7 +575,7 @@ const HRDashboard = () => {
                   <div className="space-y-3">
                     {[...candidates]
                       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-                      .slice(0, 5)
+                      .slice(0, 6)
                       .map((candidate) => (
                         <div
                           key={candidate.id}
@@ -490,7 +602,7 @@ const HRDashboard = () => {
             </Card>
           </motion.div>
 
-          {/* Candidate Pipeline Overview */}
+          {/* ── PIPELINE OVERVIEW ── */}
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
@@ -514,15 +626,18 @@ const HRDashboard = () => {
                       { label: 'Hired', key: 'HIRED', color: 'bg-emerald-600' },
                       { label: 'Rejected', key: 'REJECTED', color: 'bg-red-400' },
                     ]
-                      .filter(stage => (candidatesByStatus[stage.key] || 0) > 0)
-                      .map(stage => {
+                      .filter((s) => (candidatesByStatus[s.key] || 0) > 0)
+                      .map((stage) => {
                         const count = candidatesByStatus[stage.key] || 0;
                         const pct = Math.round((count / totalCandidates) * 100);
                         return (
                           <div key={stage.key} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-muted-foreground">{stage.label}</span>
-                              <span className="font-semibold">{count} <span className="text-muted-foreground font-normal text-xs">({pct}%)</span></span>
+                              <span className="font-semibold">
+                                {count}{' '}
+                                <span className="text-muted-foreground font-normal text-xs">({pct}%)</span>
+                              </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
                               <div
@@ -539,153 +654,134 @@ const HRDashboard = () => {
             </Card>
           </motion.div>
 
-          {/* Panel Interviews Summary */}
+          {/* ── RECENT REQUESTS TABLE ── */}
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-primary" />
-                    Panel Interviews
+                    <ClipboardList className="w-5 h-5 text-primary" />
+                    Recent Requests
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/hr/availability')}
-                    className="text-xs gap-1"
-                  >
-                    Schedule <ArrowRight className="w-3 h-3" />
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/hr/availability')} className="text-xs gap-1">
+                    View calendar <ArrowRight className="w-3 h-3" />
                   </Button>
                 </div>
-                <CardDescription>
-                  {upcomingPanels.length} upcoming · {totalPanels} total created
-                </CardDescription>
+                <CardDescription>{requests.length} total created by you</CardDescription>
               </CardHeader>
               <CardContent>
-                {panels.length === 0 ? (
+                {recentRequests.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm mb-2">No panel interviews scheduled yet</p>
-                    <p className="text-xs text-muted-foreground/70 max-w-48 mx-auto">
-                      Enable Panel Mode in the Availability Calendar to schedule multi-interviewer sessions
-                    </p>
+                    <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No interview requests created yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {panels
-                      .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime))
-                      .slice(0, 4)
-                      .map(panel => (
-                        <div key={panel.id} className="p-3 rounded-lg border bg-emerald-50/50 border-emerald-200">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-medium text-sm">{panel.candidateName}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {formatInterviewTime(panel.startDateTime)}
-                              </p>
-                            </div>
-                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 shrink-0 text-xs">
-                              {(panel.panelRequests || []).length} interviewer{(panel.panelRequests || []).length !== 1 ? 's' : ''}
-                            </Badge>
-                          </div>
-                          {(panel.panelRequests || []).length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {panel.panelRequests.map(req => (
-                                <span
-                                  key={req.id}
-                                  className="text-xs bg-white border border-emerald-200 rounded px-1.5 py-0.5 text-emerald-800"
-                                >
-                                  {req.assignedInterviewerName || 'Unknown'}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    {panels.length > 4 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => navigate('/hr/availability')}
-                      >
-                        +{panels.length - 4} more panels
-                      </Button>
-                    )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          {['Candidate', 'Interviewer', 'Time', 'Status', 'Type'].map((h) => (
+                            <th key={h} className="text-left py-2 px-3 text-muted-foreground font-medium">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentRequests.map((req) => (
+                          <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
+                            <td className="py-2.5 px-3 font-medium">{req.candidateName}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground">{req.assignedInterviewerName || '—'}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground">
+                              {req.preferredStartDateTime ? formatInterviewTime(req.preferredStartDateTime) : '—'}
+                            </td>
+                            <td className="py-2.5 px-3">{getStatusBadge(req.status)}</td>
+                            <td className="py-2.5 px-3">
+                              {req.panelId
+                                ? <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 border text-xs">Panel</Badge>
+                                : <Badge className="bg-blue-100 text-blue-800 border-blue-200 border text-xs">Single</Badge>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </CardContent>
             </Card>
           </motion.div>
-
         </div>
+      </motion.div>
 
-        {/* ── Recent Requests (full width) ── */}
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardList className="w-5 h-5 text-primary" />
-                  Recent Interview Requests
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('/hr/availability')}
-                  className="text-xs gap-1"
-                >
-                  View calendar <ArrowRight className="w-3 h-3" />
-                </Button>
-              </div>
-              <CardDescription>{requests.length} total requests created by you</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recentRequests.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No interview requests created yet</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Candidate</th>
-                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Interviewer</th>
-                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Time</th>
-                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Status</th>
-                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentRequests.map(req => (
-                        <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
-                          <td className="py-2.5 px-3 font-medium">{req.candidateName}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground">{req.assignedInterviewerName || '—'}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground">
-                            {req.preferredStartDateTime
-                              ? formatInterviewTime(req.preferredStartDateTime)
-                              : '—'}
-                          </td>
-                          <td className="py-2.5 px-3">{getStatusBadge(req.status)}</td>
-                          <td className="py-2.5 px-3">
-                            {req.panelId
-                              ? <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 border text-xs">Panel</Badge>
-                              : <Badge className="bg-blue-100 text-blue-800 border-blue-200 border text-xs">Single</Badge>
-                            }
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+      {/* ── CANCEL CONFIRMATION DIALOG ── */}
+      <Dialog open={!!cancelTarget} onOpenChange={closeCancelDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <Trash2 className="w-5 h-5" /> Cancel Interview
+            </DialogTitle>
+            <DialogDescription>
+              This will cancel the interview and immediately restore the slot(s) to available.
+              The interviewer{cancelTarget?.type === 'panel' ? 's' : ''} will be notified right away.
+            </DialogDescription>
+          </DialogHeader>
+
+          {cancelTarget && (
+            <div className={`rounded-xl border-2 p-4 ${
+              cancelTarget.type === 'panel'
+                ? 'border-emerald-200 bg-emerald-50'
+                : 'border-red-100 bg-red-50'
+            }`}>
+              <p className="font-semibold text-sm mb-1">
+                {cancelTarget.type === 'panel' ? '👥 Panel Interview' : '👤 Single Interview'}
+              </p>
+              <p className="text-sm font-medium">{cancelTarget.candidateName}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatInterviewTime(cancelTarget.startDateTime)}
+                {cancelTarget.endDateTime &&
+                  ` – ${format(parseISO(cancelTarget.endDateTime), 'h:mm a')}`
+                }
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {cancelTarget.type === 'panel'
+                  ? `${cancelTarget.interviewers.length} interviewers: ${cancelTarget.interviewers.map((i) => i.name).join(', ')}`
+                  : `with ${cancelTarget.interviewers[0]?.name}`
+                }
+              </p>
+              {cancelTarget.type === 'panel' && (
+                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs text-amber-800 flex items-start gap-1">
+                    <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                    All {cancelTarget.interviewers.length} interviewer slots will be restored to available.
+                  </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </motion.div>
+            </div>
+          )}
 
-      </motion.div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeCancelDialog} disabled={cancelling}>
+              Keep Interview
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelConfirm}
+              disabled={cancelling}
+              className="gap-2"
+            >
+              {cancelling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Cancelling…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" /> Cancel & Restore Slot
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
