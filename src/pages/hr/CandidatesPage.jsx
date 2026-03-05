@@ -394,7 +394,7 @@ const CandidatesPage = () => {
 
                           {/* Actions */}
                           <div className="flex gap-1.5 shrink-0">
-                            {candidate.resumeUrl && (
+                            {/* {candidate.resumeUrl && (
                               <Button 
                                 variant="outline" 
                                 size="sm"
@@ -404,7 +404,7 @@ const CandidatesPage = () => {
                               >
                                 <FileText className="w-3.5 h-3.5" />
                               </Button>
-                            )}
+                            )} */}
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -415,7 +415,11 @@ const CandidatesPage = () => {
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </Button>
-                            <Button 
+
+
+{/* delete button is hidden temporaily */}
+
+                            {/* <Button 
                               variant="outline" 
                               size="sm"
                               className="h-8 w-8 p-0"
@@ -424,7 +428,7 @@ const CandidatesPage = () => {
                               title="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            </Button> */}
                           </div>
                         </div>
 

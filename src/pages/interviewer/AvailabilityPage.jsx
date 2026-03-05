@@ -1,40 +1,53 @@
 // src/pages/interviewer/AvailabilityPage.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// FIXED VERSION — same CSS engine as HR calendar:
-//   • plain height container (no flex fighting RBC layout)
-//   • no custom toolbar (let RBC measure correctly)
-//   • gradient event colors for available / booked / blocked
-//   • events stay inside 7am–7pm bounds, positioned correctly
+// Interviewer availability calendar.
+// Supports: Add slot · Edit AVAILABLE slot (click event → edit panel) ·
+//           Delete AVAILABLE slot · View BOOKED slots (read-only)
+//
+// Changes from the original:
+//   • Clicking an AVAILABLE event opens an inline "Edit Slot" side-panel
+//     instead of just showing a toast.
+//   • availabilityAPI.updateAvailabilitySlot() is called on save.
+//   • HR calendar and dashboard automatically reflect the change because they
+//     fetch from the same backend data source.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User,
+  Pencil, Save, X, CheckCircle2,
+} from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { availabilityAPI } from '@/services/availabilityAPI';
 
+// ── Calendar localizer ────────────────────────────────────────────────────────
 const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  locales: { 'en-US': enUS },
+  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
 });
 
-// Status → colour mapping (gradient pairs)
+// ── Status colour map ─────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   available: {
     bg:     'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
@@ -56,36 +69,62 @@ const STATUS_COLORS = {
   },
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const TIME_SLOTS = Array.from({ length: 12 }, (_, i) =>
+  `${String(i + 7).padStart(2, '0')}:00`
+);
+
+const parseTimeOnDate = (timeStr, referenceDate) => {
+  const [h, m] = timeStr.split(':').map(Number);
+  const d = new Date(referenceDate);
+  d.setHours(h, m, 0, 0);
+  return d;
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 const AvailabilityPage = () => {
-  const [events, setEvents]           = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [startTime, setStartTime]     = useState('09:00');
-  const [endTime, setEndTime]         = useState('10:00');
-  const [description, setDescription] = useState('');
-  const [stats, setStats]             = useState({ availableSlots: 0, bookedSlots: 0 });
+  const [events, setEvents]               = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [stats, setStats]                 = useState({ availableSlots: 0, bookedSlots: 0 });
 
-  useEffect(() => {
-    loadAvailability();
-    loadStats();
-  }, []);
+  // ── Add-slot state ──────────────────────────────────────────────────────────
+  const [selectedDate, setSelectedDate]   = useState(null);
+  const [startTime, setStartTime]         = useState('09:00');
+  const [endTime, setEndTime]             = useState('10:00');
+  const [description, setDescription]     = useState('');
 
-  const loadAvailability = async () => {
+  // ── Edit-slot state ─────────────────────────────────────────────────────────
+  const [editTarget, setEditTarget]       = useState(null);   // event object
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editStart, setEditStart]         = useState('09:00');
+  const [editEnd, setEditEnd]             = useState('10:00');
+  const [editDescription, setEditDescription] = useState('');
+  const [editSaving, setEditSaving]       = useState(false);
+
+  // ── Delete confirm state ────────────────────────────────────────────────────
+  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting]           = useState(false);
+
+  // ── Load data ─────────────────────────────────────────────────────────────
+  const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
       const data = await availabilityAPI.getMyAvailability();
-      setEvents(data.map(slot => ({
-        id:                  slot.id,
-        title: slot.status === 'BOOKED'
-          ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
-          : slot.description || 'Available',
-        start:               new Date(slot.startDateTime),
-        end:                 new Date(slot.endDateTime),
-        status:              slot.status.toLowerCase(),
-        description:         slot.description,
-        candidateName:       slot.candidateName,
-        interviewScheduleId: slot.interviewScheduleId,
-      })));
+      setEvents(
+        data.map((slot) => ({
+          id:                  slot.id,
+          title: slot.status === 'BOOKED'
+            ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
+            : slot.description || 'Available',
+          start:               new Date(slot.startDateTime),
+          end:                 new Date(slot.endDateTime),
+          status:              slot.status.toLowerCase(),
+          description:         slot.description,
+          candidateName:       slot.candidateName,
+          interviewScheduleId: slot.interviewScheduleId,
+        }))
+      );
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -95,17 +134,25 @@ const AvailabilityPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const data = await availabilityAPI.getAvailabilityStats();
       setStats(data);
     } catch (error) {
       console.error('Failed to load stats:', error);
     }
-  };
+  }, []);
 
+  useEffect(() => {
+    loadAvailability();
+    loadStats();
+  }, [loadAvailability, loadStats]);
+
+  // ── Calendar interactions ──────────────────────────────────────────────────
+
+  /** Clicking on an empty slot selects the date for the "Add" form */
   const handleSelectSlot = ({ start }) => {
     const now = new Date();
     if (start < now) {
@@ -116,7 +163,6 @@ const AvailabilityPage = () => {
       });
       return;
     }
-
     let startDate = new Date(start);
     const isMonthClick = startDate.getHours() === 0 && startDate.getMinutes() === 0;
     if (isMonthClick) startDate.setHours(9, 0, 0, 0);
@@ -126,76 +172,58 @@ const AvailabilityPage = () => {
       tomorrow.setHours(9, 0, 0, 0);
       startDate = tomorrow;
     }
-
     const end = new Date(startDate.getTime() + 60 * 60 * 1000);
     setSelectedDate(startDate);
     setStartTime(format(startDate, 'HH:mm'));
     setEndTime(format(end, 'HH:mm'));
-
     toast({
       title: 'Date selected',
-      description: `${format(startDate, 'MMM dd, yyyy')} • ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
+      description: `${format(startDate, 'MMM dd, yyyy')} · ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
     });
   };
 
+  /** Clicking an existing event: edit if AVAILABLE, info-toast if BOOKED */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
       toast({
         title: '🔒 Interview Scheduled',
         description: event.candidateName
-          ? `Candidate: ${event.candidateName} • ${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`
+          ? `Candidate: ${event.candidateName} · ${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`
           : `${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`,
       });
+      return;
     }
+
+    // Open edit dialog for AVAILABLE slots
+    setEditTarget(event);
+    setEditStart(format(event.start, 'HH:mm'));
+    setEditEnd(format(event.end, 'HH:mm'));
+    setEditDescription(
+      event.description &&
+      !event.description.startsWith('Interview:') &&
+      !event.description.startsWith('Panel Interview:')
+        ? event.description
+        : ''
+    );
+    setEditDialogOpen(true);
   };
 
-  const handleStartTimeChange = (newStart) => {
-    setStartTime(newStart);
-    const [sh, sm] = newStart.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
-      const newEndMins = sh * 60 + sm + 60;
-      if (Math.floor(newEndMins / 60) < 19) {
-        setEndTime(
-          `${String(Math.floor(newEndMins / 60)).padStart(2, '0')}:${String(newEndMins % 60).padStart(2, '0')}`
-        );
-      }
-    }
-  };
-
-  const handleEndTimeChange = (newEnd) => {
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = newEnd.split(':').map(Number);
-    if ((eh * 60 + em) - (sh * 60 + sm) >= 60) {
-      setEndTime(newEnd);
-    } else {
-      toast({
-        title: 'Invalid time range',
-        description: 'End time must be at least 1 hour after start time',
-        variant: 'destructive',
-      });
-    }
-  };
-
+  // ── Add slot ───────────────────────────────────────────────────────────────
   const handleAddSlot = async () => {
     if (!selectedDate) {
       toast({ title: 'No date selected', description: 'Click a date on the calendar first', variant: 'destructive' });
       return;
     }
-    const base = new Date(selectedDate);
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
-    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh, sm, 0, 0);
-    const end   = new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh, em, 0, 0);
-    const now   = new Date();
+    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0);
+    const end   = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0);
 
-    if (start < now) {
-      toast({ title: 'Cannot add past time slot', description: 'Choose a future date and time.', variant: 'destructive' });
-      return;
+    if (start < new Date()) {
+      toast({ title: 'Cannot add past time slot', variant: 'destructive' }); return;
     }
     if (end <= start) {
-      toast({ title: 'Invalid time range', description: 'End time must be after start time.', variant: 'destructive' });
-      return;
+      toast({ title: 'End time must be after start time', variant: 'destructive' }); return;
     }
 
     try {
@@ -204,14 +232,17 @@ const AvailabilityPage = () => {
         endDateTime:   end.toISOString(),
         description:   description || null,
       });
-      setEvents(prev => [...prev, {
-        id:          newSlot.id,
-        title:       newSlot.description || 'Available',
-        start:       new Date(newSlot.startDateTime),
-        end:         new Date(newSlot.endDateTime),
-        status:      newSlot.status.toLowerCase(),
-        description: newSlot.description,
-      }]);
+      setEvents((prev) => [
+        ...prev,
+        {
+          id:          newSlot.id,
+          title:       newSlot.description || 'Available',
+          start:       new Date(newSlot.startDateTime),
+          end:         new Date(newSlot.endDateTime),
+          status:      newSlot.status.toLowerCase(),
+          description: newSlot.description,
+        },
+      ]);
       setSelectedDate(null);
       setStartTime('09:00');
       setEndTime('10:00');
@@ -219,7 +250,7 @@ const AvailabilityPage = () => {
       await loadStats();
       toast({
         title: '✓ Time slot added',
-        description: `${format(start, 'MMM dd, yyyy')} • ${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
+        description: `${format(start, 'MMM dd, yyyy')} · ${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
       });
     } catch (error) {
       toast({
@@ -230,11 +261,75 @@ const AvailabilityPage = () => {
     }
   };
 
-  const handleDeleteSlot = async (eventId) => {
+  // ── Edit slot (save) ───────────────────────────────────────────────────────
+  const handleEditSave = async () => {
+    if (!editTarget) return;
+    const refDate = editTarget.start;
+    const newStart = parseTimeOnDate(editStart, refDate);
+    const newEnd   = parseTimeOnDate(editEnd,   refDate);
+
+    if (newEnd <= newStart) {
+      toast({ title: 'End time must be after start time', variant: 'destructive' }); return;
+    }
+    if (newStart < new Date()) {
+      toast({ title: 'Start time cannot be in the past', variant: 'destructive' }); return;
+    }
+
+    setEditSaving(true);
     try {
-      await availabilityAPI.deleteAvailabilitySlot(eventId);
-      setEvents(prev => prev.filter(e => e.id !== eventId));
+      const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
+        startDateTime: newStart.toISOString(),
+        endDateTime:   newEnd.toISOString(),
+        description:   editDescription || null,
+      });
+
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === editTarget.id
+            ? {
+                ...e,
+                title:       updated.description || 'Available',
+                start:       new Date(updated.startDateTime),
+                end:         new Date(updated.endDateTime),
+                description: updated.description,
+              }
+            : e
+        )
+      );
+
+      setEditDialogOpen(false);
+      setEditTarget(null);
+      toast({
+        title: '✓ Slot updated',
+        description: `${format(new Date(updated.startDateTime), 'MMM dd, yyyy')} · ${format(new Date(updated.startDateTime), 'HH:mm')} – ${format(new Date(updated.endDateTime), 'HH:mm')}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to update slot',
+        description: error.response?.data?.message || 'Could not update slot',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // ── Delete slot ────────────────────────────────────────────────────────────
+  const openDeleteDialog = (event, e) => {
+    if (e) e.stopPropagation();
+    setDeleteTarget(event);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await availabilityAPI.deleteAvailabilitySlot(deleteTarget.id);
+      setEvents((prev) => prev.filter((e) => e.id !== deleteTarget.id));
       await loadStats();
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
       toast({ title: '✓ Time slot deleted' });
     } catch (error) {
       toast({
@@ -242,33 +337,34 @@ const AvailabilityPage = () => {
         description: error.response?.data?.message || 'Cannot delete booked slots',
         variant: 'destructive',
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
-  // ── Event styling — gradients, left border accent, no position overrides ──
+  // ── RBC style helpers ──────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
     return {
       style: {
-        background:    colors.bg,
-        borderRadius:  '5px',
-        opacity:       event.status === 'booked' ? 0.88 : 0.96,
-        color:         'white',
-        borderLeft:    `3px solid ${colors.border}`,
-        borderTop:     'none',
-        borderRight:   'none',
-        borderBottom:  'none',
-        padding:       '4px 8px',
-        fontSize:      '12px',
-        fontWeight:    '500',
-        boxShadow:     `0 2px 6px ${colors.solid}40`,
-        cursor:        event.status === 'booked' ? 'default' : 'pointer',
-        overflow:      'hidden',
+        background:   colors.bg,
+        borderRadius: '5px',
+        opacity:      event.status === 'booked' ? 0.88 : 0.96,
+        color:        'white',
+        borderLeft:   `3px solid ${colors.border}`,
+        borderTop:    'none',
+        borderRight:  'none',
+        borderBottom: 'none',
+        padding:      '4px 8px',
+        fontSize:     '12px',
+        fontWeight:   '500',
+        boxShadow:    `0 2px 6px ${colors.solid}40`,
+        cursor:       'pointer',
+        overflow:     'hidden',
       },
     };
   };
 
-  // Dim past slots — no pointer events
   const slotPropGetter = (date) => {
     if (date < new Date()) {
       return {
@@ -279,39 +375,37 @@ const AvailabilityPage = () => {
     return {};
   };
 
-  // Dim past days in month view
   const dayPropGetter = (date) => {
-    const now   = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const check = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const check = new Date(date); check.setHours(0, 0, 0, 0);
     if (check < today) {
       return { className: 'past-day', style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' } };
     }
     return {};
   };
 
-  const timeSlots = [];
-  for (let h = 7; h < 19; h++) timeSlots.push(`${String(h).padStart(2, '0')}:00`);
-
+  // ── Derived list ───────────────────────────────────────────────────────────
   const upcomingEvents = events
-    .filter(e => new Date(e.start) >= new Date())
+    .filter((e) => new Date(e.start) >= new Date())
     .sort((a, b) => new Date(a.start) - new Date(b.start))
-    .slice(0, 5);
+    .slice(0, 8);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Layout>
       <div className="space-y-6 pb-8">
 
-        {/* ── Header ──────────────────────────────────────────────── */}
+        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
-            <p className="text-muted-foreground text-lg">Manage your interview availability calendar</p>
+            <p className="text-muted-foreground text-lg">
+              Manage your interview availability · click an <span className="text-indigo-600 font-semibold">Available</span> event to edit it
+            </p>
           </div>
           <Button
-            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md
-              hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => {
               setSelectedDate(new Date());
               setStartTime('09:00');
@@ -323,7 +417,7 @@ const AvailabilityPage = () => {
           </Button>
         </motion.div>
 
-        {/* ── Stats ───────────────────────────────────────────────── */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             { label: 'Available Slots', value: stats.availableSlots,  color: 'text-indigo-600',  bg: 'bg-indigo-50',  icon: CalendarIcon },
@@ -350,7 +444,7 @@ const AvailabilityPage = () => {
           ))}
         </div>
 
-        {/* ── Calendar + Sidebar ──────────────────────────────────── */}
+        {/* Calendar + Sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
           {/* Calendar — 3/4 width */}
@@ -365,7 +459,7 @@ const AvailabilityPage = () => {
                   <div>
                     <CardTitle className="text-2xl">Availability Calendar</CardTitle>
                     <CardDescription className="mt-1">
-                      Click a date to add availability. Emerald = already booked for an interview.
+                      Click an empty slot to add availability · click an <strong>Available</strong> event to edit · 🔒 = already booked
                     </CardDescription>
                   </div>
                 </div>
@@ -379,6 +473,9 @@ const AvailabilityPage = () => {
                       <span className="text-sm font-medium text-muted-foreground">{label}</span>
                     </div>
                   ))}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground italic ml-2">
+                    <Pencil className="w-3 h-3" /> Click Available event to edit
+                  </div>
                 </div>
               </CardHeader>
 
@@ -423,13 +520,11 @@ const AvailabilityPage = () => {
                         tooltipAccessor={(event) => {
                           if (event.status === 'booked')
                             return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
-                          return `${event.title}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
+                          return `✏️ Click to edit\n${event.title}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
                         }}
                         formats={{
                           timeGutterFormat: 'HH:mm',
                           eventTimeRangeFormat: ({ start, end }) =>
-                            `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-                          agendaTimeRangeFormat: ({ start, end }) =>
                             `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
                         }}
                       />
@@ -440,7 +535,7 @@ const AvailabilityPage = () => {
             </Card>
           </motion.div>
 
-          {/* ── Sidebar ─────────────────────────────────────────── */}
+          {/* Sidebar */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
             className="space-y-6">
 
@@ -450,7 +545,7 @@ const AvailabilityPage = () => {
                 <CardTitle className="text-xl flex items-center gap-2">
                   <Plus className="w-5 h-5 text-indigo-500" /> Add Availability Slot
                 </CardTitle>
-                <CardDescription>Select time range when you're available</CardDescription>
+                <CardDescription>Click a calendar date then set the time range</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4 py-2">
@@ -479,20 +574,35 @@ const AvailabilityPage = () => {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Start Time</Label>
-                      <Select value={startTime} onValueChange={handleStartTimeChange}>
+                      <Label className="text-sm font-semibold">Start</Label>
+                      <Select value={startTime} onValueChange={(v) => {
+                        setStartTime(v);
+                        const [sh, sm] = v.split(':').map(Number);
+                        const [eh, em] = endTime.split(':').map(Number);
+                        if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
+                          const newEnd = sh * 60 + sm + 60;
+                          if (Math.floor(newEnd / 60) < 19) {
+                            setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
+                          }
+                        }
+                      }}>
                         <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                          {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">End Time</Label>
-                      <Select value={endTime} onValueChange={handleEndTimeChange}>
+                      <Label className="text-sm font-semibold">End</Label>
+                      <Select value={endTime} onValueChange={(v) => {
+                        const [sh, sm] = startTime.split(':').map(Number);
+                        const [eh, em] = v.split(':').map(Number);
+                        if ((eh * 60 + em) - (sh * 60 + sm) >= 60) setEndTime(v);
+                        else toast({ title: 'End time must be at least 1 hour after start', variant: 'destructive' });
+                      }}>
                         <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {timeSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                          {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -511,7 +621,7 @@ const AvailabilityPage = () => {
               </div>
             </Card>
 
-            {/* Legend card */}
+            {/* Legend card
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Status Legend</CardTitle>
@@ -519,13 +629,20 @@ const AvailabilityPage = () => {
               <CardContent className="space-y-3">
                 {Object.entries(STATUS_COLORS).map(([key, { bg, solid, label }]) => (
                   <div key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                    <div className="w-5 h-5 rounded-md shadow-sm"
-                      style={{ background: bg }} />
+                    <div className="w-5 h-5 rounded-md shadow-sm" style={{ background: bg }} />
                     <span className="text-sm font-medium">{label}</span>
+                    {key === 'available' && (
+                      <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+                        <Pencil className="w-3 h-3" /> editable
+                      </span>
+                    )}
+                    {key === 'booked' && (
+                      <span className="ml-auto text-xs text-muted-foreground">read-only</span>
+                    )}
                   </div>
                 ))}
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Upcoming slots */}
             <Card className="shadow-lg">
@@ -533,72 +650,208 @@ const AvailabilityPage = () => {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
                 </CardTitle>
+                <CardDescription>Click Available to edit · hover for delete</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-2">
                   {upcomingEvents.length === 0 ? (
                     <div className="text-center py-8">
                       <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground font-medium">No upcoming slots</p>
                     </div>
-                  ) : upcomingEvents.map((event, index) => {
-                    const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
-                    return (
-                      <motion.div key={event.id}
-                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="group flex items-start justify-between p-3 rounded-lg border-2 hover:border-indigo-200 hover:bg-accent/50 transition-all">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-2.5 h-2.5 rounded-full flex-none"
-                              style={{ backgroundColor: colors.solid }} />
-                            <span className="text-sm font-semibold">
-                              {format(event.start, 'MMM dd, yyyy')}
-                            </span>
+                  ) : (
+                    upcomingEvents.map((event, index) => {
+                      const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
+                      const isAvailable = event.status === 'available';
+                      return (
+                        <motion.div key={event.id}
+                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.04 }}
+                          className={`group flex items-start justify-between p-3 rounded-lg border-2 transition-all cursor-pointer
+                            ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40' : 'hover:bg-accent/30 cursor-default'}`}
+                          onClick={() => isAvailable && handleEventClick(event)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: colors.solid }} />
+                              <span className="text-sm font-semibold truncate">
+                                {format(event.start, 'MMM dd, yyyy')}
+                              </span>
+                              {isAvailable && (
+                                <Pencil className="w-3 h-3 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              )}
+                            </div>
+                            {event.status === 'booked' && event.candidateName && (
+                              <div className="flex items-center gap-1 mb-1">
+                                <User className="w-3 h-3 text-emerald-600" />
+                                <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
+                              </div>
+                            )}
+                            {event.description &&
+                              !event.description.startsWith('Interview:') &&
+                              !event.description.startsWith('Panel Interview:') && (
+                                <p className="text-xs font-medium mb-1 text-foreground truncate">{event.description}</p>
+                              )}
+                            <p className="text-xs text-muted-foreground font-medium">
+                              {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                            </p>
+                            <Badge className="mt-2 text-xs capitalize" variant="outline"
+                              style={{ borderColor: colors.solid + '40', color: colors.solid, backgroundColor: colors.solid + '10' }}>
+                              {event.status}
+                            </Badge>
                           </div>
-                          {event.status === 'booked' && event.candidateName && (
-                            <div className="flex items-center gap-1 mb-1">
-                              <User className="w-3 h-3 text-emerald-600" />
-                              <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
+
+                          {/* Action buttons — only for AVAILABLE */}
+                          {isAvailable && (
+                            <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                                onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}
+                                title="Edit slot">
+                                <Pencil className="w-3.5 h-3.5 text-indigo-500" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                                onClick={(e) => openDeleteDialog(event, e)}
+                                title="Delete slot">
+                                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                              </Button>
                             </div>
                           )}
-                          {event.description &&
-                            !event.description.startsWith('Interview:') &&
-                            !event.description.startsWith('Panel Interview:') && (
-                              <p className="text-sm font-medium mb-1 text-foreground">{event.description}</p>
-                            )}
-                          <p className="text-xs text-muted-foreground font-medium">
-                            {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                          </p>
-                          <Badge
-                            className="mt-2 text-xs capitalize"
-                            variant="outline"
-                            style={{
-                              borderColor: colors.solid + '40',
-                              color: colors.solid,
-                              backgroundColor: colors.solid + '10',
-                            }}
-                          >
-                            {event.status}
-                          </Badge>
-                        </div>
-                        {event.status === 'available' && (
-                          <Button variant="ghost" size="sm"
-                            onClick={() => handleDeleteSlot(event.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        )}
-                      </motion.div>
-                    );
-                  })}
+                        </motion.div>
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
-
           </motion.div>
         </div>
       </div>
+
+      {/* ══ EDIT SLOT DIALOG ══════════════════════════════════════════════════ */}
+      <Dialog open={editDialogOpen} onOpenChange={(o) => { if (!editSaving) setEditDialogOpen(o); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-700">
+              <Pencil className="w-5 h-5" /> Edit Availability Slot
+            </DialogTitle>
+            <DialogDescription>
+              Update the time range or description. Booked slots cannot be edited.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editTarget && (
+            <div className="space-y-4 py-2">
+              {/* Current slot info */}
+              <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
+                <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
+                <p className="font-semibold text-sm">{format(editTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
+                <p className="text-xs text-indigo-600 mt-0.5">
+                  Currently: {format(editTarget.start, 'HH:mm')} – {format(editTarget.end, 'HH:mm')}
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label className="font-semibold">Description (Optional)</Label>
+                <Input
+                  placeholder="e.g., Technical Interview, Code Review"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="border-2 focus:border-indigo-400"
+                />
+              </div>
+
+              {/* Time selectors */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="font-semibold">Start Time</Label>
+                  <Select value={editStart} onValueChange={setEditStart}>
+                    <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-semibold">End Time</Label>
+                  <Select value={editEnd} onValueChange={setEditEnd}>
+                    <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.filter((t) => t > editStart).map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Preview */}
+              {editStart && editEnd && editEnd > editStart && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  <p className="text-sm text-green-800">
+                    <strong>New window:</strong>{' '}
+                    {format(parseTimeOnDate(editStart, editTarget.start), 'h:mm a')} –{' '}
+                    {format(parseTimeOnDate(editEnd, editTarget.start), 'h:mm a')} on{' '}
+                    {format(editTarget.start, 'MMM dd')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSave} disabled={editSaving || editEnd <= editStart}
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+              {editSaving
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
+                : <><Save className="w-4 h-4" /> Save Changes</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══ DELETE CONFIRM DIALOG ════════════════════════════════════════════ */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { if (!deleting) setDeleteDialogOpen(o); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <Trash2 className="w-5 h-5" /> Delete Slot
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently remove the availability slot. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
+              <p className="font-semibold text-sm">{format(deleteTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {format(deleteTarget.start, 'HH:mm')} – {format(deleteTarget.end, 'HH:mm')}
+              </p>
+              {deleteTarget.description && (
+                <p className="text-xs text-muted-foreground">{deleteTarget.description}</p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Keep Slot
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting} className="gap-2">
+              {deleting
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting…</>
+                : <><Trash2 className="w-4 h-4" /> Delete Slot</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
