@@ -1,20 +1,19 @@
 // src/pages/interviewer/AvailabilityPage.jsx
 // ─────────────────────────────────────────────────────────────────────────────
 // Interviewer availability calendar.
-// Supports: Add slot · Edit AVAILABLE slot (click event → edit panel) ·
-//           Delete AVAILABLE slot · View BOOKED slots (read-only)
 //
-// Changes from the original:
-//   • Clicking an AVAILABLE event opens an inline "Edit Slot" side-panel
-//     instead of just showing a toast.
-//   • availabilityAPI.updateAvailabilitySlot() is called on save.
-//   • HR calendar and dashboard automatically reflect the change because they
-//     fetch from the same backend data source.
+// Slot validation rules (also enforced backend-side in AvailabilityService):
+//   • Past days  → always blocked / greyed out
+//   • Same day   → only allowed if start ≥ now + 2 h
+//   • Future days → always allowed
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import {
+  format, parse, startOfWeek, getDay,
+  addHours, isSameDay, startOfDay, isAfter, isBefore,
+} from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
@@ -22,13 +21,13 @@ import './AvailabilityCalendar.css';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { Button }   from '@/components/ui/button';
+import { Label }    from '@/components/ui/label';
+import { Input }    from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Badge }    from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -37,35 +36,29 @@ import {
   Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User,
   Pencil, Save, X, CheckCircle2,
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
+import Layout   from '@/components/layout/Layout';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from '@/hooks/use-toast';
-import { availabilityAPI } from '@/services/availabilityAPI';
+import { toast }                  from '@/hooks/use-toast';
+import { availabilityAPI }        from '@/services/availabilityAPI';
 
 // ── Calendar localizer ────────────────────────────────────────────────────────
 const localizer = dateFnsLocalizer({
   format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
 });
 
-// ── Status colour map ─────────────────────────────────────────────────────────
+// ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   available: {
-    bg:     'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    border: '#312e81',
-    solid:  '#6366f1',
-    label:  'Available',
+    bg:    'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+    border:'#312e81', solid:'#6366f1', label:'Available',
   },
   booked: {
-    bg:     'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border: '#065f46',
-    solid:  '#10b981',
-    label:  'Booked',
+    bg:    'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    border:'#065f46', solid:'#10b981', label:'Booked',
   },
   blocked: {
-    bg:     'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: '#92400e',
-    solid:  '#f59e0b',
-    label:  'Blocked',
+    bg:    'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border:'#92400e', solid:'#f59e0b', label:'Blocked',
   },
 };
 
@@ -81,32 +74,57 @@ const parseTimeOnDate = (timeStr, referenceDate) => {
   return d;
 };
 
+/** Returns true when the date is strictly before today (midnight normalised). */
+const isPastDay = (date) => {
+  const today = startOfDay(new Date());
+  return startOfDay(date) < today;
+};
+
+/** Minimum allowed start for a slot: now + 2 hours. */
+const minimumAllowedStart = () => addHours(new Date(), 2);
+
+/**
+ * Validate a proposed start time.
+ * Returns an error string or null if valid.
+ */
+const getSlotStartError = (start) => {
+  if (!start) return null;
+  if (isPastDay(start)) return 'Cannot add slots for past dates.';
+  if (isSameDay(start, new Date()) && isBefore(start, minimumAllowedStart())) {
+    const earliest = format(minimumAllowedStart(), 'HH:mm');
+    return `Same-day slots must start at least 2 hours from now (earliest: ${earliest}).`;
+  }
+  return null;
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 const AvailabilityPage = () => {
-  const [events, setEvents]               = useState([]);
-  const [loading, setLoading]             = useState(true);
-  const [stats, setStats]                 = useState({ availableSlots: 0, bookedSlots: 0 });
+  const [events, setEvents]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
 
-  // ── Add-slot state ──────────────────────────────────────────────────────────
+  // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
   const [startTime, setStartTime]         = useState('09:00');
   const [endTime, setEndTime]             = useState('10:00');
   const [description, setDescription]     = useState('');
+  const [addError, setAddError]           = useState(null);
 
-  // ── Edit-slot state ─────────────────────────────────────────────────────────
-  const [editTarget, setEditTarget]       = useState(null);   // event object
+  // Edit-slot state
+  const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editStart, setEditStart]         = useState('09:00');
   const [editEnd, setEditEnd]             = useState('10:00');
   const [editDescription, setEditDescription] = useState('');
   const [editSaving, setEditSaving]       = useState(false);
+  const [editError, setEditError]         = useState(null);
 
-  // ── Delete confirm state ────────────────────────────────────────────────────
+  // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting]           = useState(false);
 
-  // ── Load data ─────────────────────────────────────────────────────────────
+  // ── Data loading ──────────────────────────────────────────────────────────
   const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
@@ -150,39 +168,73 @@ const AvailabilityPage = () => {
     loadStats();
   }, [loadAvailability, loadStats]);
 
-  // ── Calendar interactions ──────────────────────────────────────────────────
+  // Re-validate the add-form whenever selected date or start time changes
+  useEffect(() => {
+    if (!selectedDate) { setAddError(null); return; }
+    const [sh, sm] = startTime.split(':').map(Number);
+    const start = new Date(
+      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm
+    );
+    setAddError(getSlotStartError(start));
+  }, [selectedDate, startTime]);
 
-  /** Clicking on an empty slot selects the date for the "Add" form */
+  // Re-validate edit form
+  useEffect(() => {
+    if (!editTarget) { setEditError(null); return; }
+    const newStart = parseTimeOnDate(editStart, editTarget.start);
+    setEditError(getSlotStartError(newStart));
+  }, [editTarget, editStart]);
+
+  // ── Calendar interactions ─────────────────────────────────────────────────
+
+  /** Clicking an empty slot on the calendar — select the date for the Add form. */
   const handleSelectSlot = ({ start }) => {
     const now = new Date();
-    if (start < now) {
+
+    // Reject past days outright
+    if (isPastDay(start)) {
       toast({
-        title: 'Cannot select past time',
-        description: 'Please select a future date and time',
+        title: 'Past date',
+        description: 'Please select a future date.',
         variant: 'destructive',
       });
       return;
     }
+
+    // Normalise month-view clicks (they come in at midnight)
     let startDate = new Date(start);
     const isMonthClick = startDate.getHours() === 0 && startDate.getMinutes() === 0;
     if (isMonthClick) startDate.setHours(9, 0, 0, 0);
-    if (startDate < now) {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(9, 0, 0, 0);
-      startDate = tomorrow;
+
+    // For same-day: bump to earliest valid hour (now+2, rounded up to next hour)
+    if (isSameDay(startDate, now)) {
+      const earliest = minimumAllowedStart();
+      if (isBefore(startDate, earliest)) {
+        startDate = new Date(earliest);
+        startDate.setMinutes(0, 0, 0); // round up to next clean hour
+        if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
+      }
+      // If even now+2h is past 19:00, default to 09:00 tomorrow
+      if (startDate.getHours() >= 19) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+        startDate = tomorrow;
+      }
     }
+
     const end = new Date(startDate.getTime() + 60 * 60 * 1000);
     setSelectedDate(startDate);
     setStartTime(format(startDate, 'HH:mm'));
     setEndTime(format(end, 'HH:mm'));
+
     toast({
       title: 'Date selected',
       description: `${format(startDate, 'MMM dd, yyyy')} · ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
     });
   };
 
-  /** Clicking an existing event: edit if AVAILABLE, info-toast if BOOKED */
+  /** Clicking an existing event. */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
       toast({
@@ -194,7 +246,6 @@ const AvailabilityPage = () => {
       return;
     }
 
-    // Open edit dialog for AVAILABLE slots
     setEditTarget(event);
     setEditStart(format(event.start, 'HH:mm'));
     setEditEnd(format(event.end, 'HH:mm'));
@@ -202,28 +253,36 @@ const AvailabilityPage = () => {
       event.description &&
       !event.description.startsWith('Interview:') &&
       !event.description.startsWith('Panel Interview:')
-        ? event.description
-        : ''
+        ? event.description : ''
     );
     setEditDialogOpen(true);
   };
 
-  // ── Add slot ───────────────────────────────────────────────────────────────
+  // ── Add slot ──────────────────────────────────────────────────────────────
   const handleAddSlot = async () => {
     if (!selectedDate) {
       toast({ title: 'No date selected', description: 'Click a date on the calendar first', variant: 'destructive' });
       return;
     }
+
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
-    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0);
-    const end   = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0);
+    const start = new Date(
+      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0
+    );
+    const end = new Date(
+      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0
+    );
 
-    if (start < new Date()) {
-      toast({ title: 'Cannot add past time slot', variant: 'destructive' }); return;
+    // Client-side validation (mirrors backend)
+    const startErr = getSlotStartError(start);
+    if (startErr) {
+      toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
+      return;
     }
     if (end <= start) {
-      toast({ title: 'End time must be after start time', variant: 'destructive' }); return;
+      toast({ title: 'End time must be after start time', variant: 'destructive' });
+      return;
     }
 
     try {
@@ -247,6 +306,7 @@ const AvailabilityPage = () => {
       setStartTime('09:00');
       setEndTime('10:00');
       setDescription('');
+      setAddError(null);
       await loadStats();
       toast({
         title: '✓ Time slot added',
@@ -261,18 +321,21 @@ const AvailabilityPage = () => {
     }
   };
 
-  // ── Edit slot (save) ───────────────────────────────────────────────────────
+  // ── Edit slot (save) ──────────────────────────────────────────────────────
   const handleEditSave = async () => {
     if (!editTarget) return;
-    const refDate = editTarget.start;
+    const refDate  = editTarget.start;
     const newStart = parseTimeOnDate(editStart, refDate);
     const newEnd   = parseTimeOnDate(editEnd,   refDate);
 
-    if (newEnd <= newStart) {
-      toast({ title: 'End time must be after start time', variant: 'destructive' }); return;
+    const startErr = getSlotStartError(newStart);
+    if (startErr) {
+      toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
+      return;
     }
-    if (newStart < new Date()) {
-      toast({ title: 'Start time cannot be in the past', variant: 'destructive' }); return;
+    if (newEnd <= newStart) {
+      toast({ title: 'End time must be after start time', variant: 'destructive' });
+      return;
     }
 
     setEditSaving(true);
@@ -314,7 +377,7 @@ const AvailabilityPage = () => {
     }
   };
 
-  // ── Delete slot ────────────────────────────────────────────────────────────
+  // ── Delete slot ───────────────────────────────────────────────────────────
   const openDeleteDialog = (event, e) => {
     if (e) e.stopPropagation();
     setDeleteTarget(event);
@@ -342,7 +405,7 @@ const AvailabilityPage = () => {
     }
   };
 
-  // ── RBC style helpers ──────────────────────────────────────────────────────
+  // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
     return {
@@ -352,9 +415,7 @@ const AvailabilityPage = () => {
         opacity:      event.status === 'booked' ? 0.88 : 0.96,
         color:        'white',
         borderLeft:   `3px solid ${colors.border}`,
-        borderTop:    'none',
-        borderRight:  'none',
-        borderBottom: 'none',
+        borderTop:    'none', borderRight: 'none', borderBottom: 'none',
         padding:      '4px 8px',
         fontSize:     '12px',
         fontWeight:   '500',
@@ -365,32 +426,50 @@ const AvailabilityPage = () => {
     };
   };
 
+  /**
+   * Grey-out / block interactions for:
+   *   - Any time slot on a past day
+   *   - Same-day time slots that are within the 2-hour buffer window
+   */
   const slotPropGetter = (date) => {
-    if (date < new Date()) {
+    const now = new Date();
+    if (isPastDay(date)) {
       return {
         className: 'past-time-slot',
-        style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed', pointerEvents: 'none' },
+        style: { backgroundColor: 'rgba(0,0,0,0.03)', cursor: 'not-allowed', pointerEvents: 'none' },
+      };
+    }
+    if (isSameDay(date, now) && isBefore(date, minimumAllowedStart())) {
+      return {
+        className: 'past-time-slot',
+        style: {
+          backgroundColor: 'rgba(239,68,68,0.06)',
+          cursor: 'not-allowed',
+          pointerEvents: 'none',
+          borderLeft: '2px solid rgba(239,68,68,0.2)',
+        },
       };
     }
     return {};
   };
 
   const dayPropGetter = (date) => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const check = new Date(date); check.setHours(0, 0, 0, 0);
-    if (check < today) {
-      return { className: 'past-day', style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' } };
+    if (isPastDay(date)) {
+      return {
+        className: 'past-day',
+        style: { backgroundColor: 'rgba(0,0,0,0.02)', cursor: 'not-allowed' },
+      };
     }
     return {};
   };
 
-  // ── Derived list ───────────────────────────────────────────────────────────
+  // ── Derived list ──────────────────────────────────────────────────────────
   const upcomingEvents = events
-    .filter((e) => new Date(e.start) >= new Date())
+    .filter((e) => isAfter(new Date(e.start), new Date()))
     .sort((a, b) => new Date(a.start) - new Date(b.start))
     .slice(0, 8);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
       <div className="space-y-6 pb-8">
@@ -401,13 +480,18 @@ const AvailabilityPage = () => {
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
             <p className="text-muted-foreground text-lg">
-              Manage your interview availability · click an <span className="text-indigo-600 font-semibold">Available</span> event to edit it
+              Manage your interview availability · click an{' '}
+              <span className="text-indigo-600 font-semibold">Available</span> event to edit it
             </p>
           </div>
           <Button
             className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => {
-              setSelectedDate(new Date());
+              // Default to tomorrow 09:00 so the button always opens a valid date
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              tomorrow.setHours(9, 0, 0, 0);
+              setSelectedDate(tomorrow);
               setStartTime('09:00');
               setEndTime('10:00');
               setDescription('');
@@ -447,7 +531,7 @@ const AvailabilityPage = () => {
         {/* Calendar + Sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
-          {/* Calendar — 3/4 width */}
+          {/* Calendar */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
             className="lg:col-span-3">
             <Card className="shadow-xl border-t-4 border-t-indigo-400">
@@ -459,12 +543,11 @@ const AvailabilityPage = () => {
                   <div>
                     <CardTitle className="text-2xl">Availability Calendar</CardTitle>
                     <CardDescription className="mt-1">
-                      Click an empty slot to add availability · click an <strong>Available</strong> event to edit · 🔒 = already booked
+                      Click an empty slot to add availability · click an <strong>Available</strong> event to edit ·
+                      🔒 = already booked · <span className="text-red-400">red tint</span> = within 2-hour buffer
                     </CardDescription>
                   </div>
                 </div>
-
-                {/* Legend */}
                 <div className="flex items-center gap-5 mt-3 flex-wrap">
                   {Object.entries(STATUS_COLORS).map(([key, { solid, label }]) => (
                     <div key={key} className="flex items-center gap-2">
@@ -473,6 +556,10 @@ const AvailabilityPage = () => {
                       <span className="text-sm font-medium text-muted-foreground">{label}</span>
                     </div>
                   ))}
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-md" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }} />
+                    <span className="text-sm font-medium text-muted-foreground">2-hour buffer</span>
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground italic ml-2">
                     <Pencil className="w-3 h-3" /> Click Available event to edit
                   </div>
@@ -494,8 +581,7 @@ const AvailabilityPage = () => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container"
-                      style={{ height: '700px' }}>
+                      className="availability-calendar-container" style={{ height: '700px' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
@@ -562,6 +648,14 @@ const AvailabilityPage = () => {
                     )}
                   </AnimatePresence>
 
+                  {/* Validation error banner */}
+                  {addError && (
+                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-red-700">{addError}</p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Description (Optional)</Label>
                     <Input
@@ -581,9 +675,8 @@ const AvailabilityPage = () => {
                         const [eh, em] = endTime.split(':').map(Number);
                         if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
                           const newEnd = sh * 60 + sm + 60;
-                          if (Math.floor(newEnd / 60) < 19) {
+                          if (Math.floor(newEnd / 60) < 19)
                             setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
-                          }
                         }
                       }}>
                         <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
@@ -611,38 +704,15 @@ const AvailabilityPage = () => {
               </CardContent>
               <div className="flex justify-end gap-2 px-6 pb-6">
                 <Button variant="outline" className="border-2"
-                  onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); }}>
+                  onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); setAddError(null); }}>
                   Clear
                 </Button>
-                <Button onClick={handleAddSlot}
+                <Button onClick={handleAddSlot} disabled={!!addError || !selectedDate}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all">
                   Add Slot
                 </Button>
               </div>
             </Card>
-
-            {/* Legend card
-            <Card className="shadow-lg">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg">Status Legend</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(STATUS_COLORS).map(([key, { bg, solid, label }]) => (
-                  <div key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                    <div className="w-5 h-5 rounded-md shadow-sm" style={{ background: bg }} />
-                    <span className="text-sm font-medium">{label}</span>
-                    {key === 'available' && (
-                      <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
-                        <Pencil className="w-3 h-3" /> editable
-                      </span>
-                    )}
-                    {key === 'booked' && (
-                      <span className="ml-auto text-xs text-muted-foreground">read-only</span>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card> */}
 
             {/* Upcoming slots */}
             <Card className="shadow-lg">
@@ -669,14 +739,11 @@ const AvailabilityPage = () => {
                           transition={{ delay: index * 0.04 }}
                           className={`group flex items-start justify-between p-3 rounded-lg border-2 transition-all cursor-pointer
                             ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40' : 'hover:bg-accent/30 cursor-default'}`}
-                          onClick={() => isAvailable && handleEventClick(event)}
-                        >
+                          onClick={() => isAvailable && handleEventClick(event)}>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: colors.solid }} />
-                              <span className="text-sm font-semibold truncate">
-                                {format(event.start, 'MMM dd, yyyy')}
-                              </span>
+                              <span className="text-sm font-semibold truncate">{format(event.start, 'MMM dd, yyyy')}</span>
                               {isAvailable && (
                                 <Pencil className="w-3 h-3 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                               )}
@@ -687,11 +754,6 @@ const AvailabilityPage = () => {
                                 <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
                               </div>
                             )}
-                            {event.description &&
-                              !event.description.startsWith('Interview:') &&
-                              !event.description.startsWith('Panel Interview:') && (
-                                <p className="text-xs font-medium mb-1 text-foreground truncate">{event.description}</p>
-                              )}
                             <p className="text-xs text-muted-foreground font-medium">
                               {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
                             </p>
@@ -700,18 +762,14 @@ const AvailabilityPage = () => {
                               {event.status}
                             </Badge>
                           </div>
-
-                          {/* Action buttons — only for AVAILABLE */}
                           {isAvailable && (
                             <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}
-                                title="Edit slot">
+                                onClick={(e) => { e.stopPropagation(); handleEventClick(event); }} title="Edit slot">
                                 <Pencil className="w-3.5 h-3.5 text-indigo-500" />
                               </Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => openDeleteDialog(event, e)}
-                                title="Delete slot">
+                                onClick={(e) => openDeleteDialog(event, e)} title="Delete slot">
                                 <Trash2 className="w-3.5 h-3.5 text-destructive" />
                               </Button>
                             </div>
@@ -727,7 +785,7 @@ const AvailabilityPage = () => {
         </div>
       </div>
 
-      {/* ══ EDIT SLOT DIALOG ══════════════════════════════════════════════════ */}
+      {/* ══ EDIT SLOT DIALOG ═══════════════════════════════════════════════ */}
       <Dialog open={editDialogOpen} onOpenChange={(o) => { if (!editSaving) setEditDialogOpen(o); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -741,7 +799,6 @@ const AvailabilityPage = () => {
 
           {editTarget && (
             <div className="space-y-4 py-2">
-              {/* Current slot info */}
               <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
                 <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
                 <p className="font-semibold text-sm">{format(editTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
@@ -750,7 +807,13 @@ const AvailabilityPage = () => {
                 </p>
               </div>
 
-              {/* Description */}
+              {editError && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-red-700">{editError}</p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="font-semibold">Description (Optional)</Label>
                 <Input
@@ -761,7 +824,6 @@ const AvailabilityPage = () => {
                 />
               </div>
 
-              {/* Time selectors */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label className="font-semibold">Start Time</Label>
@@ -785,14 +847,13 @@ const AvailabilityPage = () => {
                 </div>
               </div>
 
-              {/* Preview */}
-              {editStart && editEnd && editEnd > editStart && (
+              {editStart && editEnd && editEnd > editStart && !editError && (
                 <div className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
                   <p className="text-sm text-green-800">
                     <strong>New window:</strong>{' '}
                     {format(parseTimeOnDate(editStart, editTarget.start), 'h:mm a')} –{' '}
-                    {format(parseTimeOnDate(editEnd, editTarget.start), 'h:mm a')} on{' '}
+                    {format(parseTimeOnDate(editEnd,   editTarget.start), 'h:mm a')} on{' '}
                     {format(editTarget.start, 'MMM dd')}
                   </p>
                 </div>
@@ -801,10 +862,8 @@ const AvailabilityPage = () => {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditSave} disabled={editSaving || editEnd <= editStart}
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>Cancel</Button>
+            <Button onClick={handleEditSave} disabled={editSaving || !!editError || editEnd <= editStart}
               className="gap-2 bg-indigo-600 hover:bg-indigo-700">
               {editSaving
                 ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
@@ -815,7 +874,7 @@ const AvailabilityPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ══ DELETE CONFIRM DIALOG ════════════════════════════════════════════ */}
+      {/* ══ DELETE CONFIRM DIALOG ═════════════════════════════════════════ */}
       <Dialog open={deleteDialogOpen} onOpenChange={(o) => { if (!deleting) setDeleteDialogOpen(o); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -826,23 +885,16 @@ const AvailabilityPage = () => {
               This will permanently remove the availability slot. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-
           {deleteTarget && (
             <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
               <p className="font-semibold text-sm">{format(deleteTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {format(deleteTarget.start, 'HH:mm')} – {format(deleteTarget.end, 'HH:mm')}
               </p>
-              {deleteTarget.description && (
-                <p className="text-xs text-muted-foreground">{deleteTarget.description}</p>
-              )}
             </div>
           )}
-
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
-              Keep Slot
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Keep Slot</Button>
             <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting} className="gap-2">
               {deleting
                 ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting…</>
