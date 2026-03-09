@@ -1,10 +1,10 @@
-// src/pages/interviewer/InterviewerDashboard.jsx - UPDATED WITHOUT APPROVAL FLOW
+// src/pages/interviewer/InterviewerDashboard.jsx
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, CheckCircle, TrendingUp, Settings, User, Bell } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, TrendingUp, Settings, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import { toast } from '@/hooks/use-toast';
@@ -52,43 +52,56 @@ const InterviewerDashboard = () => {
     availableSlots: 0,
     bookedSlots: 0,
     upcomingInterviews: 0,
-    completedThisMonth: 0
+    completedThisMonth: 0,
   });
   const [upcomingInterviews, setUpcomingInterviews] = useState([]);
-  const [recentNotifications, setRecentNotifications] = useState([]);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
-      // Load availability stats
-      const availabilityStats = await availabilityAPI.getAvailabilityStats();
-      
-      // Load upcoming interviews
-      const upcomingData = await interviewRequestAPI.getUpcomingInterviews();
-      
-      // Mock: Count completed this month (you'd implement this in backend)
-      const completedThisMonth = 0; // TODO: Implement backend endpoint
+      const results = await Promise.allSettled([
+        availabilityAPI.getAvailabilityStats(),
+        interviewRequestAPI.getUpcomingInterviews(),
+      ]);
+
+      const [statsRes, upcomingRes] = results;
+
+      const availabilityStats =
+        statsRes.status === 'fulfilled' ? statsRes.value : { availableSlots: 0, bookedSlots: 0 };
+      const upcomingData =
+        upcomingRes.status === 'fulfilled' && Array.isArray(upcomingRes.value)
+          ? upcomingRes.value
+          : [];
+
+      if (statsRes.status === 'rejected') {
+        console.error('Failed to load availability stats:', statsRes.reason);
+      }
+      if (upcomingRes.status === 'rejected') {
+        console.error('Failed to load upcoming interviews:', upcomingRes.reason);
+        toast({
+          title: 'Warning',
+          description: 'Could not load upcoming interviews.',
+          variant: 'destructive',
+        });
+      }
 
       setStats({
-        availableSlots: availabilityStats.availableSlots,
-        bookedSlots: availabilityStats.bookedSlots,
+        availableSlots: availabilityStats.availableSlots ?? 0,
+        bookedSlots: availabilityStats.bookedSlots ?? 0,
         upcomingInterviews: upcomingData.length,
-        completedThisMonth
+        completedThisMonth: 0,
       });
-      
       setUpcomingInterviews(upcomingData.slice(0, 5));
-      
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive"
+        title: 'Error',
+        description: 'Failed to load dashboard data.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -142,7 +155,7 @@ const InterviewerDashboard = () => {
             </p>
           </div>
           <div className="flex gap-3">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => navigate('/interviewer/availability')}
               className="gap-2"
@@ -150,7 +163,7 @@ const InterviewerDashboard = () => {
               <Calendar className="w-4 h-4" />
               Manage Availability
             </Button>
-            <Button 
+            <Button
               onClick={() => navigate('/interviewer/profile')}
               className="gap-2"
             >
@@ -176,6 +189,7 @@ const InterviewerDashboard = () => {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
           {/* Upcoming Interviews */}
           <Card className="shadow-elegant">
             <CardHeader className="border-b bg-muted/30">
@@ -197,7 +211,7 @@ const InterviewerDashboard = () => {
             <CardContent className="pt-6">
               {loading ? (
                 <div className="space-y-3">
-                  {[1, 2].map(i => (
+                  {[1, 2].map((i) => (
                     <div key={i} className="animate-pulse">
                       <div className="h-20 bg-muted rounded-lg"></div>
                     </div>
@@ -261,8 +275,8 @@ const InterviewerDashboard = () => {
                     </motion.div>
                   ))}
                   {stats.upcomingInterviews > 5 && (
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       className="w-full"
                       onClick={() => navigate('/interviewer/requests')}
                     >
@@ -318,39 +332,33 @@ const InterviewerDashboard = () => {
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-primary font-bold">1</span>
+                  {[
+                    {
+                      step: 1,
+                      title: 'Set Your Availability',
+                      desc: "Add time slots when you're available to interview",
+                    },
+                    {
+                      step: 2,
+                      title: 'Get Notified',
+                      desc: 'HR will schedule interviews in your available slots',
+                    },
+                    {
+                      step: 3,
+                      title: 'Conduct Interviews',
+                      desc: 'View your schedule and conduct scheduled interviews',
+                    },
+                  ].map(({ step, title, desc }) => (
+                    <div key={step} className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-primary font-bold">{step}</span>
+                      </div>
+                      <div>
+                        <p className="font-medium">{title}</p>
+                        <p className="text-sm text-muted-foreground">{desc}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">Set Your Availability</p>
-                      <p className="text-sm text-muted-foreground">
-                        Add time slots when you're available to interview
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-primary font-bold">2</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Get Notified</p>
-                      <p className="text-sm text-muted-foreground">
-                        HR will schedule interviews in your available slots
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-primary font-bold">3</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Conduct Interviews</p>
-                      <p className="text-sm text-muted-foreground">
-                        View your schedule and conduct scheduled interviews
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

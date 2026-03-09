@@ -1,10 +1,8 @@
 // src/pages/hr/AvailabilityViewPage.jsx
-// Enhanced with:
-//   • Per-interviewer color coding (consistent hues across all their slots)
-//   • Interviewer legend strip above calendar
-//   • Overlapping events clearly visible (RBC side-by-side + color helps distinguish)
-//   • Cancel booked interviews from calendar (slot restored immediately)
-//   • Panel events grouped with a distinct teal color band
+// Changes in this version:
+//   1. Custom RBC EventComponent — selected panel slots show a ✓ badge
+//   2. Privilege check — blocks scheduling if interviewer is less senior than candidate
+//   3. Slot merge is handled server-side (no frontend change needed)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
@@ -32,7 +30,7 @@ import enUS from 'date-fns/locale/en-US';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2,
+  CheckCircle2, Scissors, Trash2, ShieldAlert,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -50,7 +48,6 @@ const localizer = dateFnsLocalizer({
 });
 
 // ── Per-interviewer color palette ────────────────────────────────────────────
-// 16 visually distinct hues; wraps around for large teams.
 const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', solid: '#f59e0b', border: '#78350f', text: '#fff' },
@@ -70,7 +67,6 @@ const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', solid: '#0ea5e9', border: '#0c4a6e', text: '#fff' },
 ];
 
-// Panel-selected state
 const PANEL_PALETTE = {
   bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
   solid: '#0ea5e9',
@@ -78,7 +74,6 @@ const PANEL_PALETTE = {
   text: '#fff',
 };
 
-// Booked overlay — applied on top of interviewer color with reduced opacity
 const BOOKED_OVERLAY = {
   bg: 'linear-gradient(135deg,#10b981,#059669)',
   solid: '#10b981',
@@ -108,9 +103,57 @@ const parseTimeOnDate = (timeStr, referenceDate) => {
   return r;
 };
 
+// ── Privilege check ───────────────────────────────────────────────────────────
+/**
+ * Returns an error string if the interviewer is less senior than the candidate,
+ * or null if the check passes (or data is missing).
+ *
+ * Logic:
+ *  - First compare tierOrder: higher tier = more senior
+ *  - If same tier, compare levelOrder: higher level = more senior
+ *  - interviewer must be >= candidate on both dimensions
+ *
+ * Requires backend to expose interviewerTierOrder / interviewerLevelOrder on
+ * the slot resource, and targetDesignationTierOrder / targetDesignationLevelOrder
+ * on the candidate (see BACKEND_DTO_ADDITIONS.java).
+ */
+const checkInterviewerPrivilege = (slotResource, candidate) => {
+  if (!slotResource || !candidate) return null;
+
+  const ivTier  = slotResource.interviewerTierOrder;
+  const ivLevel = slotResource.interviewerLevelOrder;
+  const cTier   = candidate.targetDesignationTierOrder;
+  const cLevel  = candidate.targetDesignationLevelOrder;
+
+  // If we don't have numeric data from the backend, skip the check gracefully
+  if (ivTier == null || cTier == null) return null;
+
+  if (ivTier < cTier) {
+    return `The interviewer's tier (Tier ${ivTier}) is below the candidate's required tier (Tier ${cTier}). Please choose a more senior interviewer.`;
+  }
+  if (ivTier === cTier && ivLevel != null && cLevel != null && ivLevel < cLevel) {
+    return `The interviewer is at the same tier but a lower level (Level ${ivLevel}) than the candidate requires (Level ${cLevel}). Please choose a more senior interviewer.`;
+  }
+  return null;
+};
+
+/**
+ * For panel interviews: check ALL selected interviewers.
+ * Returns a list of { name, reason } for any that fail.
+ */
+const checkPanelPrivilege = (panelSlots, candidate) => {
+  if (!candidate) return [];
+  return panelSlots
+    .map((ps) => {
+      const err = checkInterviewerPrivilege(ps.slot.resource, candidate);
+      return err ? { name: ps.slot.resource.interviewer, reason: err } : null;
+    })
+    .filter(Boolean);
+};
+
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
-  const [rawSlots, setRawSlots] = useState([]);   // unformatted API results
+  const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState([]);
@@ -119,7 +162,6 @@ const AvailabilityViewPage = () => {
   const [tiers, setTiers] = useState([]);
   const [candidates, setCandidates] = useState([]);
 
-  // Per-interviewer color map  { interviewerId → paletteIndex }
   const [interviewerColorMap, setInterviewerColorMap] = useState({});
 
   // Filters
@@ -153,12 +195,27 @@ const AvailabilityViewPage = () => {
 
   // Cancel booked dialog
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelTarget, setCancelTarget] = useState(null); // event object
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
 
   const techDropdownRef = useRef(null);
 
-  // ── Build color map from slot list ────────────────────────────────────────
+  // ── Derived: selected candidate object (for privilege check) ─────────────
+  const selectedCandidate = requestForm.candidateId
+    ? candidates.find((c) => c.id === requestForm.candidateId) || null
+    : null;
+
+  // Single-interview privilege error
+  const singlePrivilegeError = selectedSlot && selectedCandidate
+    ? checkInterviewerPrivilege(selectedSlot.resource, selectedCandidate)
+    : null;
+
+  // Panel privilege errors
+  const panelPrivilegeErrors = panelSlots.length > 0 && selectedCandidate
+    ? checkPanelPrivilege(panelSlots, selectedCandidate)
+    : [];
+
+  // ── Build color map ────────────────────────────────────────────────────────
   const buildColorMap = useCallback((slots) => {
     const map = {};
     let idx = 0;
@@ -204,6 +261,9 @@ const AvailabilityViewPage = () => {
           candidateName: slot.candidateName,
           requestId: slot.requestId ?? null,
           palette,
+          // Tier / level for privilege check (populated by backend)
+          interviewerTierOrder:  slot.interviewerTierOrder  ?? null,
+          interviewerLevelOrder: slot.interviewerLevelOrder ?? null,
         },
       };
     });
@@ -238,7 +298,6 @@ const AvailabilityViewPage = () => {
     })();
   }, [buildColorMap, formatSlots]);
 
-  // ── Filter effects ────────────────────────────────────────────────────────
   useEffect(() => {
     if (selectedDeptForDesignation) loadTiersForDept(selectedDeptForDesignation);
     else { setTiersForSelectedDept([]); setSelectedTierInDept(''); setMinDesignationLevel(''); }
@@ -343,7 +402,6 @@ const AvailabilityViewPage = () => {
     const isBooked = event.resource?.status === 'BOOKED';
 
     if (isBooked) {
-      // Open cancel dialog for booked events
       openCancelDialog(event);
       return;
     }
@@ -375,10 +433,65 @@ const AvailabilityViewPage = () => {
     setRequestDialogOpen(true);
   };
 
+  // ── Custom calendar event component ──────────────────────────────────────
+  // Shows a ✓ icon + "Panel" label when a slot is selected in panel mode.
+  const CalendarEventComponent = useCallback(({ event }) => {
+    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
+    const isBooked   = event.resource?.status === 'BOOKED';
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3,
+        overflow: 'hidden',
+        height: '100%',
+        width: '100%',
+      }}>
+        {/* Panel-selected indicator */}
+        {isInPanel && (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+            background: 'rgba(255,255,255,0.25)',
+            borderRadius: 3,
+            padding: '1px 4px',
+            fontSize: 10,
+            fontWeight: 700,
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+          }}>
+            <CheckCircle2 style={{ width: 9, height: 9 }} />
+            Panel
+          </span>
+        )}
+        {/* Lock icon for booked */}
+        {isBooked && !isInPanel && (
+          <span style={{ fontSize: 10, flexShrink: 0 }}>🔒</span>
+        )}
+        {/* Title text */}
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: 11,
+          flex: 1,
+          minWidth: 0,
+        }}>
+          {/* Strip leading emoji from title if we already show the icon */}
+          {isBooked
+            ? event.title.replace(/^🔒\s*/, '')
+            : event.resource?.interviewer || event.title}
+        </span>
+      </div>
+    );
+  }, [panelSlots]);
+
   // ── Event style ───────────────────────────────────────────────────────────
   const eventStyleGetter = useCallback((event) => {
-    const isBooked = event.resource?.status === 'BOOKED';
-    const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
+    const isBooked   = event.resource?.status === 'BOOKED';
+    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
     let palette;
 
     if (isInPanel) {
@@ -389,7 +502,7 @@ const AvailabilityViewPage = () => {
 
     return {
       style: {
-        background: isBooked ? palette.bg : palette.bg,
+        background: palette.bg,
         borderRadius: '5px',
         opacity: isBooked ? 0.82 : 0.94,
         color: 'white',
@@ -403,7 +516,7 @@ const AvailabilityViewPage = () => {
         boxShadow: isInPanel
           ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
           : `0 1px 4px ${palette.solid}30`,
-        cursor: isBooked ? 'pointer' : 'pointer',
+        cursor: 'pointer',
         overflow: 'hidden',
         maxWidth: '100%',
         outline: 'none',
@@ -414,12 +527,15 @@ const AvailabilityViewPage = () => {
   // ── Tooltip ───────────────────────────────────────────────────────────────
   const tooltipAccessor = (event) => {
     const r = event.resource;
+    const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
     if (r?.status === 'BOOKED')
       return `🔒 BOOKED — ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick to cancel & restore slot`;
+    if (isInPanel)
+      return `✅ PANEL SELECTED — ${r.interviewer}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick again to remove from panel`;
     return [
       `👤 ${r.interviewer}`,
       r.designation ? `📋 ${r.designation}` : null,
-      r.department ? `🏢 ${r.department}` : null,
+      r.department  ? `🏢 ${r.department}` : null,
       r.yearsOfExperience ? `⏱ ${r.yearsOfExperience} yrs` : null,
       r.skills?.length ? `💻 ${r.skills.join(', ')}` : null,
       `🕐 ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`,
@@ -437,6 +553,10 @@ const AvailabilityViewPage = () => {
   const handleSendRequest = async () => {
     if (!requestForm.candidateName.trim()) {
       toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    }
+    // Privilege gate
+    if (singlePrivilegeError) {
+      toast({ title: '⛔ Insufficient interviewer privilege', description: singlePrivilegeError, variant: 'destructive' }); return;
     }
     const bookStart = parseTimeOnDate(bookStartTime, selectedSlot.start);
     const bookEnd   = parseTimeOnDate(bookEndTime,   selectedSlot.start);
@@ -474,6 +594,14 @@ const AvailabilityViewPage = () => {
     }
     if (panelTimeOptions.length === 0) {
       toast({ title: 'No overlapping time', variant: 'destructive' }); return;
+    }
+    // Privilege gate — block if any panel interviewer is under-qualified
+    if (panelPrivilegeErrors.length > 0) {
+      toast({
+        title: '⛔ Insufficient interviewer privilege',
+        description: panelPrivilegeErrors.map((e) => `${e.name}: ${e.reason}`).join('\n'),
+        variant: 'destructive',
+      }); return;
     }
     const bookStart = parseTimeOnDate(panelBookStart, panelSlots[0].slot.start);
     const bookEnd   = parseTimeOnDate(panelBookEnd,   panelSlots[0].slot.start);
@@ -549,21 +677,42 @@ const AvailabilityViewPage = () => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  // ── Derived counts ────────────────────────────────────────────────────────
   const availableCount = events.filter((e) => e.resource?.status === 'AVAILABLE').length;
   const bookedCount    = events.filter((e) => e.resource?.status === 'BOOKED').length;
 
-  // ── Interviewer legend (unique interviewers from current events) ──────────
   const interviewerLegend = Object.entries(interviewerColorMap)
     .map(([id, idx]) => {
       const ev = events.find((e) => String(e.interviewerId) === String(id));
       return { id, name: ev?.resource?.interviewer || `#${id}`, palette: INTERVIEWER_PALETTES[idx] };
     })
-    .slice(0, 20); // cap at 20 for UI sanity
+    .slice(0, 20);
 
   // ── Candidate section (shared between single + panel dialogs) ─────────────
-  const renderCandidateSection = () => (
+  const renderCandidateSection = (privilegeError) => (
     <div className="space-y-4">
+      {/* ── Privilege warning ─────────────────────────────────────────── */}
+      {privilegeError && (
+        <div className="flex items-start gap-3 p-3 bg-red-50 border-2 border-red-200 rounded-xl">
+          <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Interviewer privilege too low</p>
+            <p className="text-xs text-red-700 mt-0.5">{privilegeError}</p>
+          </div>
+        </div>
+      )}
+      {/* Multiple panel privilege errors */}
+      {Array.isArray(privilegeError) && privilegeError.length > 0 && (
+        <div className="flex items-start gap-3 p-3 bg-red-50 border-2 border-red-200 rounded-xl">
+          <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Some interviewers have insufficient privilege</p>
+            {privilegeError.map((e, i) => (
+              <p key={i} className="text-xs text-red-700 mt-0.5">• <strong>{e.name}:</strong> {e.reason}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label>Candidate *</Label>
         {requestForm.candidateId ? (
@@ -574,6 +723,14 @@ const AvailabilityViewPage = () => {
                 <p className="text-sm text-muted-foreground">
                   {candidates.find((c) => c.id === requestForm.candidateId)?.email}
                 </p>
+                {selectedCandidate?.targetDesignationName && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Target: {selectedCandidate.targetDesignationName}
+                    {selectedCandidate.targetDesignationTierOrder != null && (
+                      <span className="ml-1 text-indigo-600">(Tier {selectedCandidate.targetDesignationTierOrder})</span>
+                    )}
+                  </p>
+                )}
               </div>
               <Button variant="ghost" size="sm" onClick={handleClearCandidate}><X className="w-4 h-4" /></Button>
             </div>
@@ -594,6 +751,9 @@ const AvailabilityViewPage = () => {
                       className="w-full p-3 hover:bg-accent text-left transition-colors">
                       <p className="font-medium">{c.name}</p>
                       <p className="text-sm text-muted-foreground">{c.email}</p>
+                      {c.targetDesignationName && (
+                        <p className="text-xs text-indigo-600 mt-0.5">Target: {c.targetDesignationName}</p>
+                      )}
                     </button>
                   ))
                 }
@@ -674,7 +834,7 @@ const AvailabilityViewPage = () => {
           </div>
         )}
 
-        {/* Slot counts legend */}
+        {/* Slot counts */}
         <div className="flex items-center gap-6 px-1 flex-wrap">
           {[
             { color: '#6366f1', label: 'Available slots', count: availableCount, textColor: 'text-indigo-600' },
@@ -698,7 +858,6 @@ const AvailabilityViewPage = () => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Department */}
               <div className="space-y-2">
                 <Label>Department</Label>
                 <Select value={filterDept.length > 0 ? filterDept[0].toString() : 'ALL'}
@@ -711,7 +870,6 @@ const AvailabilityViewPage = () => {
                 </Select>
               </div>
 
-              {/* Technologies */}
               <div className="space-y-2" ref={techDropdownRef}>
                 <Label className="flex items-center gap-2">
                   <Code className="w-4 h-4" /> Technologies {filterTech.length > 0 && `(${filterTech.length})`}
@@ -771,14 +929,12 @@ const AvailabilityViewPage = () => {
                 )}
               </div>
 
-              {/* Min experience */}
               <div className="space-y-2">
                 <Label>Min. Experience (Years)</Label>
                 <Input type="number" min="0" placeholder="Any" value={minExperience}
                   onChange={(e) => setMinExperience(e.target.value)} />
               </div>
 
-              {/* Dept for designation */}
               <div className="space-y-2">
                 <Label>Department (Tier/Level Filter)</Label>
                 <Select value={selectedDeptForDesignation || 'ANY'}
@@ -791,7 +947,6 @@ const AvailabilityViewPage = () => {
                 </Select>
               </div>
 
-              {/* Min Tier */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2"><Award className="w-4 h-4" /> Min. Tier</Label>
                 <Select value={selectedTierInDept || 'ANY'}
@@ -805,7 +960,6 @@ const AvailabilityViewPage = () => {
                 </Select>
               </div>
 
-              {/* Min Level */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Min. Level in Tier</Label>
                 <Select value={minDesignationLevel || 'ANY'}
@@ -820,7 +974,6 @@ const AvailabilityViewPage = () => {
               </div>
             </div>
 
-            {/* Slot count summary */}
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <span className="text-sm font-semibold text-muted-foreground">Slots Shown</span>
@@ -855,7 +1008,7 @@ const AvailabilityViewPage = () => {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {panelMode
-                      ? 'Click AVAILABLE slots to add interviewers. Shared overlap window calculated automatically.'
+                      ? 'Click AVAILABLE slots to add interviewers. Selected slots show a ✓ badge. Overlap window calculated automatically.'
                       : 'Enable to schedule one candidate with multiple interviewers at the same time.'}
                   </p>
                 </div>
@@ -910,8 +1063,8 @@ const AvailabilityViewPage = () => {
             </CardTitle>
             <CardDescription>
               {panelMode
-                ? 'Click AVAILABLE slots to build a panel. Overlap window is calculated automatically.'
-                : 'Each color represents a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+                ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
+                : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -938,6 +1091,8 @@ const AvailabilityViewPage = () => {
                     endAccessor="end"
                     onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
+                    // ── Custom event component with panel ✓ icon ──────────────
+                    components={{ event: CalendarEventComponent }}
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
@@ -1024,7 +1179,11 @@ const AvailabilityViewPage = () => {
                     <User className="w-5 h-5 text-primary" />
                     <div>
                       <p className="font-semibold">{selectedSlot.resource.interviewer}</p>
-                      <p className="text-sm text-muted-foreground">{selectedSlot.resource.designation || 'N/A'}</p>
+                      <p className="text-sm text-muted-foreground">{selectedSlot.resource.designation || 'N/A'}
+                        {selectedSlot.resource.interviewerTierOrder != null && (
+                          <span className="ml-2 text-indigo-600 text-xs">(Tier {selectedSlot.resource.interviewerTierOrder})</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -1054,7 +1213,7 @@ const AvailabilityViewPage = () => {
                     <div>
                       <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">Choose Interview Window</p>
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                        Book part of the slot — unused time stays available automatically.
+                        Book part of the slot — unused time stays available. Slots are automatically merged when cancelled.
                       </p>
                     </div>
                   </div>
@@ -1094,13 +1253,19 @@ const AvailabilityViewPage = () => {
                 </CardContent>
               </Card>
 
-              {renderCandidateSection()}
+              {/* Candidate + privilege check */}
+              {renderCandidateSection(singlePrivilegeError)}
             </div>
           )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSendRequest} className="gap-2">
+            <Button
+              onClick={handleSendRequest}
+              disabled={!!singlePrivilegeError}
+              className="gap-2"
+              title={singlePrivilegeError ? 'Interviewer privilege too low for this candidate' : undefined}
+            >
               <Send className="w-4 h-4" /> Schedule Interview
             </Button>
           </DialogFooter>
@@ -1127,24 +1292,36 @@ const AvailabilityViewPage = () => {
                   <Users className="w-4 h-4" /> Panel Interviewers ({panelSlots.length})
                 </p>
                 <div className="space-y-2">
-                  {panelSlots.map((ps) => (
-                    <div key={ps.slot.id}
-                      className="flex items-center justify-between p-2 rounded bg-white dark:bg-gray-900 border border-sky-200">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: INTERVIEWER_PALETTES[ps.slot.paletteIdx]?.solid || '#6366f1' }} />
-                        <div>
-                          <p className="font-medium text-sm">{ps.slot.resource.interviewer}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {ps.slot.resource.department} · Slot: {format(ps.slot.start, 'h:mm a')} – {format(ps.slot.end, 'h:mm a')}
-                          </p>
+                  {panelSlots.map((ps) => {
+                    const privErr = selectedCandidate
+                      ? checkInterviewerPrivilege(ps.slot.resource, selectedCandidate)
+                      : null;
+                    return (
+                      <div key={ps.slot.id}
+                        className={`flex items-center justify-between p-2 rounded border ${privErr ? 'bg-red-50 border-red-200' : 'bg-white dark:bg-gray-900 border-sky-200'}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: INTERVIEWER_PALETTES[ps.slot.paletteIdx]?.solid || '#6366f1' }} />
+                          <div>
+                            <p className="font-medium text-sm flex items-center gap-1">
+                              {ps.slot.resource.interviewer}
+                              {privErr && <ShieldAlert className="w-3.5 h-3.5 text-red-500" />}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {ps.slot.resource.department} · Slot: {format(ps.slot.start, 'h:mm a')} – {format(ps.slot.end, 'h:mm a')}
+                              {ps.slot.resource.interviewerTierOrder != null && (
+                                <span className="ml-1 text-indigo-600">(Tier {ps.slot.resource.interviewerTierOrder})</span>
+                              )}
+                            </p>
+                            {privErr && <p className="text-xs text-red-600 mt-0.5">{privErr}</p>}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
+                          {ps.slot.resource.skills.slice(0, 2).map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
-                        {ps.slot.resource.skills.slice(0, 2).map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -1197,14 +1374,18 @@ const AvailabilityViewPage = () => {
               </CardContent>
             </Card>
 
-            {renderCandidateSection()}
+            {/* Candidate + privilege check (panel errors) */}
+            {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSendPanelRequest}
+            <Button
+              onClick={handleSendPanelRequest}
               className="gap-2 bg-sky-600 hover:bg-sky-700"
-              disabled={panelTimeOptions.length === 0}>
+              disabled={panelTimeOptions.length === 0 || panelPrivilegeErrors.length > 0}
+              title={panelPrivilegeErrors.length > 0 ? 'One or more interviewers have insufficient privilege' : undefined}
+            >
               <Users className="w-4 h-4" /> Schedule Panel Interview
             </Button>
           </DialogFooter>
