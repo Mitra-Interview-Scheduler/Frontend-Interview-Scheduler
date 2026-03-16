@@ -22,16 +22,15 @@ const hrLinks = [
   { icon: Users, label: 'Candidates', path: '/hr/candidates' },
 
   { icon: UserCheck, label: 'Interviewer Availability', path: '/hr/availability' },
-  { icon: Bell, label: 'Urgent Requests', path: '/hr/urgent' },
   { icon: Shield, label: 'Designations', path: '/hr/designations' },
-  { icon: Briefcase, label: 'Technologies', path: '/hr/technologies' },
-  { icon: FileText, label: 'Custom Rules', path: '/hr/rules' },
+  { icon: Briefcase, label: 'Technologies', path: '/hr/technologies' }
+  
 ];
 
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
-  { icon: Clock, label: 'Interview Requests', path: '/interviewer/requests' },
+ 
   { icon: Settings, label: 'Profile', path: '/interviewer/profile' },
 ];
 

@@ -1,177 +1,232 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, Calendar, TrendingUp, Shield, Clock, CheckCircle } from 'lucide-react';
+import { Users, Calendar, Shield, Clock, Loader2, RefreshCw } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
+import { tierAPI } from '@/services/tierAPI';
+import { usersAPI } from '@/services/api';
+import { useNavigate } from 'react-router-dom';
 
-const StatCard = ({ icon: Icon, title, value, description, color }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    whileHover={{ y: -4 }}
-    transition={{ duration: 0.3 }}
-  >
-    <Card className="shadow-elegant">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <div className={`p-2 rounded-lg ${color}`}>
-          <Icon className="w-4 h-4 text-white" />
+const StatCard = ({ icon: Icon, title, value, description, loading }) => (
+  <Card className="shadow-sm">
+    <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+      <div className="p-2 rounded-lg bg-primary/10">
+        <Icon className="w-4 h-4 text-primary" />
+      </div>
+    </CardHeader>
+    <CardContent>
+      {loading ? (
+        <div className="h-9 flex items-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold text-foreground">{value}</div>
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
-      </CardContent>
-    </Card>
-  </motion.div>
+      ) : (
+        <>
+          <div className="text-3xl font-bold text-foreground">{value}</div>
+          {description && (
+            <p className="text-xs text-muted-foreground mt-1">{description}</p>
+          )}
+        </>
+      )}
+    </CardContent>
+  </Card>
 );
 
 const AdminDashboard = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await usersAPI.getAll();
+      setUsers(data);
+    } catch (err) {
+      setError(err.response?.data?.message ?? err.message ?? 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  // Derived counts from real data
+  const totalUsers = users.length;
+  const admins = users.filter((u) => u.role === 'ADMIN').length;
+  const hrs = users.filter((u) => u.role === 'HR').length;
+  const interviewers = users.filter((u) => u.role === 'INTERVIEWER').length;
+  const activeUsers = users.filter((u) => u.active !== false).length;
+
+  // Recent 5 users (most recently added, assuming sorted by id desc or just last 5)
+  const recentUsers = [...users].reverse().slice(0, 5);
+
   const stats = [
-    {
-      icon: Users,
-      title: 'Total Users',
-      value: '248',
-      description: '12 added this month',
-      color: 'bg-primary',
-    },
-    {
-      icon: Shield,
-      title: 'Active Interviewers',
-      value: '89',
-      description: '45 available today',
-      color: 'bg-success',
-    },
-    {
-      icon: Calendar,
-      title: 'Scheduled Interviews',
-      value: '156',
-      description: '23 pending approval',
-      color: 'bg-secondary',
-    },
-    {
-      icon: CheckCircle,
-      title: 'Completed This Month',
-      value: '342',
-      description: '+18% from last month',
-      color: 'bg-success',
-    },
-    {
-      icon: Clock,
-      title: 'Avg Response Time',
-      value: '2.4h',
-      description: '-0.5h improvement',
-      color: 'bg-warning',
-    },
-    {
-      icon: TrendingUp,
-      title: 'System Utilization',
-      value: '87%',
-      description: 'Optimal performance',
-      color: 'bg-primary',
-    },
+    { icon: Users, title: 'Total Users', value: totalUsers, description: `${activeUsers} active` },
+    { icon: Shield, title: 'Interviewers', value: interviewers, description: 'Interview panel members' },
+    { icon: Calendar, title: 'HR Users', value: hrs, description: 'HR team members' },
+    { icon: Clock, title: 'Admins', value: admins, description: 'System administrators' },
   ];
 
-  const recentActivities = [
-    { action: 'New interviewer registered', user: 'John Smith', time: '5 minutes ago', type: 'user' },
-    { action: 'Custom rule created', user: 'Admin', time: '1 hour ago', type: 'rule' },
-    { action: 'Designation hierarchy updated', user: 'Admin', time: '2 hours ago', type: 'config' },
-    { action: 'Technology stack added', user: 'Admin', time: '3 hours ago', type: 'tech' },
-    { action: 'Urgent interview broadcast sent', user: 'Sarah Johnson (HR)', time: '4 hours ago', type: 'urgent' },
-  ];
+  const roleColor = (role) => {
+    const map = { ADMIN: 'bg-purple-100 text-purple-700', HR: 'bg-blue-100 text-blue-700', INTERVIEWER: 'bg-green-100 text-green-700' };
+    return map[role] ?? 'bg-muted text-muted-foreground';
+  };
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Admin Dashboard</h1>
-          <p className="text-muted-foreground">
-            System overview and management controls
-          </p>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
+            <p className="text-muted-foreground">System overview</p>
+          </div>
+          <Button variant="outline" size="icon" onClick={fetchUsers} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stats.map((stat, index) => (
+        {error && (
+          <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((stat, i) => (
             <motion.div
               key={stat.title}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: i * 0.08 }}
             >
-              <StatCard {...stat} />
+              <StatCard {...stat} loading={loading} />
             </motion.div>
           ))}
         </div>
 
+        {/* Content grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="shadow-elegant">
+          {/* Recent Users */}
+          <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest system activities and updates</CardDescription>
+              <CardTitle>Recent Users</CardTitle>
+              <CardDescription>Last added accounts</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentActivities.map((activity, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="flex items-start gap-4 pb-4 border-b last:border-0"
-                  >
-                    <div className="w-2 h-2 rounded-full bg-primary mt-2"></div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{activity.action}</p>
-                      <p className="text-xs text-muted-foreground">{activity.user}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : recentUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No users yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentUsers.map((user, i) => (
+                    <motion.div
+                      key={user.id}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="flex items-center gap-3"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-primary">
+                          {(user.firstName?.[0] ?? user.email[0]).toUpperCase()}
+                          {user.lastName?.[0]?.toUpperCase() ?? ''}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      </div>
+                      <Badge className={`text-xs shrink-0 ${roleColor(user.role)}`}>
+                        {user.role}
+                      </Badge>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          <Card className="shadow-elegant">
+          {/* Quick Actions */}
+          <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Frequently used admin functions</CardDescription>
+              <CardDescription>Common admin tasks</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Add User', icon: Users, path: '/admin/users' },
-                  { label: 'Create Rule', icon: Shield, path: '/admin/rules' },
-                  { label: 'View Analytics', icon: TrendingUp, path: '/admin/analytics' },
-                  { label: 'Manage Tech', icon: CheckCircle, path: '/admin/technologies' },
-                ].map((action, index) => {
+                  { label: 'Manage Users', icon: Users, path: '/admin/users' },
+                  { label: 'Technologies', icon: Shield, path: '/admin/technologies' },
+                  { label: 'Designations', icon: Calendar, path: '/admin/designations' },
+                  { label: 'Departments', icon: Clock, path: '/admin/departments' },
+                ].map((action) => {
                   const Icon = action.icon;
                   return (
-                    <motion.div
+                    <Button
                       key={action.label}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => navigate(action.path)}
                     >
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto p-4 flex flex-col items-center gap-2"
-                        onClick={() => window.location.href = action.path}
-                      >
-                        <Icon className="w-5 h-5 text-primary" />
-                        <span className="text-sm font-medium">{action.label}</span>
-                      </Button>
-                    </motion.div>
+                      <Icon className="w-5 h-5 text-primary" />
+                      <span className="text-sm font-medium">{action.label}</span>
+                    </Button>
                   );
                 })}
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Role breakdown */}
+        {!loading && users.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Role Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-6 flex-wrap">
+                {[
+                  { label: 'Admins', count: admins, total: totalUsers, color: 'bg-purple-500' },
+                  { label: 'HR', count: hrs, total: totalUsers, color: 'bg-blue-500' },
+                  { label: 'Interviewers', count: interviewers, total: totalUsers, color: 'bg-green-500' },
+                ].map((item) => (
+                  <div key={item.label} className="flex-1 min-w-[140px] space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{item.label}</span>
+                      <span className="font-medium">{item.count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${totalUsers ? (item.count / totalUsers) * 100 : 0}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${item.color}`}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {totalUsers ? Math.round((item.count / totalUsers) * 100) : 0}% of total
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </Layout>
   );

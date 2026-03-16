@@ -20,41 +20,47 @@ import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
 
-// ─── Safe array helper ────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
 const safeArray = (v) => (Array.isArray(v) ? v : []);
 
-// ─── Unified "scheduled interview" record ─────────────────────────────────────
-// Merges single requests and panels into one shape for the schedule list.
+// Panels that are cancelled must be excluded — this was the root cause of
+// the item persisting after cancel (backend cancelled it but frontend
+// re-added it from the refresh because there was no status guard).
+const ACTIVE_PANEL_STATUSES = new Set(['SCHEDULED', 'ACCEPTED', 'CONFIRMED', undefined, null]);
+
 const buildScheduleItems = (requests, panels) => {
   const items = [];
 
-  // Panel items — one record per panel
-  const panelIds = new Set();
-  safeArray(panels).forEach((panel) => {
-    panelIds.add(panel.id);
-    items.push({
-      id: `panel-${panel.id}`,
-      type: 'panel',
-      panelId: panel.id,
-      candidateName: panel.candidateName,
-      candidateId: panel.candidate?.id ?? null,
-      startDateTime: panel.startDateTime,
-      endDateTime: panel.endDateTime,
-      status: 'ACCEPTED', // panels are always accepted
-      isUrgent: panel.isUrgent,
-      notes: panel.notes,
-      interviewers: safeArray(panel.panelRequests).map((r) => ({
-        name: r.assignedInterviewerName || r.assignedInterviewer?.fullName || '—',
-        requestId: r.id,
-      })),
-      requestIds: safeArray(panel.panelRequests).map((r) => r.id),
-      technologies: safeArray(panel.panelRequests[0]?.requiredTechnologies),
+  safeArray(panels)
+    .filter((p) => {
+      // exclude cancelled / completed panels
+      const s = (p.status ?? '').toUpperCase();
+      return s !== 'CANCELLED' && s !== 'COMPLETED' && s !== 'REJECTED';
+    })
+    .forEach((panel) => {
+      items.push({
+        id: `panel-${panel.id}`,
+        type: 'panel',
+        panelId: panel.id,
+        candidateName: panel.candidateName,
+        candidateId: panel.candidate?.id ?? null,
+        startDateTime: panel.startDateTime,
+        endDateTime: panel.endDateTime,
+        status: 'ACCEPTED',
+        isUrgent: panel.isUrgent,
+        notes: panel.notes,
+        interviewers: safeArray(panel.panelRequests).map((r) => ({
+          name: r.assignedInterviewerName || r.assignedInterviewer?.fullName || '—',
+          requestId: r.id,
+        })),
+        requestIds: safeArray(panel.panelRequests).map((r) => r.id),
+        technologies: safeArray(panel.panelRequests?.[0]?.requiredTechnologies),
+      });
     });
-  });
 
-  // Single-interview items (exclude any that belong to a panel)
   safeArray(requests)
-    .filter((r) => !r.panelId)
+    .filter((r) => !r.panelId && r.status !== 'CANCELLED' && r.status !== 'REJECTED')
     .forEach((req) => {
       items.push({
         id: `req-${req.id}`,
@@ -72,28 +78,41 @@ const buildScheduleItems = (requests, panels) => {
       });
     });
 
-  // Sort upcoming first, then by start time
   return items.sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const HRDashboard = () => {
   const navigate = useNavigate();
 
-  const [candidates, setCandidates] = useState([]);
-  const [requests, setRequests] = useState([]);
-  const [panels, setPanels] = useState([]);
+  const [candidates, setCandidates]           = useState([]);
+  const [requests, setRequests]               = useState([]);
+  const [panels, setPanels]                   = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState(null);
+  const [lastRefreshed, setLastRefreshed]     = useState(null);
 
-  // Cancel dialog state
-  const [cancelTarget, setCancelTarget] = useState(null); // { item, confirmOpen }
-  const [cancelling, setCancelling] = useState(false);
+  const [cancelTarget, setCancelTarget]       = useState(null);
+  const [cancelling, setCancelling]           = useState(false);
+  const [expandedItems, setExpandedItems]     = useState(new Set());
+  // Locally dismissed items — persisted so they survive refresh
+  const [dismissed, setDismissed]             = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('hr_dismissed_items') || '[]')); }
+    catch { return new Set(); }
+  });
 
-  // Expanded interviewers panel
-  const [expandedItems, setExpandedItems] = useState(new Set());
+  const dismissItem = (itemId) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      localStorage.setItem('hr_dismissed_items', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  // ── Data loading ────────────────────────────────────────────────────────────
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
@@ -105,12 +124,11 @@ const HRDashboard = () => {
         hrAvailabilityAPI.getMyPanels(),
         hrAvailabilityAPI.getAllAvailability(),
       ]);
-      const [candidatesRes, requestsRes, panelsRes, slotsRes] = results;
-
-      setCandidates(safeArray(candidatesRes.status === 'fulfilled' ? candidatesRes.value : []));
-      setRequests(safeArray(requestsRes.status === 'fulfilled' ? requestsRes.value : []));
-      setPanels(safeArray(panelsRes.status === 'fulfilled' ? panelsRes.value : []));
-      setAvailabilitySlots(safeArray(slotsRes.status === 'fulfilled' ? slotsRes.value : []));
+      const [cRes, rRes, pRes, sRes] = results;
+      setCandidates(safeArray(cRes.status === 'fulfilled' ? cRes.value : []));
+      setRequests(safeArray(rRes.status === 'fulfilled' ? rRes.value : []));
+      setPanels(safeArray(pRes.status === 'fulfilled' ? pRes.value : []));
+      setAvailabilitySlots(safeArray(sRes.status === 'fulfilled' ? sRes.value : []));
       setLastRefreshed(new Date());
     } catch (err) {
       console.error(err);
@@ -122,41 +140,58 @@ const HRDashboard = () => {
 
   useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
 
-  // ── Cancel logic ────────────────────────────────────────────────────────────
-  const openCancelDialog = (item) => setCancelTarget(item);
+  // ── Cancel ──────────────────────────────────────────────────────────────────
+
+  const openCancelDialog  = (item) => setCancelTarget(item);
   const closeCancelDialog = () => { if (!cancelling) setCancelTarget(null); };
 
   const handleCancelConfirm = async () => {
-    if (!cancelTarget) return;
-    setCancelling(true);
-    try {
+    if (!cancelling && cancelTarget) {
+      setCancelling(true);
+
+      // ── OPTIMISTIC REMOVAL ──────────────────────────────────────────────────
+      // Remove the item from local state immediately so the UI updates at once,
+      // without waiting for the refetch. The refetch below keeps things in sync.
       if (cancelTarget.type === 'panel') {
-        await hrAvailabilityAPI.cancelPanelInterview(cancelTarget.panelId);
-        toast({
-          title: '✓ Panel interview cancelled',
-          description: `All ${cancelTarget.interviewers.length} interviewer slots restored to available.`,
-        });
+        setPanels((prev) => prev.filter((p) => p.id !== cancelTarget.panelId));
       } else {
-        await hrAvailabilityAPI.cancelInterviewRequest(cancelTarget.requestId);
-        toast({
-          title: '✓ Interview cancelled',
-          description: `${cancelTarget.interviewers[0]?.name}'s slot has been restored to available.`,
-        });
+        setRequests((prev) => prev.filter((r) => r.id !== cancelTarget.requestId));
       }
-      setCancelTarget(null);
-      await loadDashboardData();
-    } catch (err) {
-      toast({
-        title: 'Failed to cancel',
-        description: err.response?.data?.message || err.message || 'Unknown error',
-        variant: 'destructive',
-      });
-    } finally {
-      setCancelling(false);
+      setCancelTarget(null); // close dialog right away
+
+      try {
+        if (cancelTarget.type === 'panel') {
+          await hrAvailabilityAPI.cancelPanelInterview(cancelTarget.panelId);
+          toast({
+            title: 'Panel interview cancelled',
+            description: `All ${cancelTarget.interviewers.length} interviewer slots restored.`,
+          });
+        } else {
+          await hrAvailabilityAPI.cancelInterviewRequest(cancelTarget.requestId);
+          toast({
+            title: 'Interview cancelled',
+            description: `${cancelTarget.interviewers[0]?.name}'s slot has been restored.`,
+          });
+        }
+        // Sync with server (runs silently in background)
+        loadDashboardData();
+      } catch (err) {
+        // Rollback optimistic update on failure
+        toast({
+          title: 'Failed to cancel',
+          description: err.response?.data?.message || err.message || 'Unknown error',
+          variant: 'destructive',
+        });
+        // Reload to get true server state back
+        loadDashboardData();
+      } finally {
+        setCancelling(false);
+      }
     }
   };
 
-  // ── Derived stats ───────────────────────────────────────────────────────────
+  // ── Derived data ─────────────────────────────────────────────────────────────
+
   const totalCandidates = candidates.length;
   const candidatesByStatus = candidates.reduce((acc, c) => {
     const s = c.status || 'UNKNOWN';
@@ -164,35 +199,32 @@ const HRDashboard = () => {
     return acc;
   }, {});
 
-  const acceptedRequests = requests.filter((r) => r.status === 'ACCEPTED');
-  const todayInterviews = acceptedRequests.filter((r) => {
-    try { return isToday(parseISO(r.preferredStartDateTime)); } catch { return false; }
-  });
-  const tomorrowInterviews = acceptedRequests.filter((r) => {
-    try { return isTomorrow(parseISO(r.preferredStartDateTime)); } catch { return false; }
-  });
-  const thisWeekInterviews = acceptedRequests.filter((r) => {
-    try { return isThisWeek(parseISO(r.preferredStartDateTime), { weekStartsOn: 1 }); } catch { return false; }
-  });
-  const upcomingPanels = panels.filter((p) => {
-    try { return new Date(p.startDateTime) > new Date(); } catch { return false; }
-  });
-  const availableSlots = availabilitySlots.length;
+  const acceptedRequests   = requests.filter((r) => r.status === 'ACCEPTED');
+  const todayInterviews    = acceptedRequests.filter((r) => { try { return isToday(parseISO(r.preferredStartDateTime)); } catch { return false; } });
+  const tomorrowInterviews = acceptedRequests.filter((r) => { try { return isTomorrow(parseISO(r.preferredStartDateTime)); } catch { return false; } });
+  const thisWeekInterviews = acceptedRequests.filter((r) => { try { return isThisWeek(parseISO(r.preferredStartDateTime), { weekStartsOn: 1 }); } catch { return false; } });
+  const upcomingPanels     = panels.filter((p) => { try { return new Date(p.startDateTime) > new Date(); } catch { return false; } });
+  const availableSlots     = availabilitySlots.length;
 
-  // Build unified schedule items
-  const scheduleItems = buildScheduleItems(requests, panels);
+  const scheduleItems    = buildScheduleItems(requests, panels);
   const upcomingSchedule = scheduleItems.filter((item) => {
-    try { return new Date(item.startDateTime) > new Date() && item.status === 'ACCEPTED'; } catch { return false; }
+    if (dismissed.has(item.id)) return false;
+    // Use endDateTime so past interviews don't show; fall back to start + 1h
+    const end = item.endDateTime
+      ? new Date(item.endDateTime)
+      : new Date(new Date(item.startDateTime).getTime() + 60 * 60 * 1000);
+    return end > new Date() && item.status === 'ACCEPTED';
   });
-  const recentRequests = [...requests]
+  const recentRequests   = [...requests]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // ── Display helpers ──────────────────────────────────────────────────────────
+
   const formatInterviewTime = (dateStr) => {
     try {
       const d = parseISO(dateStr);
-      if (isToday(d)) return `Today, ${format(d, 'h:mm a')}`;
+      if (isToday(d))    return `Today, ${format(d, 'h:mm a')}`;
       if (isTomorrow(d)) return `Tomorrow, ${format(d, 'h:mm a')}`;
       return format(d, 'MMM d, h:mm a');
     } catch { return dateStr || '—'; }
@@ -232,13 +264,13 @@ const HRDashboard = () => {
   const toggleExpanded = (id) => {
     setExpandedItems((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
-  // ── Stats cards ─────────────────────────────────────────────────────────────
+  // ── Stats cards ──────────────────────────────────────────────────────────────
+
   const statsCards = [
     {
       title: 'Total Candidates',
@@ -270,13 +302,11 @@ const HRDashboard = () => {
     },
   ];
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
-  };
+  const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
   const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <Layout>
@@ -293,7 +323,8 @@ const HRDashboard = () => {
     );
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <Layout>
       <motion.div className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
@@ -316,31 +347,25 @@ const HRDashboard = () => {
           </Button>
         </motion.div>
 
-        {/* Error Banner */}
+        {/* Error */}
         {error && (
           <motion.div variants={itemVariants}>
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
               <div>
                 <p className="text-red-800 font-medium text-sm">{error}</p>
-                <Button variant="link" className="text-red-700 p-0 h-auto text-sm" onClick={loadDashboardData}>
-                  Try again
-                </Button>
+                <Button variant="link" className="text-red-700 p-0 h-auto text-sm" onClick={loadDashboardData}>Try again</Button>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {statsCards.map((card) => {
             const Icon = card.icon;
             return (
-              <Card
-                key={card.title}
-                className="cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 border"
-                onClick={card.onClick}
-              >
+              <Card key={card.title} className="cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 border" onClick={card.onClick}>
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className={`p-2 rounded-lg ${card.bg}`}>
@@ -366,17 +391,12 @@ const HRDashboard = () => {
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: 'View Availability', icon: Calendar, path: '/hr/availability' },
-                  { label: 'Manage Candidates', icon: Users, path: '/hr/candidates' },
-                  { label: 'Schedule Interview', icon: UserCheck, path: '/hr/availability' },
-                  { label: 'Add Candidate', icon: ClipboardList, path: '/hr/candidates/add' },
+                  { label: 'View Availability', icon: Calendar,      path: '/hr/availability' },
+                  { label: 'Manage Candidates', icon: Users,          path: '/hr/candidates' },
+                  { label: 'Schedule Interview', icon: UserCheck,     path: '/hr/availability' },
+                  { label: 'Add Candidate',      icon: ClipboardList, path: '/hr/candidates/add' },
                 ].map(({ label, icon: Icon, path }) => (
-                  <Button
-                    key={label}
-                    variant="outline"
-                    className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                    onClick={() => navigate(path)}
-                  >
+                  <Button key={label} variant="outline" className="h-auto py-3 flex flex-col gap-1.5 items-center" onClick={() => navigate(path)}>
                     <Icon className="w-5 h-5 text-primary" />
                     <span className="text-xs font-medium">{label}</span>
                   </Button>
@@ -386,10 +406,10 @@ const HRDashboard = () => {
           </Card>
         </motion.div>
 
-        {/* Main Grid */}
+        {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* ── UPCOMING SCHEDULE (unified single + panel) ── */}
+          {/* Upcoming Schedule */}
           <motion.div variants={itemVariants}>
             <Card className="h-full">
               <CardHeader>
@@ -398,17 +418,12 @@ const HRDashboard = () => {
                     <Calendar className="w-5 h-5 text-primary" />
                     Upcoming Schedule
                   </CardTitle>
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => navigate('/hr/availability')}
-                    className="text-xs gap-1"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/hr/availability')} className="text-xs gap-1">
                     View calendar <ArrowRight className="w-3 h-3" />
                   </Button>
                 </div>
                 <CardDescription>
-                  {upcomingSchedule.length} upcoming interview{upcomingSchedule.length !== 1 ? 's' : ''} ·{' '}
-                  click <Trash2 className="w-3 h-3 inline text-red-400" /> to cancel &amp; restore slot
+                  {upcomingSchedule.length} upcoming · click <Trash2 className="w-3 h-3 inline text-red-400" /> to cancel &amp; restore slot
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -416,144 +431,136 @@ const HRDashboard = () => {
                   <div className="text-center py-10 text-muted-foreground">
                     <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm">No upcoming interviews scheduled</p>
-                    <Button variant="link" size="sm" className="mt-2 text-primary"
-                      onClick={() => navigate('/hr/availability')}>
+                    <Button variant="link" size="sm" className="mt-2 text-primary" onClick={() => navigate('/hr/availability')}>
                       Schedule one →
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                    {upcomingSchedule.map((item) => {
-                      const isPanel = item.type === 'panel';
-                      const isExpanded = expandedItems.has(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          className={`rounded-xl border-2 transition-all ${
-                            isPanel
-                              ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20'
-                              : 'border-border bg-accent/20 hover:border-primary/30'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3 p-3">
-                            {/* Icon */}
-                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
-                              isPanel ? 'bg-emerald-100' : 'bg-primary/10'
-                            }`}>
-                              {isPanel
-                                ? <Users className="w-4 h-4 text-emerald-600" />
-                                : <User className="w-4 h-4 text-primary" />
-                              }
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-sm truncate">{item.candidateName}</p>
-                                  <p className="text-xs text-primary font-medium mt-0.5">
-                                    {formatInterviewTime(item.startDateTime)}
-                                    {item.endDateTime && ` – ${format(parseISO(item.endDateTime), 'h:mm a')}`}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {isPanel && (
-                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 border text-xs">
-                                      Panel · {item.interviewers.length}
-                                    </Badge>
-                                  )}
-                                  {item.isUrgent && (
-                                    <Badge variant="destructive" className="text-xs">Urgent</Badge>
-                                  )}
-                                </div>
+                    <AnimatePresence initial={false}>
+                      {upcomingSchedule.map((item) => {
+                        const isPanel    = item.type === 'panel';
+                        const isExpanded = expandedItems.has(item.id);
+                        return (
+                          <motion.div
+                            key={item.id}
+                            layout
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className={`rounded-xl border-2 overflow-hidden ${
+                              isPanel
+                                ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20'
+                                : 'border-border bg-accent/20 hover:border-primary/30'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 p-3">
+                              <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${isPanel ? 'bg-emerald-100' : 'bg-primary/10'}`}>
+                                {isPanel
+                                  ? <Users className="w-4 h-4 text-emerald-600" />
+                                  : <User  className="w-4 h-4 text-primary" />}
                               </div>
 
-                              {/* Interviewers row */}
-                              <div className="mt-1.5">
-                                {isPanel ? (
-                                  <button
-                                    onClick={() => toggleExpanded(item.id)}
-                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    {isExpanded
-                                      ? <ChevronUp className="w-3 h-3" />
-                                      : <ChevronDown className="w-3 h-3" />
-                                    }
-                                    {item.interviewers.map((i) => i.name).join(', ')}
-                                  </button>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">
-                                    with {item.interviewers[0]?.name}
-                                  </p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-sm truncate">{item.candidateName}</p>
+                                    <p className="text-xs text-primary font-medium mt-0.5">
+                                      {formatInterviewTime(item.startDateTime)}
+                                      {item.endDateTime && ` – ${format(parseISO(item.endDateTime), 'h:mm a')}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {isPanel && (
+                                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 border text-xs">
+                                        Panel · {item.interviewers.length}
+                                      </Badge>
+                                    )}
+                                    {item.isUrgent && <Badge variant="destructive" className="text-xs">Urgent</Badge>}
+                                  </div>
+                                </div>
+
+                                <div className="mt-1.5">
+                                  {isPanel ? (
+                                    <button
+                                      onClick={() => toggleExpanded(item.id)}
+                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                      {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                      {item.interviewers.map((i) => i.name).join(', ')}
+                                    </button>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">with {item.interviewers[0]?.name}</p>
+                                  )}
+                                </div>
+
+                                <AnimatePresence>
+                                  {isPanel && isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="flex flex-wrap gap-1 mt-2">
+                                        {item.interviewers.map((iv, idx) => (
+                                          <span key={idx} className="text-xs bg-white border border-emerald-200 rounded-md px-2 py-0.5 text-emerald-800">
+                                            {iv.name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+
+                                {item.technologies.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {item.technologies.slice(0, 3).map((t, i) => (
+                                      <Badge key={i} variant="outline" className="text-xs px-1.5 py-0">{t.name || t}</Badge>
+                                    ))}
+                                    {item.technologies.length > 3 && (
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0">+{item.technologies.length - 3}</Badge>
+                                    )}
+                                  </div>
                                 )}
                               </div>
 
-                              {/* Expanded panel interviewers */}
-                              <AnimatePresence>
-                                {isPanel && isExpanded && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="flex flex-wrap gap-1 mt-2">
-                                      {item.interviewers.map((iv, idx) => (
-                                        <span
-                                          key={idx}
-                                          className="text-xs bg-white border border-emerald-200 rounded-md px-2 py-0.5 text-emerald-800"
-                                        >
-                                          {iv.name}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-
-                              {/* Technologies */}
-                              {item.technologies.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {item.technologies.slice(0, 3).map((t, i) => (
-                                    <Badge key={i} variant="outline" className="text-xs px-1.5 py-0">
-                                      {t.name || t}
-                                    </Badge>
-                                  ))}
-                                  {item.technologies.length > 3 && (
-                                    <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                      +{item.technologies.length - 3}
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
+                              {/* Actions */}
+                              <div className="flex flex-col gap-0.5 ml-1 shrink-0">
+                                <button
+                                  onClick={() => openCancelDialog(item)}
+                                  title="Cancel & restore slot"
+                                  className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-all"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => dismissItem(item.id)}
+                                  title="Hide from this list"
+                                  className="p-1.5 rounded-lg text-muted-foreground hover:text-gray-600 hover:bg-gray-100 transition-all"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-
-                            {/* Cancel button */}
-                            <button
-                              onClick={() => openCancelDialog(item)}
-                              title="Cancel interview & restore slot"
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-all ml-1 shrink-0"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
                   </div>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* ── RECENT CANDIDATES ── */}
+          {/* Recent Candidates */}
           <motion.div variants={itemVariants}>
             <Card className="h-full">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-primary" />
-                    Recent Candidates
+                    <Users className="w-5 h-5 text-primary" /> Recent Candidates
                   </CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => navigate('/hr/candidates')} className="text-xs gap-1">
                     View all <ArrowRight className="w-3 h-3" />
@@ -566,8 +573,7 @@ const HRDashboard = () => {
                   <div className="text-center py-10 text-muted-foreground">
                     <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm">No candidates in the system yet</p>
-                    <Button variant="link" size="sm" className="mt-2 text-primary"
-                      onClick={() => navigate('/hr/candidates/add')}>
+                    <Button variant="link" size="sm" className="mt-2 text-primary" onClick={() => navigate('/hr/candidates/add')}>
                       Add first candidate →
                     </Button>
                   </div>
@@ -602,13 +608,12 @@ const HRDashboard = () => {
             </Card>
           </motion.div>
 
-          {/* ── PIPELINE OVERVIEW ── */}
+          {/* Pipeline */}
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  Pipeline Overview
+                  <TrendingUp className="w-5 h-5 text-primary" /> Candidate Info
                 </CardTitle>
                 <CardDescription>Candidates by stage</CardDescription>
               </CardHeader>
@@ -618,32 +623,28 @@ const HRDashboard = () => {
                 ) : (
                   <div className="space-y-3">
                     {[
-                      { label: 'Applied', key: 'APPLIED', color: 'bg-blue-500' },
-                      { label: 'Screening', key: 'SCREENING', color: 'bg-purple-500' },
-                      { label: 'Scheduled', key: 'SCHEDULED', color: 'bg-green-500' },
+                      { label: 'Applied',     key: 'APPLIED',     color: 'bg-blue-500' },
+                      { label: 'Screening',   key: 'SCREENING',   color: 'bg-purple-500' },
+                      { label: 'Scheduled',   key: 'SCHEDULED',   color: 'bg-green-500' },
                       { label: 'Interviewed', key: 'INTERVIEWED', color: 'bg-teal-500' },
-                      { label: 'Offered', key: 'OFFERED', color: 'bg-amber-500' },
-                      { label: 'Hired', key: 'HIRED', color: 'bg-emerald-600' },
-                      { label: 'Rejected', key: 'REJECTED', color: 'bg-red-400' },
+                      { label: 'Offered',     key: 'OFFERED',     color: 'bg-amber-500' },
+                      { label: 'Hired',       key: 'HIRED',       color: 'bg-emerald-600' },
+                      { label: 'Rejected',    key: 'REJECTED',    color: 'bg-red-400' },
                     ]
                       .filter((s) => (candidatesByStatus[s.key] || 0) > 0)
                       .map((stage) => {
                         const count = candidatesByStatus[stage.key] || 0;
-                        const pct = Math.round((count / totalCandidates) * 100);
+                        const pct   = Math.round((count / totalCandidates) * 100);
                         return (
                           <div key={stage.key} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-muted-foreground">{stage.label}</span>
                               <span className="font-semibold">
-                                {count}{' '}
-                                <span className="text-muted-foreground font-normal text-xs">({pct}%)</span>
+                                {count} <span className="text-muted-foreground font-normal text-xs">({pct}%)</span>
                               </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${stage.color} transition-all duration-700`}
-                                style={{ width: `${pct}%` }}
-                              />
+                              <div className={`h-full rounded-full ${stage.color} transition-all duration-700`} style={{ width: `${pct}%` }} />
                             </div>
                           </div>
                         );
@@ -654,14 +655,13 @@ const HRDashboard = () => {
             </Card>
           </motion.div>
 
-          {/* ── RECENT REQUESTS TABLE ── */}
+          {/* Recent Requests */}
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-primary" />
-                    Recent Requests
+                    <ClipboardList className="w-5 h-5 text-primary" /> Recent Requests
                   </CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => navigate('/hr/availability')} className="text-xs gap-1">
                     View calendar <ArrowRight className="w-3 h-3" />
@@ -697,8 +697,7 @@ const HRDashboard = () => {
                             <td className="py-2.5 px-3">
                               {req.panelId
                                 ? <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 border text-xs">Panel</Badge>
-                                : <Badge className="bg-blue-100 text-blue-800 border-blue-200 border text-xs">Single</Badge>
-                              }
+                                : <Badge className="bg-blue-100 text-blue-800 border-blue-200 border text-xs">Single</Badge>}
                             </td>
                           </tr>
                         ))}
@@ -712,7 +711,7 @@ const HRDashboard = () => {
         </div>
       </motion.div>
 
-      {/* ── CANCEL CONFIRMATION DIALOG ── */}
+      {/* Cancel dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={closeCancelDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -721,15 +720,12 @@ const HRDashboard = () => {
             </DialogTitle>
             <DialogDescription>
               This will cancel the interview and immediately restore the slot(s) to available.
-              The interviewer{cancelTarget?.type === 'panel' ? 's' : ''} will be notified right away.
             </DialogDescription>
           </DialogHeader>
 
           {cancelTarget && (
             <div className={`rounded-xl border-2 p-4 ${
-              cancelTarget.type === 'panel'
-                ? 'border-emerald-200 bg-emerald-50'
-                : 'border-red-100 bg-red-50'
+              cancelTarget.type === 'panel' ? 'border-emerald-200 bg-emerald-50' : 'border-red-100 bg-red-50'
             }`}>
               <p className="font-semibold text-sm mb-1">
                 {cancelTarget.type === 'panel' ? '👥 Panel Interview' : '👤 Single Interview'}
@@ -737,15 +733,12 @@ const HRDashboard = () => {
               <p className="text-sm font-medium">{cancelTarget.candidateName}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {formatInterviewTime(cancelTarget.startDateTime)}
-                {cancelTarget.endDateTime &&
-                  ` – ${format(parseISO(cancelTarget.endDateTime), 'h:mm a')}`
-                }
+                {cancelTarget.endDateTime && ` – ${format(parseISO(cancelTarget.endDateTime), 'h:mm a')}`}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {cancelTarget.type === 'panel'
                   ? `${cancelTarget.interviewers.length} interviewers: ${cancelTarget.interviewers.map((i) => i.name).join(', ')}`
-                  : `with ${cancelTarget.interviewers[0]?.name}`
-                }
+                  : `with ${cancelTarget.interviewers[0]?.name}`}
               </p>
               {cancelTarget.type === 'panel' && (
                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
@@ -762,22 +755,10 @@ const HRDashboard = () => {
             <Button variant="outline" onClick={closeCancelDialog} disabled={cancelling}>
               Keep Interview
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleCancelConfirm}
-              disabled={cancelling}
-              className="gap-2"
-            >
-              {cancelling ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Cancelling…
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4" /> Cancel & Restore Slot
-                </>
-              )}
+            <Button variant="destructive" onClick={handleCancelConfirm} disabled={cancelling} className="gap-2">
+              {cancelling
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Cancelling…</>
+                : <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>}
             </Button>
           </DialogFooter>
         </DialogContent>
