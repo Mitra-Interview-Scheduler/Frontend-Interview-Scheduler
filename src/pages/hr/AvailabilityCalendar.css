@@ -1,6 +1,15 @@
 /* ============================================================
    AVAILABILITY CALENDAR — SHARED STYLES
    Used by: InterviewerAvailabilityPage  +  HRAvailabilityViewPage
+
+   KEY RULES:
+   1. Container is a plain height block — RBC measures it for px/min calc.
+   2. .rbc-day-slot has NO overflow:hidden — events are position:absolute.
+   3. .rbc-events-container has NO explicit height — RBC sets it inline.
+   4. Never override position/top/left/width/height on .rbc-event.
+   5. Use overflow-y:scroll (not auto) on .rbc-time-content so the
+      scrollbar is always present — prevents gutter misalignment in
+      day view where the single column otherwise shifts by ~8px.
    ============================================================ */
 
 /* ── Base ────────────────────────────────────────────────── */
@@ -111,6 +120,10 @@
   background: linear-gradient(180deg,
     hsl(var(--muted, 210 40% 96.1%) / 0.35) 0%,
     hsl(var(--muted, 210 40% 96.1%) / 0.65) 100%);
+  /* Compensate for the always-present scrollbar in rbc-time-content
+     so the header columns align perfectly with the content columns.
+     This is the #1 fix for day view misalignment. */
+  padding-right: 8px;
 }
 
 .availability-calendar-container .rbc-time-header-gutter {
@@ -155,25 +168,31 @@
   border-left: none;
 }
 
+/* Hide all-day row */
 .availability-calendar-container .rbc-allday-cell {
-  display: none;
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* ══════════════════════════════════════════════════════════
    TIME CONTENT — scrollable grid
+   FIX: overflow-y:scroll (not auto) keeps the scrollbar always
+   visible so the header padding-right of 8px aligns correctly
+   in both week view (many columns) and day view (1 column).
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-time-content {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: row;
-  overflow-y: auto;
+  overflow-y: scroll;   /* scroll, not auto — prevents column shift */
   overflow-x: hidden;
   border-top: none;
   position: relative;
 }
 
-/* ── Time gutter ──────────────────────────────────────── */
+/* ── Time gutter ─────────────────────────────────────────── */
 .availability-calendar-container .rbc-time-gutter {
   flex: none;
   width: 70px;
@@ -203,12 +222,12 @@
 
 /* ══════════════════════════════════════════════════════════
    DAY COLUMNS
-   CRITICAL: position:relative, NO overflow:hidden
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-day-slot {
   flex: 1;
   min-width: 0;
   position: relative;
+  /* NO overflow:hidden */
 }
 
 .availability-calendar-container .rbc-time-column {
@@ -225,7 +244,7 @@
 }
 
 .availability-calendar-container .rbc-timeslot-group:hover {
-  background-color: hsl(var(--accent, 210 40% 96.1%) / 0.18);
+  background-color: hsl(var(--accent, 210 40% 96.1%) / 0.25);
   transition: background-color 0.1s;
 }
 
@@ -240,6 +259,45 @@
 }
 
 /* ══════════════════════════════════════════════════════════
+   DAY VIEW SPECIFIC OVERRIDES
+   RBC adds .rbc-day-view to .rbc-calendar in day view.
+   ══════════════════════════════════════════════════════════ */
+
+/* Single column — remove the left border that week view uses
+   to separate adjacent columns; day view has nothing to its left */
+.availability-calendar-container .rbc-calendar.rbc-day-view
+  .rbc-day-slot .rbc-timeslot-group {
+  border-left: none;
+}
+
+/* Single header cell — no left separator needed */
+.availability-calendar-container .rbc-calendar.rbc-day-view
+  .rbc-time-header-cell .rbc-header {
+  border-left: none;
+}
+
+/* Events container — allow it to fill the full column width.
+   In day view RBC sometimes applies a margin-right for overlap
+   layout that isn't needed when there's only one column. */
+.availability-calendar-container .rbc-calendar.rbc-day-view
+  .rbc-events-container {
+  margin-right: 0 !important;
+}
+
+/* Day view events — more room, so use slightly larger text */
+.availability-calendar-container .rbc-calendar.rbc-day-view
+  .rbc-event {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.availability-calendar-container .rbc-calendar.rbc-day-view
+  .rbc-event-content {
+  white-space: normal;
+  font-size: 12px;
+}
+
+/* ══════════════════════════════════════════════════════════
    EVENTS CONTAINER
    RBC sets position:absolute + inline height.
    DO NOT set height or overflow:hidden here.
@@ -249,28 +307,29 @@
   top: 0;
   left: 2px;
   right: 2px;
+  /* height set inline by RBC — do not touch */
 }
 
 /* ══════════════════════════════════════════════════════════
-   EVENTS — HR view needs tighter padding for dense columns
+   EVENTS
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .rbc-event {
   border-radius: 5px;
-  padding: 3px 6px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 12px;
   font-weight: 500;
   font-family: inherit;
-  line-height: 1.25;
+  line-height: 1.3;
   cursor: pointer;
   overflow: hidden;
-  transition: filter 0.12s ease, box-shadow 0.12s ease, z-index 0s;
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
   border: none !important;
 }
 
 .availability-calendar-container .rbc-event:hover {
   filter: brightness(1.1);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.26) !important;
-  z-index: 20 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22) !important;
+  z-index: 10 !important;
 }
 
 .availability-calendar-container .rbc-event:focus {
@@ -278,9 +337,8 @@
   outline-offset: 1px;
 }
 
-/* Time label inside event (week/day views) */
 .availability-calendar-container .rbc-event-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
   opacity: 0.82;
@@ -292,7 +350,7 @@
 }
 
 .availability-calendar-container .rbc-event-content {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -305,40 +363,20 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   HR-SPECIFIC: Overlapping events — make them all visible
-   RBC renders overlapping events side by side automatically
-   when they share the same column. These rules improve the
-   narrowed layout for dense multi-interviewer days.
+   HR CALENDAR — dense overlapping events
    ══════════════════════════════════════════════════════════ */
-
-/* When multiple events overlap, RBC narrows each one.
-   Ensure minimum readable width and always show name. */
 .availability-calendar-container.hr-calendar .rbc-event {
   min-width: 40px;
   padding: 2px 4px;
 }
 
-/* Show full name on hover even in narrow state */
 .availability-calendar-container.hr-calendar .rbc-event:hover .rbc-event-content {
   white-space: normal;
   word-break: break-word;
 }
 
-/* HR Overlap indicator — thin right border to visually
-   separate adjacent events of same interviewer */
 .availability-calendar-container.hr-calendar .rbc-event + .rbc-event {
   border-left: 1px solid rgba(255,255,255,0.3) !important;
-}
-
-/* Day view shows one column → more room for each event */
-.availability-calendar-container .rbc-time-view.rbc-view-day .rbc-event {
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.availability-calendar-container .rbc-time-view.rbc-view-day .rbc-event-content {
-  font-size: 12px;
-  white-space: normal;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -388,9 +426,7 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.availability-calendar-container .rbc-month-header {
-  flex: none;
-}
+.availability-calendar-container .rbc-month-header { flex: none; }
 
 .availability-calendar-container .rbc-header {
   padding: 10px 6px;
@@ -499,7 +535,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   PAST TIME / DAY SLOTS
+   PAST TIME SLOTS
    ══════════════════════════════════════════════════════════ */
 .availability-calendar-container .past-time-slot {
   background-color: rgba(0, 0, 0, 0.02) !important;
@@ -544,9 +580,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   HR CALENDAR — INTERVIEWER GROUPING HEADER
-   Shown above the week/day grid so HR can see who owns each
-   column of events at a glance.
+   HR CALENDAR INTERVIEWER LEGEND
    ══════════════════════════════════════════════════════════ */
 .hr-interviewer-legend {
   display: flex;
@@ -596,8 +630,10 @@
     width: 48px; min-width: 48px; max-width: 48px;
   }
   .availability-calendar-container .rbc-label { font-size: 10px; padding: 3px 6px; }
-  .availability-calendar-container .rbc-event { font-size: 10px; padding: 2px 4px; }
+  .availability-calendar-container .rbc-event { font-size: 11px; padding: 3px 5px; }
   .availability-calendar-container .rbc-toolbar button { padding: 5px 10px; font-size: 12px; }
+  /* On mobile, header padding matches narrower scrollbar */
+  .availability-calendar-container .rbc-time-header { padding-right: 6px; }
 }
 
 /* ══════════════════════════════════════════════════════════
