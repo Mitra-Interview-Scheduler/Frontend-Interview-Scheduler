@@ -129,24 +129,7 @@ const Login = () => {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm text-muted-foreground mb-3">Demo accounts:</p>
-              <div className="space-y-2">
-                {demoAccounts.map((account) => (
-                  <button
-                    key={account.email}
-                    onClick={() => {
-                      setEmail(account.email);
-                      setPassword('demo123');
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-lg border hover:bg-accent transition-colors text-sm"
-                  >
-                    <span className="font-medium">{account.role}:</span>{' '}
-                    <span className="text-muted-foreground">{account.email}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+           
           </CardContent>
         </Card>
       </motion.div>
