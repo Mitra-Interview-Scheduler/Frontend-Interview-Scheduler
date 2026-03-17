@@ -33,11 +33,16 @@ const buildScheduleItems = (requests, panels) => {
   const items = [];
 
   safeArray(panels)
-    .filter((p) => {
-      // exclude cancelled / completed panels
-      const s = (p.status ?? '').toUpperCase();
-      return s !== 'CANCELLED' && s !== 'COMPLETED' && s !== 'REJECTED';
-    })
+  .filter((p) => {
+    const s = (p.status ?? '').toUpperCase();
+    if (s === 'CANCELLED' || s === 'COMPLETED' || s === 'REJECTED') return false;
+
+    // ← ADD THIS: if every child request is cancelled, the panel is effectively cancelled
+    const reqs = safeArray(p.panelRequests);
+    if (reqs.length > 0 && reqs.every((r) => r.status === 'CANCELLED')) return false;
+
+    return true;
+  })
     .forEach((panel) => {
       items.push({
         id: `panel-${panel.id}`,

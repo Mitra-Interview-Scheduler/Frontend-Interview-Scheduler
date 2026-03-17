@@ -48,14 +48,17 @@ const ProfilePage = () => {
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
 
+  // ── FIX: dedicated state for tier selection so it doesn't depend on
+  //         profile.currentDesignation (which gets nulled on tier change)
+  const [selectedTierId, setSelectedTierId] = useState(null);
+
   useEffect(() => {
     loadProfileData();
   }, []);
 
   useEffect(() => {
-    // Filter technologies based on input
     if (newSkill.trim()) {
-      const filtered = technologies.filter(tech => 
+      const filtered = technologies.filter(tech =>
         tech.name.toLowerCase().includes(newSkill.toLowerCase()) &&
         !interviewerTechs.some(it => it.technology.id === tech.id)
       );
@@ -66,25 +69,6 @@ const ProfilePage = () => {
       setShowSkillDropdown(false);
     }
   }, [newSkill, technologies, interviewerTechs]);
-
-  // Load tiers when department changes
-  useEffect(() => {
-    if (profile?.department?.id) {
-      loadTiersForDepartment(profile.department.id);
-    } else {
-      setTiersForSelectedDept([]);
-      setDesignationsForSelectedTier([]);
-    }
-  }, [profile?.department?.id]);
-
-  // Load designations when tier changes
-  useEffect(() => {
-    if (profile?.currentDesignation?.tier?.id) {
-      loadDesignationsForTier(profile.currentDesignation.tier.id);
-    } else {
-      setDesignationsForSelectedTier([]);
-    }
-  }, [profile?.currentDesignation?.tier?.id]);
 
   const loadProfileData = async () => {
     try {
@@ -105,7 +89,9 @@ const ProfilePage = () => {
       setTiers(tierList);
       setInterviewerTechs(interviewerTechList);
 
-      // Load tiers and designations for current department/tier
+      // ── FIX: initialize selectedTierId from the loaded profile
+      setSelectedTierId(profileData.currentDesignation?.tier?.id ?? null);
+
       if (profileData.department?.id) {
         await loadTiersForDepartment(profileData.department.id);
       }
@@ -153,11 +139,9 @@ const ProfilePage = () => {
         bio: profile.bio,
         yearsOfExperience: profile.yearsOfExperience
       });
-      
+
       setIsEditing(false);
       toast.success('Profile updated successfully!');
-      
-      // Reload profile to get updated data
       await loadProfileData();
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -173,53 +157,41 @@ const ProfilePage = () => {
 
   const handleDepartmentChange = async (deptId) => {
     if (deptId === "NONE") {
-      setProfile({ 
-        ...profile, 
-        department: null,
-        currentDesignation: null
-      });
+      setProfile({ ...profile, department: null, currentDesignation: null });
+      setSelectedTierId(null);         // ── FIX
       setTiersForSelectedDept([]);
       setDesignationsForSelectedTier([]);
       return;
     }
 
     const department = departments.find(d => d.id === parseInt(deptId));
-    setProfile({ 
-      ...profile, 
-      department,
-      currentDesignation: null // Reset designation when department changes
-    });
-    
-    // Load tiers for new department
+    setProfile({ ...profile, department, currentDesignation: null });
+    setSelectedTierId(null);           // ── FIX: reset tier when department changes
+    setDesignationsForSelectedTier([]);
+
     if (deptId) {
       await loadTiersForDepartment(parseInt(deptId));
     } else {
       setTiersForSelectedDept([]);
-      setDesignationsForSelectedTier([]);
     }
   };
 
   const handleTierChange = async (tierId) => {
     if (tierId === "NONE" || !tierId) {
-      setProfile({
-        ...profile,
-        currentDesignation: null
-      });
+      setSelectedTierId(null);         // ── FIX: clear dedicated tier state
+      setProfile({ ...profile, currentDesignation: null });
       setDesignationsForSelectedTier([]);
       return;
     }
 
-    const tier = tiersForSelectedDept.find(t => t.id === parseInt(tierId));
-    
-    // Load designations for this tier
-    await loadDesignationsForTier(parseInt(tierId));
-    
-    // Keep current designation if it's in the new tier, otherwise reset
-    if (profile.currentDesignation?.tier?.id !== parseInt(tierId)) {
-      setProfile({
-        ...profile,
-        currentDesignation: null
-      });
+    const id = parseInt(tierId);
+    setSelectedTierId(id);             // ── FIX: store tier independently, not inside profile
+
+    await loadDesignationsForTier(id);
+
+    // Only reset designation if switching to a different tier
+    if (profile.currentDesignation?.tier?.id !== id) {
+      setProfile({ ...profile, currentDesignation: null });
     }
   };
 
@@ -245,9 +217,9 @@ const ProfilePage = () => {
 
   const handleAddSkill = async () => {
     if (!newSkill.trim()) return;
-    
+
     setShowSkillDropdown(false);
-    
+
     try {
       const exactMatch = technologies.find(
         t => t.name.toLowerCase() === newSkill.trim().toLowerCase()
@@ -272,11 +244,11 @@ const ProfilePage = () => {
       const newTech = await profileAPI.createTechnology(newSkill.trim(), newSkillCategory);
       setTechnologies([...technologies, newTech]);
       await addSkillById(newTech.id);
-      
+
       setNewSkill('');
       setNewSkillCategory('Other');
       setShowNewSkillModal(false);
-      
+
       toast.success(`Created and added "${newTech.name}"`);
     } catch (error) {
       console.error('Error creating skill:', error);
@@ -316,7 +288,7 @@ const ProfilePage = () => {
       setShowSkillDropdown(false);
     } else {
       setFilteredTechnologies(
-        technologies.filter(tech => 
+        technologies.filter(tech =>
           !interviewerTechs.some(it => it.technology.id === tech.id)
         )
       );
@@ -377,6 +349,7 @@ const ProfilePage = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Sidebar */}
           <Card className="shadow-elegant">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
@@ -430,6 +403,7 @@ const ProfilePage = () => {
           </Card>
 
           <div className="lg:col-span-2 space-y-6">
+            {/* Personal Info */}
             <Card className="shadow-elegant">
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
@@ -495,12 +469,14 @@ const ProfilePage = () => {
               </CardContent>
             </Card>
 
+            {/* Professional Details */}
             <Card className="shadow-elegant">
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
                 <CardDescription>Your role, department, tier, and designation information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Department */}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Briefcase className="w-4 h-4" />
@@ -532,6 +508,7 @@ const ProfilePage = () => {
                   )}
                 </div>
 
+                {/* Tier — only show when a department is selected */}
                 {profile.department && (
                   <>
                     <div className="space-y-2">
@@ -541,7 +518,8 @@ const ProfilePage = () => {
                       </Label>
                       {isEditing ? (
                         <Select
-                          value={profile.currentDesignation?.tier?.id?.toString() || "NONE"}
+                          // ── FIX: read from dedicated selectedTierId, not from designation
+                          value={selectedTierId?.toString() || "NONE"}
                           onValueChange={handleTierChange}
                           disabled={!profile.department?.id}
                         >
@@ -559,8 +537,8 @@ const ProfilePage = () => {
                         </Select>
                       ) : (
                         <Input
-                          value={profile.currentDesignation?.tier 
-                            ? `Tier ${profile.currentDesignation.tier.tierOrder} - ${profile.currentDesignation.tier.name}` 
+                          value={profile.currentDesignation?.tier
+                            ? `Tier ${profile.currentDesignation.tier.tierOrder} - ${profile.currentDesignation.tier.name}`
                             : 'Not set'}
                           disabled
                           className="bg-muted"
@@ -568,6 +546,7 @@ const ProfilePage = () => {
                       )}
                     </div>
 
+                    {/* Designation — only show when a tier is selected */}
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Award className="w-4 h-4" />
@@ -577,12 +556,13 @@ const ProfilePage = () => {
                         <Select
                           value={profile.currentDesignation?.id?.toString() || "NONE"}
                           onValueChange={handleDesignationChange}
-                          disabled={!profile.currentDesignation?.tier?.id && designationsForSelectedTier.length === 0}
+                          // ── FIX: gate on selectedTierId, not designation's tier
+                          disabled={!selectedTierId || designationsForSelectedTier.length === 0}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder={
-                              profile.currentDesignation?.tier?.id 
-                                ? "Select designation" 
+                              selectedTierId
+                                ? "Select designation"
                                 : "Select tier first"
                             } />
                           </SelectTrigger>
@@ -597,8 +577,8 @@ const ProfilePage = () => {
                         </Select>
                       ) : (
                         <Input
-                          value={profile.currentDesignation?.name 
-                            ? `Level ${profile.currentDesignation.levelOrder} - ${profile.currentDesignation.name}` 
+                          value={profile.currentDesignation?.name
+                            ? `Level ${profile.currentDesignation.levelOrder} - ${profile.currentDesignation.name}`
                             : 'Not set'}
                           disabled
                           className="bg-muted"
@@ -608,6 +588,7 @@ const ProfilePage = () => {
                   </>
                 )}
 
+                {/* Years of Experience */}
                 <div className="space-y-2">
                   <Label>Years of Experience</Label>
                   <Input
@@ -624,6 +605,7 @@ const ProfilePage = () => {
               </CardContent>
             </Card>
 
+            {/* Skills */}
             <Card className="shadow-elegant">
               <CardHeader>
                 <CardTitle>Technical Skills & Interview Preferences</CardTitle>
@@ -657,7 +639,7 @@ const ProfilePage = () => {
                           className="pr-10"
                         />
                         <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                        
+
                         <AnimatePresence>
                           {showSkillDropdown && (
                             <motion.div
@@ -695,17 +677,17 @@ const ProfilePage = () => {
                           )}
                         </AnimatePresence>
                       </div>
-                      <Button 
-                        onClick={handleAddSkill} 
-                        size="sm" 
+                      <Button
+                        onClick={handleAddSkill}
+                        size="sm"
                         className="shrink-0"
                         disabled={!newSkill.trim()}
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
-                      <Button 
+                      <Button
                         onClick={handleShowAllSkills}
-                        size="sm" 
+                        size="sm"
                         variant="outline"
                         className="shrink-0"
                         title="Browse all skills"
@@ -713,7 +695,7 @@ const ProfilePage = () => {
                         <ChevronDown className="w-4 h-4" />
                       </Button>
                     </div>
-                    
+
                     <p className="text-xs text-muted-foreground">
                       Start typing to search, or click the dropdown icon to browse all available skills
                     </p>
@@ -749,7 +731,7 @@ const ProfilePage = () => {
                   ))}
                   {interviewerTechs.length === 0 && (
                     <p className="text-sm text-muted-foreground">
-                      {isEditing 
+                      {isEditing
                         ? "No skills added yet. Start typing above to add your first skill."
                         : "No skills added yet. Click 'Edit Profile' to add skills."}
                     </p>
