@@ -22,7 +22,7 @@ import { authAPI, usersAPI } from '@/services/api'; // ← adjust to your api.js
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
-const ROOT_KEY = 'root'; // key required to delete ADMIN accounts
+const ROOT_KEY = import.meta.env.VITE_ROOT_KEY ?? "root"; // key required to delete ADMIN accounts
 
 const ROLE_META = {
   ADMIN:       { label: 'Admin',       dot: 'bg-violet-500', badge: 'bg-violet-100 text-violet-700 border-violet-200' },
