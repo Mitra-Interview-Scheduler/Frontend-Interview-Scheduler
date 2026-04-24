@@ -128,22 +128,22 @@ const App = () => (
                 </PrivateRoute>
               }
             />
-            <Route
+            {/* <Route
               path="/hr/designations"
               element={
                 <PrivateRoute allowedRoles={['HR']}>
                   <DesignationsPage />
                 </PrivateRoute>
               }
-            />
-            <Route
+            /> */}
+            {/* <Route
               path="/hr/technologies"
               element={
                 <PrivateRoute allowedRoles={['HR']}>
                   <TechnologiesPage />
                 </PrivateRoute>
               }
-            />
+            /> */}
             <Route
               path="/hr/rules"
               element={
