@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { authAPI } from '@/services/api';
+import { set } from 'date-fns';
 
 const AuthContext = createContext(null);
 
@@ -52,7 +53,6 @@ export const AuthProvider = ({ children }) => {
         profilePicture: response.profilePictureUrl,
       };
       
-      // Store token and user data
       localStorage.setItem('token', response.token);
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
@@ -60,6 +60,10 @@ export const AuthProvider = ({ children }) => {
       return userData;
     } catch (error) {
       console.error('Login error:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+
       throw new Error(error.response?.data?.message || 'Login failed');
     }
   };
