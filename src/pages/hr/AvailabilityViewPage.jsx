@@ -1163,9 +1163,9 @@ const AvailabilityViewPage = () => {
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Send className="w-6 h-6 text-primary" /> Schedule Interview
             </DialogTitle>
-            <DialogDescription>
+            {/* <DialogDescription>
               Schedule an interview with {selectedSlot?.resource.interviewer}
-            </DialogDescription>
+            </DialogDescription> */}
           </DialogHeader>
 
           {selectedSlot && (
@@ -1174,8 +1174,8 @@ const AvailabilityViewPage = () => {
               <Card className="bg-accent/50">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: INTERVIEWER_PALETTES[selectedSlot.paletteIdx]?.solid || '#6366f1' }} />
+                    {/* <div className="w-3 h-3 rounded-full" */}
+                      {/* // style={{ backgroundColor: INTERVIEWER_PALETTES[selectedSlot.paletteIdx]?.solid || '#6366f1' }} /> */}
                     <User className="w-5 h-5 text-primary" />
                     <div>
                       <p className="font-semibold">{selectedSlot.resource.interviewer}</p>

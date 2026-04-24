@@ -12,39 +12,41 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const validationErrors = { email: '', password: '' };
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setLoading(true);
-
-  try {
-    const user = await login(email, password);
-    
-    // Navigate based on role
-    if (user.role === 'ADMIN') {
-      navigate('/admin/dashboard');
-    } else if (user.role === 'HR') {
-      navigate('/hr/dashboard');
-    } else if (user.role === 'INTERVIEWER') {
-      navigate('/interviewer/dashboard');
+    e.preventDefault();
+    setError('');
+    if (!email.trim()) validationErrors.email = 'Email is required';
+    if (!password.trim()) validationErrors.password = 'Password is required';
+    if (validationErrors.email || validationErrors.password) {
+      setFieldErrors(validationErrors);
+      return;
     }
-  } catch (err) {
-    setError(err.message || 'Invalid credentials. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+    setFieldErrors({ email: '', password: '' });
+    setLoading(true);
+
+    try {
+      const user = await login(email, password);
+      if (user.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else if (user.role === 'HR') {
+        navigate('/hr/dashboard');
+      } else if (user.role === 'INTERVIEWER') {
+        navigate('/interviewer/dashboard');
+      }
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
-  const demoAccounts = [
-    { email: 'admin@mitra.com', role: 'Admin', color: 'primary' },
-    { email: 'hr@mitra.com', role: 'HR', color: 'secondary' },
-    { email: 'interviewer@mitra.com', role: 'Interviewer', color: 'success' },
-  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-subtle p-4">
@@ -75,8 +77,8 @@ const Login = () => {
 
         <Card className="shadow-elegant">
           <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl font-bold text-center" >Sign In</CardTitle>
+            <CardDescription className="text-center">
               Enter your credentials to access your dashboard
             </CardDescription>
           </CardHeader>
@@ -91,11 +93,17 @@ const Login = () => {
                     type="email"
                     placeholder="you@mitra.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) {
+                        setFieldErrors((prev) => ({ ...prev, email: '' }));
+                      }
+                    }}
+                    className={`pl-10 ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    aria-invalid={!!fieldErrors.email}
                   />
                 </div>
+                {fieldErrors.email && <p className="text-destructive text-sm">{fieldErrors.email}</p>}
               </div>
 
               <div className="space-y-2">
@@ -107,11 +115,17 @@ const Login = () => {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    required
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) {
+                        setFieldErrors((prev) => ({ ...prev, password: '' }));
+                      }
+                    }}
+                    className={`pl-10 ${fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    aria-invalid={!!fieldErrors.password}
                   />
                 </div>
+                {fieldErrors.password && <p className="text-destructive text-sm">{fieldErrors.password}</p>}
               </div>
 
               {error && (
