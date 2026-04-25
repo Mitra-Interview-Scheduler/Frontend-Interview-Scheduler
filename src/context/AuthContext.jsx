@@ -19,6 +19,18 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const syncUser = (userData) => {
+    const nextUser = {
+      ...userData,
+      profilePicture: userData.profilePicture || userData.profilePictureUrl || null,
+      profilePictureUrl: userData.profilePictureUrl || userData.profilePicture || null,
+    };
+
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    setUser(nextUser);
+    return nextUser;
+  };
+
   useEffect(() => {
     // Check if user is logged in
     const initAuth = async () => {
@@ -50,12 +62,12 @@ export const AuthProvider = ({ children }) => {
         firstName: response.firstName,
         lastName: response.lastName,
         role: response.role,
-        profilePicture: response.profilePictureUrl,
+        profilePicture: response.profilePictureUrl || response.profilePicture || null,
+        profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
       };
       
       localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
+      syncUser(userData);
       
       return userData;
     } catch (error) {
@@ -78,12 +90,12 @@ export const AuthProvider = ({ children }) => {
         firstName: response.firstName,
         lastName: response.lastName,
         role: response.role,
-        profilePicture: response.profilePictureUrl,
+        profilePicture: response.profilePictureUrl || response.profilePicture || null,
+        profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
       };
 
       localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
+      syncUser(userData);
 
       return userData;
     } catch (error) {
@@ -106,6 +118,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     loginWithGoogle,
+    syncUser,
     logout,
     loading,
     isAuthenticated: !!user,
