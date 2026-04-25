@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { authAPI } from '@/services/api';
-import { set } from 'date-fns';
 
 const AuthContext = createContext(null);
 
@@ -12,6 +11,9 @@ export const useAuth = () => {
   }
   return context;
 };
+
+
+
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -25,11 +27,9 @@ export const AuthProvider = ({ children }) => {
       
       if (storedUser && token) {
         try {
-          // Verify token is still valid
           await authAPI.verify();
           setUser(JSON.parse(storedUser));
         } catch (error) {
-          // Token invalid, clear storage
           localStorage.removeItem('user');
           localStorage.removeItem('token');
         }
@@ -68,6 +68,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async (credentialResponse) => {
+    try {
+      const response = await authAPI.googleLogin(credentialResponse.credential);
+
+      const userData = {
+        id: response.id,
+        email: response.email,
+        firstName: response.firstName,
+        lastName: response.lastName,
+        role: response.role,
+        profilePicture: response.profilePictureUrl,
+      };
+
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+
+      return userData;
+    } catch (error) {
+      console.error('Google login error:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+
+      throw new Error(error.response?.data?.message || 'Google login failed');
+    }
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
@@ -77,6 +105,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     login,
+    loginWithGoogle,
     logout,
     loading,
     isAuthenticated: !!user,
