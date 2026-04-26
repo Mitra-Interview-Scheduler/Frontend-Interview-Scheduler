@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const SKILL_CATEGORIES = [
   'Programming Language',
@@ -216,7 +217,13 @@ const ProfilePage = () => {
     return `${profile.firstName?.[0] || ''}${profile.lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const profileImage = profile?.profilePictureUrl || profile?.profilePicture || user?.profilePicture || null;
+  const profileImage = normalizeImageUrl(
+    profile?.profilePictureUrl ||
+      profile?.profilePicture ||
+      user?.profilePicture ||
+      user?.profilePictureUrl ||
+      null
+  );
 
   const handleSelectFromDropdown = async (tech) => {
     setShowSkillDropdown(false);
@@ -363,7 +370,12 @@ const ProfilePage = () => {
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <Avatar className="w-32 h-32">
-                  <AvatarImage src={profileImage || undefined} alt="Profile" />
+                  <AvatarImage
+                    src={profileImage || undefined}
+                    alt="Profile"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                  />
                   <AvatarFallback className="gradient-primary text-white text-3xl font-semibold">
                     {getInitials()}
                   </AvatarFallback>
