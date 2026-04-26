@@ -54,10 +54,10 @@ export const usersAPI = {
     const response = await api.get('/admin/users');
     return response.data; // expects List<UserDto>
   },
-  update: async (id, userData) => {
-    const response = await api.patch(`/admin/users/${id}`, userData);
-    return response.data;
-  },
+  // update: async (id, userData) => {
+  //   const response = await api.patch(`/admin/users/${id}`, userData);
+  //   return response.data;
+  // },
   updateRole: async (id, role) => {
     const response = await api.patch(`/admin/users/${id}/role`, { role });
     return response.data;
