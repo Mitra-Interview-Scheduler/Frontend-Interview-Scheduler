@@ -86,6 +86,12 @@ const formatLocalDateTime = (date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
   `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 
+const formatInputDateTime = (date) => {
+  if (!date) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
 const generateTimeOptions = (startDate, endDate) => {
   const options = [];
   let cur = new Date(startDate);
@@ -155,6 +161,7 @@ const checkPanelPrivilege = (panelSlots, candidate) => {
 const AvailabilityViewPage = () => {
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
+  const [calendarDate, setCalendarDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
@@ -322,6 +329,12 @@ const AvailabilityViewPage = () => {
   }, [filterDept, filterTech, minExperience, dateRange,
       selectedDeptForDesignation, selectedTierInDept, minDesignationLevel]);
 
+  useEffect(() => {
+    if (dateRange.start) {
+      setCalendarDate(new Date(dateRange.start));
+    }
+  }, [dateRange.start]);
+
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {
     try {
@@ -348,8 +361,8 @@ const AvailabilityViewPage = () => {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
         minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
-        startDateTime: dateRange.start ? dateRange.start.toISOString() : null,
-        endDateTime: dateRange.end ? dateRange.end.toISOString() : null,
+        startDateTime: dateRange.start ? formatLocalDateTime(dateRange.start) : null,
+        endDateTime: dateRange.end ? formatLocalDateTime(dateRange.end) : null,
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
         minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null,
@@ -660,6 +673,43 @@ const AvailabilityViewPage = () => {
     setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
     setMinDesignationLevel(''); setSelectedTierInDept('');
     setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setCalendarDate(new Date());
+  };
+
+  const handleStartDateTimeChange = (value) => {
+    if (!value) {
+      setDateRange((prev) => ({ ...prev, start: null }));
+      return;
+    }
+
+    const nextStart = new Date(value);
+    if (Number.isNaN(nextStart.getTime())) return;
+
+    setDateRange((prev) => {
+      let nextEnd = prev.end;
+      if (nextEnd && nextStart > nextEnd) {
+        nextEnd = new Date(nextStart);
+      }
+      return { start: nextStart, end: nextEnd };
+    });
+  };
+
+  const handleEndDateTimeChange = (value) => {
+    if (!value) {
+      setDateRange((prev) => ({ ...prev, end: null }));
+      return;
+    }
+
+    const nextEnd = new Date(value);
+    if (Number.isNaN(nextEnd.getTime())) return;
+
+    setDateRange((prev) => {
+      let nextStart = prev.start;
+      if (nextStart && nextEnd < nextStart) {
+        nextStart = new Date(nextEnd);
+      }
+      return { start: nextStart, end: nextEnd };
+    });
   };
 
   const filteredTechnologies = techSearchTerm.trim()
@@ -936,6 +986,26 @@ const AvailabilityViewPage = () => {
               </div>
 
               <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Clock className="w-4 h-4" /> From (Date & Time)</Label>
+                <Input
+                  type="datetime-local"
+                  value={formatInputDateTime(dateRange.start)}
+                  max={dateRange.end ? formatInputDateTime(dateRange.end) : undefined}
+                  onChange={(e) => handleStartDateTimeChange(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Clock className="w-4 h-4" /> To (Date & Time)</Label>
+                <Input
+                  type="datetime-local"
+                  value={formatInputDateTime(dateRange.end)}
+                  min={dateRange.start ? formatInputDateTime(dateRange.start) : undefined}
+                  onChange={(e) => handleEndDateTimeChange(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label>Department (Tier/Level Filter)</Label>
                 <Select value={selectedDeptForDesignation || 'ANY'}
                   onValueChange={(v) => setSelectedDeptForDesignation(v === 'ANY' ? '' : v)}>
@@ -1087,6 +1157,8 @@ const AvailabilityViewPage = () => {
                   <Calendar
                     localizer={localizer}
                     events={events}
+                    date={calendarDate}
+                    onNavigate={(nextDate) => setCalendarDate(nextDate)}
                     startAccessor="start"
                     endAccessor="end"
                     onSelectEvent={handleEventClick}
