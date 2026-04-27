@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Mail, Phone, Edit, Loader2, MapPin, Hash, Link,
   TrendingUp, Award, Users,
+  CalendarClockIcon,
 } from 'lucide-react';
 import { motion }   from 'framer-motion';
 import { toast }    from '@/hooks/use-toast';
@@ -30,6 +31,7 @@ import { candidateAPI }   from '@/services/candidateAPI';
 import { departmentAPI }  from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI }        from '@/services/tierAPI';
+import CandidateEditDialog from './components/CandidateEditDialog';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CANDIDATE_STATUSES = [
@@ -77,10 +79,7 @@ const CandidatesPage = () => {
 
   // ── Edit dialog state ───────────────────────────────────────────────────────
   const [isEditOpen,   setIsEditOpen]   = useState(false);
-  const [editingId,    setEditingId]    = useState(null);
-  const [editForm,     setEditForm]     = useState({ ...EMPTY_FORM, status: 'APPLIED' });
-  const [editTiers,    setEditTiers]    = useState([]);
-  const [editDesigs,   setEditDesigs]   = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   useEffect(() => { loadInitialData(); }, []);
@@ -194,89 +193,9 @@ const CandidatesPage = () => {
   };
 
   // ── Edit dialog handlers ──────────────────────────────────────────────────
-  const handleOpenEdit = async (candidate) => {
-    setEditingId(candidate.id);
-    const form = {
-      name:              candidate.name           || '',
-      email:             candidate.email          || '',
-      phone:             candidate.phone          || '',
-      departmentId:      candidate.departmentId?.toString()          || '',
-      tierId:            candidate.tierId?.toString()                || '',
-      targetDesignationId: candidate.targetDesignationId?.toString() || '',
-      yearsOfExperience: candidate.yearsOfExperience?.toString()     || '',
-      resumeUrl:         candidate.resumeUrl      || '',
-      jdUrl:             candidate.jdUrl          || '',
-      jobReferenceCode:  candidate.jobReferenceCode || '',
-      location:          candidate.location       || '',
-      notes:             candidate.notes          || '',
-      status:            candidate.status,
-    };
-    setEditForm(form);
-    setEditTiers([]);
-    setEditDesigs([]);
-
-    // Pre-load tier/designation cascades
-    if (candidate.departmentId) {
-      const tiers = await (async () => {
-        try {
-          const data = await tierAPI.getTiersByDepartment(candidate.departmentId);
-          return data.sort((a, b) => a.tierOrder - b.tierOrder);
-        } catch { return []; }
-      })();
-      setEditTiers(tiers);
-
-      if (candidate.tierId) {
-        await loadDesignsForTier(candidate.tierId, setEditDesigs);
-      }
-    }
+  const handleOpenEdit = (candidate) => {
+    setSelectedCandidate(candidate);
     setIsEditOpen(true);
-  };
-
-  const handleEditDeptChange = async (val) => {
-    setEditForm((f) => ({ ...f, departmentId: val, tierId: '', targetDesignationId: '' }));
-    setEditDesigs([]);
-    await loadTiersForDept(val, setEditTiers);
-  };
-
-  const handleEditTierChange = async (val) => {
-    setEditForm((f) => ({ ...f, tierId: val, targetDesignationId: '' }));
-    await loadDesignsForTier(val, setEditDesigs);
-  };
-
-  const handleEditSubmit = async () => {
-    if (!editForm.name.trim() || !editForm.email.trim()) {
-      toast({ title: 'Validation Error', description: 'Name and email are required', variant: 'destructive' });
-      return;
-    }
-    const payload = {
-      name:              editForm.name.trim(),
-      email:             editForm.email.trim(),
-      phone:             editForm.phone?.trim()             || null,
-      departmentId:      editForm.departmentId              ? parseInt(editForm.departmentId) : null,
-      targetDesignationId: editForm.targetDesignationId     ? parseInt(editForm.targetDesignationId) : null,
-      status:            editForm.status,
-      yearsOfExperience: editForm.yearsOfExperience         ? parseInt(editForm.yearsOfExperience) : null,
-      resumeUrl:         editForm.resumeUrl?.trim()         || null,
-      jdUrl:             editForm.jdUrl?.trim()             || null,
-      jobReferenceCode:  editForm.jobReferenceCode?.trim()  || null,
-      location:          editForm.location?.trim()          || null,
-      notes:             editForm.notes?.trim()             || null,
-    };
-    setIsMutating(true);
-    try {
-      await candidateAPI.updateCandidate(editingId, payload);
-      await applyFilters();
-      setIsEditOpen(false);
-      toast({ title: 'Success', description: 'Candidate updated successfully' });
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err.response?.data?.message || 'Failed to update candidate',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsMutating(false);
-    }
   };
 
   // ── Shared form fields renderer ───────────────────────────────────────────
@@ -557,8 +476,20 @@ const CandidatesPage = () => {
                               onClick={() => handleOpenEdit(candidate)} disabled={isMutating} title="Edit">
                               <Edit className="w-3.5 h-3.5" />
                             </Button>
+
+                              <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+                              onClick={() => handleOpenEdit(candidate)} disabled={isMutating} title="calender">
+                              <CalendarClockIcon className="w-3.5 h-3.5" />
+                            </Button>
+
+
+
                           </div>
                         </div>
+
+
+                        
+                       
 
                         {/* Mobile extra row */}
                         <div className="lg:hidden mt-2 pt-2 border-t flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -612,27 +543,13 @@ const CandidatesPage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* ══ EDIT DIALOG ══════════════════════════════════════════════════ */}
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Candidate</DialogTitle>
-            </DialogHeader>
-            {renderFormFields(
-              editForm, setEditForm,
-              editTiers, editDesigs,
-              handleEditDeptChange, handleEditTierChange,
-              true  // show status selector
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={isMutating}>Cancel</Button>
-              <Button onClick={handleEditSubmit} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Update
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <CandidateEditDialog
+          open={isEditOpen}
+          candidate={selectedCandidate}
+          departments={departments}
+          onOpenChange={setIsEditOpen}
+          onSaveSuccess={applyFilters}
+        />
       </div>
     </Layout>
   );
