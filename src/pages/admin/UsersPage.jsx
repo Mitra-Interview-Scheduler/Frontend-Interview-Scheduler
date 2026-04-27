@@ -19,7 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { authAPI, usersAPI } from '@/services/api'; 
-import UserRoleStatusDialog from '@/components/admin/UserRoleStatusDialog';
+import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const ROOT_KEY = import.meta.env.VITE_ROOT_KEY ?? "root"; 
