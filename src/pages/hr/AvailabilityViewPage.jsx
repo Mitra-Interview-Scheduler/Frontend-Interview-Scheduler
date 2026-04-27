@@ -393,6 +393,7 @@ const AvailabilityViewPage = () => {
       if (minLevelOrder != null) {
         // Find the designation with matching levelOrder
         const matchingDesignation = designationsForSelectedTier.find(d => d.id === minLevelOrder);
+        // console.log('Finding matching designation for levelOrder:', minLevelOrder, 'Found:', matchingDesignation);
         if (matchingDesignation) {
           setMinDesignationLevel(matchingDesignation.levelOrder.toString());
         }
@@ -437,6 +438,19 @@ const AvailabilityViewPage = () => {
 
   const applyFilters = async () => {
     try {
+      // // ── Log all filter states ────────────────────────────────────────────────
+      // console.group('📊 FILTER STATE');
+      // console.log('filterDept[]:', filterDept);
+      // console.log('filterTech[]:', filterTech);
+      // console.log('minExperience:', minExperience);
+      // console.log('dateRange:', dateRange);
+      // console.log('selectedDeptForDesignation:', selectedDeptForDesignation);
+      // console.log('selectedTierInDept:', selectedTierInDept);
+      // console.log('minDesignationLevel:', minDesignationLevel);
+      // console.log('tiersForSelectedDept[]:', tiersForSelectedDept);
+      // console.log('designationsForSelectedTier[]:', designationsForSelectedTier);
+      // console.groupEnd();
+
       let tierOrderToSend = null;
       if (selectedTierInDept) {
         const t = tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept);
@@ -449,6 +463,20 @@ const AvailabilityViewPage = () => {
         levelOrderToSend = d ? d.levelOrder : null;
       }
 
+      // // ── Log conversion process ───────────────────────────────────────────────
+      // console.group('🔄 CONVERSION');
+      // console.log('Tier Conversion:', {
+      //   selectedTierInDept,
+      //   matchingTier: tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept),
+      //   tierOrderToSend,
+      // });
+      // console.log('Level Conversion:', {
+      //   minDesignationLevel,
+      //   matchingDesignation: designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel),
+      //   levelOrderToSend,
+      // });
+      // console.groupEnd();
+
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
@@ -459,7 +487,37 @@ const AvailabilityViewPage = () => {
         minTierId: tierOrderToSend,
         minDesignationLevelInDepartment: levelOrderToSend,
       };
+
+      // ── Log final filters object ─────────────────────────────────────────────
+      // console.group('📤 SENDING TO API');
+      // console.table(filters);
+      // console.groupEnd();
+
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
+
+      // ── Log retrieved data ───────────────────────────────────────────────────
+      // console.group('📥 RECEIVED DATA');
+      // console.log(`Total slots: ${data.length}`);
+      // console.table(data.map(slot => ({
+      //   slotId: slot.slotId,
+      //   interviewerName: slot.interviewerName,
+      //   interviewerLevelOrder: slot.interviewerLevelOrder,
+      //   interviewerTierOrder: slot.interviewerTierOrder,
+      //   startDateTime: slot.startDateTime,
+      //   status: slot.status,
+      // })));
+      // console.groupEnd();
+
+      // // ── Summary ──────────────────────────────────────────────────────────────
+      // console.group('✅ SUMMARY');
+      // console.log(`Filter applied. Returned: ${data.length} slots`);
+      // const byStatus = data.reduce((acc, slot) => {
+      //   acc[slot.status] = (acc[slot.status] || 0) + 1;
+      //   return acc;
+      // }, {});
+      // console.table(byStatus);
+      // console.groupEnd();
+
       const colorMap = buildColorMap(data);
       setRawSlots(data);
       setEvents(formatSlots(data, colorMap));
