@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import {
-  format, parse, startOfWeek, getDay, addMinutes,
+  format, parse, startOfWeek, getDay, addMinutes, startOfDay,
 } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import {
@@ -206,6 +206,7 @@ const AvailabilityViewPage = () => {
   const [cancelling, setCancelling] = useState(false);
 
   const techDropdownRef = useRef(null);
+  const calendarLockStart = dateRange.start ? startOfDay(new Date(dateRange.start)) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
@@ -685,32 +686,43 @@ const AvailabilityViewPage = () => {
     const nextStart = new Date(value);
     if (Number.isNaN(nextStart.getTime())) return;
 
-    setDateRange((prev) => {
-      let nextEnd = prev.end;
-      if (nextEnd && nextStart > nextEnd) {
-        nextEnd = new Date(nextStart);
-      }
-      return { start: nextStart, end: nextEnd };
-    });
+    setDateRange((prev) => ({ ...prev, start: nextStart }));
   };
 
-  const handleEndDateTimeChange = (value) => {
-    if (!value) {
-      setDateRange((prev) => ({ ...prev, end: null }));
-      return;
+  const calendarDayPropGetter = useCallback((date) => {
+    if (!calendarLockStart) return {};
+
+    const currentDay = startOfDay(date);
+    if (currentDay < calendarLockStart) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6',
+          color: '#9ca3af',
+          opacity: 0.45,
+          filter: 'grayscale(1)',
+        },
+      };
     }
 
-    const nextEnd = new Date(value);
-    if (Number.isNaN(nextEnd.getTime())) return;
+    return {};
+  }, [calendarLockStart]);
 
-    setDateRange((prev) => {
-      let nextStart = prev.start;
-      if (nextStart && nextEnd < nextStart) {
-        nextStart = new Date(nextEnd);
-      }
-      return { start: nextStart, end: nextEnd };
-    });
-  };
+  const calendarSlotPropGetter = useCallback((date) => {
+    if (!calendarLockStart) return {};
+
+    if (date < new Date(dateRange.start)) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6',
+          color: '#9ca3af',
+          opacity: 0.35,
+          pointerEvents: 'none',
+        },
+      };
+    }
+
+    return {};
+  }, [calendarLockStart, dateRange.start]);
 
   const filteredTechnologies = techSearchTerm.trim()
     ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
@@ -990,18 +1002,7 @@ const AvailabilityViewPage = () => {
                 <Input
                   type="datetime-local"
                   value={formatInputDateTime(dateRange.start)}
-                  max={dateRange.end ? formatInputDateTime(dateRange.end) : undefined}
                   onChange={(e) => handleStartDateTimeChange(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Clock className="w-4 h-4" /> To (Date & Time)</Label>
-                <Input
-                  type="datetime-local"
-                  value={formatInputDateTime(dateRange.end)}
-                  min={dateRange.start ? formatInputDateTime(dateRange.start) : undefined}
-                  onChange={(e) => handleEndDateTimeChange(e.target.value)}
                 />
               </div>
 
@@ -1158,11 +1159,20 @@ const AvailabilityViewPage = () => {
                     localizer={localizer}
                     events={events}
                     date={calendarDate}
-                    onNavigate={(nextDate) => setCalendarDate(nextDate)}
+                    onNavigate={(nextDate) => {
+                      const nextDay = startOfDay(nextDate);
+                      if (calendarLockStart && nextDay < calendarLockStart) {
+                        setCalendarDate(calendarLockStart);
+                        return;
+                      }
+                      setCalendarDate(nextDay);
+                    }}
                     startAccessor="start"
                     endAccessor="end"
                     onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
+                    dayPropGetter={calendarDayPropGetter}
+                    slotPropGetter={calendarSlotPropGetter}
                     // ── Custom event component with panel ✓ icon ──────────────
                     components={{ event: CalendarEventComponent }}
                     style={{ height: '100%' }}
