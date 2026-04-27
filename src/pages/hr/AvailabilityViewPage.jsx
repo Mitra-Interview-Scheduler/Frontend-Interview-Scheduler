@@ -321,6 +321,19 @@ const AvailabilityViewPage = () => {
     }
   }, [location.state]);
 
+  // ── Auto-set candidate designation after candidates load ─────────────────
+  useEffect(() => {
+    if (requestForm.candidateId && candidates.length > 0) {
+      const candidate = candidates.find(c => c.id === requestForm.candidateId);
+      if (candidate && candidate.targetDesignationId) {
+        setRequestForm(prev => ({
+          ...prev,
+          candidateDesignationId: candidate.targetDesignationId
+        }));
+      }
+    }
+  }, [requestForm.candidateId, candidates]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -522,14 +535,16 @@ const AvailabilityViewPage = () => {
     setSelectedSlot(event);
     setBookStartTime(format(event.start, 'HH:mm'));
     setBookEndTime(format(event.end, 'HH:mm'));
-    setRequestForm({
-      candidateId: null, candidateName: '', candidateDesignationId: '',
+    setRequestForm(prev => ({
+      candidateId: prev.candidateId, 
+      candidateName: prev.candidateName, 
+      candidateDesignationId: prev.candidateDesignationId,
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
       }).filter(Boolean),
       isUrgent: false, notes: '',
-    });
+    }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
   };
@@ -1199,7 +1214,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                       disabled={panelTimeOptions.length === 0}
                       onClick={() => {
                         setPanelBookStartOverride(''); setPanelBookEndOverride('');
-                        setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
+                        setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
                         setCandidateSearchTerm('');
                         setPanelDialogOpen(true);
                       }}>
