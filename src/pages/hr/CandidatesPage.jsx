@@ -32,6 +32,7 @@ import { departmentAPI }  from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI }        from '@/services/tierAPI';
 import CandidateEditDialog from './components/CandidateEditDialog';
+import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CANDIDATE_STATUSES = [
@@ -79,6 +80,7 @@ const CandidatesPage = () => {
 
   // ── Edit dialog state ───────────────────────────────────────────────────────
   const [isEditOpen,   setIsEditOpen]   = useState(false);
+  const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
   // ── Load data ─────────────────────────────────────────────────────────────
@@ -192,11 +194,20 @@ const CandidatesPage = () => {
     }
   };
 
+
+
   // ── Edit dialog handlers ──────────────────────────────────────────────────
   const handleOpenEdit = (candidate) => {
     setSelectedCandidate(candidate);
     setIsEditOpen(true);
   };
+
+   // ── InterviewSchedulePage dialog handlers ──────────────────────────────────────────────────
+  const handleOpenInterviewSchedulePage = (candidate) => {
+    setSelectedCandidate(candidate);
+    setIsInterviewSchedulePageOpen(true);
+  };
+
 
   // ── Shared form fields renderer ───────────────────────────────────────────
   const renderFormFields = (form, setForm, tiers, desigs, onDeptChange, onTierChange, includeStatus) => (
@@ -478,18 +489,11 @@ const CandidatesPage = () => {
                             </Button>
 
                               <Button variant="outline" size="sm" className="h-8 w-8 p-0"
-                              onClick={() => handleOpenEdit(candidate)} disabled={isMutating} title="calender">
+                              onClick={() => handleOpenInterviewSchedulePage(candidate)} disabled={isMutating} title="calender">
                               <CalendarClockIcon className="w-3.5 h-3.5" />
                             </Button>
-
-
-
                           </div>
                         </div>
-
-
-                        
-                       
 
                         {/* Mobile extra row */}
                         <div className="lg:hidden mt-2 pt-2 border-t flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -543,13 +547,19 @@ const CandidatesPage = () => {
           </DialogContent>
         </Dialog>
 
-        <CandidateEditDialog
+         <CandidateEditDialog
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
           onOpenChange={setIsEditOpen}
           onSaveSuccess={applyFilters}
         />
+
+<CandidateInterviewSchedulePage
+  open={isInterviewSchedulePageOpen}
+  candidate={selectedCandidate}
+  onOpenChange={setIsInterviewSchedulePageOpen} // This ensures the Effect inside can trigger
+/>
       </div>
     </Layout>
   );
