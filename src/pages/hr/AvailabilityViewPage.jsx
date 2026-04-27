@@ -43,6 +43,9 @@ import { candidateAPI } from '@/services/candidateAPI';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
+
+const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
+const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
 const localizer = dateFnsLocalizer({
   format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
 });
@@ -206,7 +209,7 @@ const AvailabilityViewPage = () => {
   const [cancelling, setCancelling] = useState(false);
 
   const techDropdownRef = useRef(null);
-  const calendarLockStart = dateRange.start ? startOfDay(new Date(dateRange.start)) : null;
+  const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
@@ -693,7 +696,8 @@ const AvailabilityViewPage = () => {
     if (!calendarLockStart) return {};
 
     const currentDay = startOfDay(date);
-    if (currentDay < calendarLockStart) {
+    const lockDay = startOfDay(calendarLockStart);
+    if (currentDay < lockDay) {
       return {
         style: {
           backgroundColor: '#f3f4f6',
@@ -710,7 +714,7 @@ const AvailabilityViewPage = () => {
   const calendarSlotPropGetter = useCallback((date) => {
     if (!calendarLockStart) return {};
 
-    if (date < new Date(dateRange.start)) {
+    if (date < calendarLockStart) {
       return {
         style: {
           backgroundColor: '#f3f4f6',
@@ -722,7 +726,7 @@ const AvailabilityViewPage = () => {
     }
 
     return {};
-  }, [calendarLockStart, dateRange.start]);
+  }, [calendarLockStart]);
 
   const filteredTechnologies = techSearchTerm.trim()
     ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
@@ -1169,6 +1173,7 @@ const AvailabilityViewPage = () => {
                     }}
                     startAccessor="start"
                     endAccessor="end"
+                    scrollToTime={calendarLockStart || new Date(1970, 0, 1, 7, 0)}
                     onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
                     dayPropGetter={calendarDayPropGetter}
@@ -1180,8 +1185,8 @@ const AvailabilityViewPage = () => {
                     defaultView="week"
                     step={60}
                     timeslots={1}
-                    min={new Date(1970, 0, 1, 7, 0)}
-                    max={new Date(1970, 0, 1, 19, 0)}
+                    min={new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}
+                    max={new Date(1970, 0, 1, CALENDAR_MAX_HOUR, 0)}
                     tooltipAccessor={tooltipAccessor}
                     popup
                     showMultiDayTimes
