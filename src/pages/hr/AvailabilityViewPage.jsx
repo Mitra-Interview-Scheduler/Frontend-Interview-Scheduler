@@ -3,7 +3,7 @@
 //   1. Custom RBC EventComponent — selected panel slots show a ✓ badge
 //   2. Privilege check — blocks scheduling if interviewer is less senior than candidate
 //   3. Slot merge is handled server-side (no frontend change needed)
-
+import { useLocation } from 'react-router-dom'; // Add this import
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import {
@@ -162,6 +162,7 @@ const checkPanelPrivilege = (panelSlots, candidate) => {
 
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
+  const location = useLocation();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -186,6 +187,7 @@ const AvailabilityViewPage = () => {
   const [selectedTierInDept, setSelectedTierInDept] = useState('');
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
+  const [pendingFilter, setPendingFilter] = useState(null);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -281,6 +283,44 @@ const AvailabilityViewPage = () => {
   }, []);
 
   // ── Initial load ──────────────────────────────────────────────────────────
+
+
+  useEffect(() => {
+    // Check if we arrived here via the "Schedule" button
+    const incomingFilter = location.state?.filterData;
+    
+    if (incomingFilter) {
+      // Store the incoming filter to process after tiers/designations load
+      setPendingFilter(incomingFilter);
+      
+      // 1. Set the Date Range
+      setDateRange({ 
+        start: new Date(incomingFilter.startDateTime), 
+        end: null 
+      });
+
+      // 2. Set Department
+      if (incomingFilter.departmentId) {
+        setFilterDept([incomingFilter.departmentId]);
+        setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
+      }
+
+      if (incomingFilter.minTierOrder) {
+
+      }
+
+      // 3. Set the pre-selected candidate for the Booking Dialog later
+      setRequestForm(prev => ({
+        ...prev,
+        candidateId: incomingFilter.candidateId,
+        candidateName: incomingFilter.candidateName
+      }));
+      
+      // Note: Tier and Level will be set in subsequent useEffects
+      // after tiers and designations are loaded
+    }
+  }, [location.state]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -314,10 +354,38 @@ const AvailabilityViewPage = () => {
     else { setTiersForSelectedDept([]); setSelectedTierInDept(''); setMinDesignationLevel(''); }
   }, [selectedDeptForDesignation]);
 
+  // ── Auto-set Tier from pending filter ───────────────────────────────────────
+  useEffect(() => {
+    if (pendingFilter && tiersForSelectedDept.length > 0) {
+      const { minTierOrder } = pendingFilter;
+     
+      if (minTierOrder != null) {
+        const matchingTier = tiersForSelectedDept.find(t => t.tierOrder === minTierOrder);
+        if (matchingTier) {
+          setSelectedTierInDept(matchingTier.id.toString());
+        } 
+      }
+    }
+  }, [pendingFilter, tiersForSelectedDept]);
+
   useEffect(() => {
     if (selectedTierInDept) loadDesignationsForTier(parseInt(selectedTierInDept));
     else { setDesignationsForSelectedTier([]); setMinDesignationLevel(''); }
   }, [selectedTierInDept]);
+
+  // ── Auto-set Level from pending filter ───────────────────────────────────────
+  useEffect(() => {
+    if (pendingFilter && designationsForSelectedTier.length > 0) {
+      const { minLevelOrder } = pendingFilter;      
+      if (minLevelOrder != null) {
+        // Find the designation with matching levelOrder
+        const matchingDesignation = designationsForSelectedTier.find(d => d.id === minLevelOrder);
+        if (matchingDesignation) {
+          setMinDesignationLevel(matchingDesignation.levelOrder.toString());
+        }
+      }
+    }
+  }, [pendingFilter, designationsForSelectedTier]);
 
   useEffect(() => {
     const handle = (e) => {
@@ -361,6 +429,13 @@ const AvailabilityViewPage = () => {
         const t = tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept);
         tierOrderToSend = t ? t.tierOrder : null;
       }
+
+      let levelOrderToSend = null;
+      if (minDesignationLevel) {
+        const d = designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel);
+        levelOrderToSend = d ? d.levelOrder : null;
+      }
+
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
@@ -369,7 +444,7 @@ const AvailabilityViewPage = () => {
         endDateTime: dateRange.end ? formatLocalDateTime(dateRange.end) : null,
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
-        minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null,
+        minDesignationLevelInDepartment: levelOrderToSend,
       };
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
       const colorMap = buildColorMap(data);
@@ -416,6 +491,15 @@ const AvailabilityViewPage = () => {
 
   // ── Event click ───────────────────────────────────────────────────────────
   const handleEventClick = (event) => {
+
+    if (calendarLockStart && event.start < calendarLockStart) {
+    toast({ 
+      title: "Slot unavailable", 
+      description: "You cannot book an interview in the past or before the selected filter start time.",
+      variant: "destructive" 
+    });
+    return;
+  }
     const isBooked = event.resource?.status === 'BOOKED';
 
     if (isBooked) {
@@ -711,23 +795,25 @@ const AvailabilityViewPage = () => {
     return {};
   }, [calendarLockStart]);
 
-  const calendarSlotPropGetter = useCallback((date) => {
-    if (!calendarLockStart) return {};
+const calendarSlotPropGetter = useCallback((date) => {
+  if (!calendarLockStart) return {};
 
-    if (date < calendarLockStart) {
-      return {
-        style: {
-          backgroundColor: '#f3f4f6',
-          color: '#9ca3af',
-          opacity: 0.35,
-          pointerEvents: 'none',
-        },
-      };
-    }
+  // If the slot is on a day BEFORE the lock date, OR
+  // if it's the SAME day but the time is earlier than the lock time
+  if (date < calendarLockStart) {
+    return {
+      style: {
+        backgroundColor: '#f3f4f6',
+        color: '#9ca3af',
+        opacity: 0.5,
+        pointerEvents: 'none', // Prevents clicking the slot
+        cursor: 'not-allowed',
+      },
+    };
+  }
 
-    return {};
-  }, [calendarLockStart]);
-
+  return {};
+}, [calendarLockStart]);
   const filteredTechnologies = techSearchTerm.trim()
     ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
     : technologies;
@@ -1002,15 +1088,6 @@ const AvailabilityViewPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Clock className="w-4 h-4" /> From (Date & Time)</Label>
-                <Input
-                  type="datetime-local"
-                  value={formatInputDateTime(dateRange.start)}
-                  onChange={(e) => handleStartDateTimeChange(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label>Department (Tier/Level Filter)</Label>
                 <Select value={selectedDeptForDesignation || 'ANY'}
                   onValueChange={(v) => setSelectedDeptForDesignation(v === 'ANY' ? '' : v)}>
@@ -1047,7 +1124,21 @@ const AvailabilityViewPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">From (Date & Time)</Label>
+                <Input
+                  type="datetime-local"
+                  value={formatInputDateTime(dateRange.start)}
+                  onChange={(e) => handleStartDateTimeChange(e.target.value)}
+                />
+              </div>
             </div>
+
+
+            
 
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1173,8 +1264,7 @@ const AvailabilityViewPage = () => {
                     }}
                     startAccessor="start"
                     endAccessor="end"
-                    scrollToTime={calendarLockStart || new Date(1970, 0, 1, 7, 0)}
-                    onSelectEvent={handleEventClick}
+                    scrollToTime={calendarLockStart ? calendarLockStart : new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}                    onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
                     dayPropGetter={calendarDayPropGetter}
                     slotPropGetter={calendarSlotPropGetter}
