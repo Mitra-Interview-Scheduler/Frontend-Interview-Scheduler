@@ -9,10 +9,11 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Menu, Bell, LogOut, User, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
@@ -31,6 +32,8 @@ const Navbar = ({ onMenuClick }) => {
       default: return 'bg-muted text-muted-foreground';
     }
   };
+
+  const profileImage = normalizeImageUrl(user?.profilePicture || user?.profilePictureUrl || null);
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 shadow-sm">
@@ -81,6 +84,12 @@ const Navbar = ({ onMenuClick }) => {
                     </Badge>
                   </div>
                   <Avatar className="w-10 h-10">
+                    <AvatarImage
+                      src={profileImage || undefined}
+                      alt="Profile"
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
+                    />
                     <AvatarFallback className="gradient-primary text-white font-semibold">
                       {getInitials()}
                     </AvatarFallback>

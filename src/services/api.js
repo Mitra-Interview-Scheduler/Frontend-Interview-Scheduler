@@ -33,6 +33,10 @@ export const authAPI = {
     const response = await api.post('/auth/login', { email, password });
     return response.data;
   },
+  googleLogin: async (token) => {
+    const response = await api.post('/auth/google', { token });
+    return response.data;
+  },
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
     return response.data;
@@ -49,6 +53,14 @@ export const usersAPI = {
   getAll: async () => {
     const response = await api.get('/admin/users');
     return response.data; // expects List<UserDto>
+  },
+  // update: async (id, userData) => {
+  //   const response = await api.patch(`/admin/users/${id}`, userData);
+  //   return response.data;
+  // },
+  updateRole: async (id, role) => {
+    const response = await api.patch(`/admin/users/${id}/role`, { role });
+    return response.data;
   },
   toggleStatus: async (id) => {
     const response = await api.patch(`/admin/users/${id}/status`);

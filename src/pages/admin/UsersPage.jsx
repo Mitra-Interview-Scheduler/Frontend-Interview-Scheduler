@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { authAPI, usersAPI } from '@/services/api'; 
+import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const ROOT_KEY = import.meta.env.VITE_ROOT_KEY ?? "root"; 
@@ -295,6 +296,8 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [guardTarget, setGuardTarget] = useState(null); // user pending admin-delete guard
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -342,6 +345,16 @@ export default function UsersPage() {
     } catch (err) {
       toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
     } finally { setActionId(null); }
+  };
+
+  const openDetails = (user) => {
+    setSelectedUser(user);
+    setDetailsOpen(true);
+  };
+
+  const handleUserSaved = (updatedUser) => {
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u)));
+    setSelectedUser((prev) => (prev?.id === updatedUser.id ? { ...prev, ...updatedUser } : prev));
   };
 
   const counts = {
@@ -426,7 +439,8 @@ export default function UsersPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.025 }}
-                    className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors group"
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors group cursor-pointer"
+                    onClick={() => openDetails(user)}
                   >
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -450,12 +464,12 @@ export default function UsersPage() {
                     </div>
 
                     {/* Actions — visible on hover */}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost" size="icon"
                         className="w-7 h-7 text-muted-foreground hover:text-foreground"
                         disabled={actionId === user.id}
-                        onClick={() => handleToggle(user)}
+                        onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
                         title={user.active !== false ? 'Deactivate' : 'Activate'}
                       >
                         {actionId === user.id
@@ -468,7 +482,7 @@ export default function UsersPage() {
                         variant="ghost" size="icon"
                         className="w-7 h-7 text-muted-foreground hover:text-red-500"
                         disabled={actionId === user.id}
-                        onClick={() => initiateDelete(user)}
+                        onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
                         title="Delete"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -483,6 +497,13 @@ export default function UsersPage() {
       </div>
 
       <RegisterDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={fetchUsers} />
+
+      <UserRoleStatusDialog
+        open={detailsOpen}
+        user={selectedUser}
+        onOpenChange={setDetailsOpen}
+        onSave={handleUserSaved}
+      />
 
       <AdminDeleteGuard
         open={!!guardTarget}

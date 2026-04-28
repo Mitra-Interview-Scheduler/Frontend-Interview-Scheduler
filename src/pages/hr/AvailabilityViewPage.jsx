@@ -3,7 +3,7 @@
 //   1. Custom RBC EventComponent — selected panel slots show a ✓ badge
 //   2. Privilege check — blocks scheduling if interviewer is less senior than candidate
 //   3. Slot merge is handled server-side (no frontend change needed)
-
+import { useLocation } from 'react-router-dom'; // Add this import
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import {
@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import {
-  format, parse, startOfWeek, getDay, addMinutes,
+  format, parse, startOfWeek, getDay, addMinutes, startOfDay,
 } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import {
@@ -43,6 +43,9 @@ import { candidateAPI } from '@/services/candidateAPI';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
+
+const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
+const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
 const localizer = dateFnsLocalizer({
   format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
 });
@@ -85,6 +88,12 @@ const pad = (n) => String(n).padStart(2, '0');
 const formatLocalDateTime = (date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
   `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+
+const formatInputDateTime = (date) => {
+  if (!date) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 const generateTimeOptions = (startDate, endDate) => {
   const options = [];
@@ -153,8 +162,10 @@ const checkPanelPrivilege = (panelSlots, candidate) => {
 
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
+  const location = useLocation();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
+  const [calendarDate, setCalendarDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
@@ -176,6 +187,7 @@ const AvailabilityViewPage = () => {
   const [selectedTierInDept, setSelectedTierInDept] = useState('');
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
+  const [pendingFilter, setPendingFilter] = useState(null);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -199,6 +211,7 @@ const AvailabilityViewPage = () => {
   const [cancelling, setCancelling] = useState(false);
 
   const techDropdownRef = useRef(null);
+  const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
@@ -270,6 +283,50 @@ const AvailabilityViewPage = () => {
   }, []);
 
   // ── Initial load ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+
+    
+    // Check if we arrived here via the "Schedule" button
+    const incomingFilter = location.state?.filterData;
+    
+    if (incomingFilter) {
+      setPendingFilter(incomingFilter);
+      
+      // 1. Set the Date Range
+      setDateRange({ 
+        start: new Date(incomingFilter.startDateTime), 
+        end: null 
+      });
+
+      // 2. Set Department
+      if (incomingFilter.departmentId) {
+        setFilterDept([incomingFilter.departmentId]);
+        setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
+      }
+
+      // 3. Set the pre-selected candidate for the Booking Dialog later
+      setRequestForm(prev => ({
+        ...prev,
+        candidateId: incomingFilter.candidateId,
+        candidateName: incomingFilter.candidateName
+      }));
+    }
+  }, [location.state]);
+
+  // ── Auto-set candidate designation after candidates load ─────────────────
+  useEffect(() => {
+    if (requestForm.candidateId && candidates.length > 0) {
+      const candidate = candidates.find(c => c.id === requestForm.candidateId);
+      if (candidate && candidate.targetDesignationId) {
+        setRequestForm(prev => ({
+          ...prev,
+          candidateDesignationId: candidate.targetDesignationId
+        }));
+      }
+    }
+  }, [requestForm.candidateId, candidates]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -303,10 +360,40 @@ const AvailabilityViewPage = () => {
     else { setTiersForSelectedDept([]); setSelectedTierInDept(''); setMinDesignationLevel(''); }
   }, [selectedDeptForDesignation]);
 
+  // ── Auto-set Tier from pending filter ───────────────────────────────────────
+  useEffect(() => {
+    if (pendingFilter && tiersForSelectedDept.length > 0) {
+      const { minTierOrder } = pendingFilter;
+     
+      if (minTierOrder != null) {
+        const matchingTier = tiersForSelectedDept.find(t => t.tierOrder === minTierOrder);
+        if (matchingTier) {
+          setSelectedTierInDept(matchingTier.id.toString());
+        } 
+      }
+    }
+  }, [pendingFilter, tiersForSelectedDept]);
+
   useEffect(() => {
     if (selectedTierInDept) loadDesignationsForTier(parseInt(selectedTierInDept));
     else { setDesignationsForSelectedTier([]); setMinDesignationLevel(''); }
   }, [selectedTierInDept]);
+
+  // ── Auto-set Level from pending filter ───────────────────────────────────────
+  useEffect(() => {
+    if (pendingFilter && designationsForSelectedTier.length > 0) {
+      const { minLevelOrder } = pendingFilter;      
+      if (minLevelOrder != null) {
+        // Find the designation with matching levelOrder
+        const matchingDesignation = designationsForSelectedTier.find(d => d.id === minLevelOrder);
+        if (matchingDesignation) {
+          setMinDesignationLevel(matchingDesignation.levelOrder.toString());
+        }
+      }
+      // ✅ Clear pendingFilter after cascading tier/level updates complete
+      setPendingFilter(null);
+    }
+  }, [pendingFilter, designationsForSelectedTier]);
 
   useEffect(() => {
     const handle = (e) => {
@@ -318,9 +405,20 @@ const AvailabilityViewPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!loading) applyFilters();
-  }, [filterDept, filterTech, minExperience, dateRange,
-      selectedDeptForDesignation, selectedTierInDept, minDesignationLevel]);
+  if (loading || (pendingFilter && !selectedTierInDept)) return;
+
+  applyFilters();
+}, [
+  filterDept, filterTech, minExperience, dateRange,
+  selectedDeptForDesignation, selectedTierInDept, minDesignationLevel,
+  pendingFilter
+]);
+
+  useEffect(() => {
+    if (dateRange.start) {
+      setCalendarDate(new Date(dateRange.start));
+    }
+  }, [dateRange.start]);
 
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {
@@ -339,22 +437,86 @@ const AvailabilityViewPage = () => {
 
   const applyFilters = async () => {
     try {
+      // ── Log all filter states ────────────────────────────────────────────────
+      console.group('📊 FILTER STATE');
+      console.log('filterDept[]:', filterDept);
+      console.log('filterTech[]:', filterTech);
+      console.log('minExperience:', minExperience);
+      console.log('dateRange:', dateRange);
+      console.log('selectedDeptForDesignation:', selectedDeptForDesignation);
+      console.log('selectedTierInDept:', selectedTierInDept);
+      console.log('minDesignationLevel:', minDesignationLevel);
+      console.log('tiersForSelectedDept[]:', tiersForSelectedDept);
+      console.log('designationsForSelectedTier[]:', designationsForSelectedTier);
+      console.groupEnd();
+
       let tierOrderToSend = null;
       if (selectedTierInDept) {
         const t = tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept);
         tierOrderToSend = t ? t.tierOrder : null;
       }
+
+      let levelOrderToSend = null;
+      if (minDesignationLevel) {
+        const d = designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel);
+        levelOrderToSend = d ? d.levelOrder : null;
+      }
+
+      // // ── Log conversion process ───────────────────────────────────────────────
+      console.group('🔄 CONVERSION');
+      console.log('Tier Conversion:', {
+        selectedTierInDept,
+        matchingTier: tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept),
+        tierOrderToSend,
+      });
+      console.log('Level Conversion:', {
+        minDesignationLevel,
+        matchingDesignation: designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel),
+        levelOrderToSend,
+      });
+      console.groupEnd();
+
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
         minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
-        startDateTime: dateRange.start ? dateRange.start.toISOString() : null,
-        endDateTime: dateRange.end ? dateRange.end.toISOString() : null,
+        startDateTime: dateRange.start ? formatLocalDateTime(dateRange.start) : null,
+        endDateTime: dateRange.end ? formatLocalDateTime(dateRange.end) : null,
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
-        minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null,
+        minDesignationLevelInDepartment: levelOrderToSend,
       };
+
+      // ── Log final filters object ─────────────────────────────────────────────
+      console.group('📤 SENDING TO API');
+      console.table(filters);
+      console.groupEnd();
+
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
+
+      // ── Log retrieved data ───────────────────────────────────────────────────
+      console.group('📥 RECEIVED DATA');
+      console.log(`Total slots: ${data.length}`);
+      console.table(data.map(slot => ({
+        slotId: slot.slotId,
+        interviewerName: slot.interviewerName,
+        interviewerLevelOrder: slot.interviewerLevelOrder,
+        interviewerTierOrder: slot.interviewerTierOrder,
+        startDateTime: slot.startDateTime,
+        status: slot.status,
+      })));
+      console.groupEnd();
+
+      // ── Summary ──────────────────────────────────────────────────────────────
+      console.group('✅ SUMMARY');
+      console.log(`Filter applied. Returned: ${data.length} slots`);
+      const byStatus = data.reduce((acc, slot) => {
+        acc[slot.status] = (acc[slot.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.table(byStatus);
+      console.groupEnd();
+
       const colorMap = buildColorMap(data);
       setRawSlots(data);
       setEvents(formatSlots(data, colorMap));
@@ -399,6 +561,15 @@ const AvailabilityViewPage = () => {
 
   // ── Event click ───────────────────────────────────────────────────────────
   const handleEventClick = (event) => {
+
+    if (calendarLockStart && event.start < calendarLockStart) {
+    toast({ 
+      title: "Slot unavailable", 
+      description: "You cannot book an interview in the past or before the selected filter start time.",
+      variant: "destructive" 
+    });
+    return;
+  }
     const isBooked = event.resource?.status === 'BOOKED';
 
     if (isBooked) {
@@ -421,14 +592,16 @@ const AvailabilityViewPage = () => {
     setSelectedSlot(event);
     setBookStartTime(format(event.start, 'HH:mm'));
     setBookEndTime(format(event.end, 'HH:mm'));
-    setRequestForm({
-      candidateId: null, candidateName: '', candidateDesignationId: '',
+    setRequestForm(prev => ({
+      candidateId: prev.candidateId, 
+      candidateName: prev.candidateName, 
+      candidateDesignationId: prev.candidateDesignationId,
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
       }).filter(Boolean),
       isUrgent: false, notes: '',
-    });
+    }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
   };
@@ -660,8 +833,60 @@ const AvailabilityViewPage = () => {
     setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
     setMinDesignationLevel(''); setSelectedTierInDept('');
     setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
+    setCalendarDate(new Date());
   };
 
+  const handleStartDateTimeChange = (value) => {
+    if (!value) {
+      setDateRange((prev) => ({ ...prev, start: null }));
+      return;
+    }
+
+    const nextStart = new Date(value);
+    if (Number.isNaN(nextStart.getTime())) return;
+
+    setDateRange((prev) => ({ ...prev, start: nextStart }));
+  };
+
+  const calendarDayPropGetter = useCallback((date) => {
+    if (!calendarLockStart) return {};
+
+    const currentDay = startOfDay(date);
+    const lockDay = startOfDay(calendarLockStart);
+    if (currentDay < lockDay) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6',
+          color: '#9ca3af',
+          opacity: 0.45,
+          filter: 'grayscale(1)',
+        },
+      };
+    }
+
+    return {};
+  }, [calendarLockStart]);
+
+const calendarSlotPropGetter = useCallback((date) => {
+  if (!calendarLockStart) return {};
+
+  // If the slot is on a day BEFORE the lock date, OR
+  // if it's the SAME day but the time is earlier than the lock time
+  if (date < calendarLockStart) {
+    return {
+      style: {
+        backgroundColor: '#f3f4f6',
+        color: '#9ca3af',
+        opacity: 0.5,
+        pointerEvents: 'none', // Prevents clicking the slot
+        cursor: 'not-allowed',
+      },
+    };
+  }
+
+  return {};
+}, [calendarLockStart]);
   const filteredTechnologies = techSearchTerm.trim()
     ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
     : technologies;
@@ -972,7 +1197,21 @@ const AvailabilityViewPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">From (Date & Time)</Label>
+                <Input
+                  type="date"
+                  value={formatInputDateTime(dateRange.start)}
+                  onChange={(e) => handleStartDateTimeChange(e.target.value)}
+                />
+              </div>
             </div>
+
+
+            
 
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1033,7 +1272,7 @@ const AvailabilityViewPage = () => {
                       disabled={panelTimeOptions.length === 0}
                       onClick={() => {
                         setPanelBookStartOverride(''); setPanelBookEndOverride('');
-                        setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
+                        setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
                         setCandidateSearchTerm('');
                         setPanelDialogOpen(true);
                       }}>
@@ -1087,10 +1326,21 @@ const AvailabilityViewPage = () => {
                   <Calendar
                     localizer={localizer}
                     events={events}
+                    date={calendarDate}
+                    onNavigate={(nextDate) => {
+                      const nextDay = startOfDay(nextDate);
+                      if (calendarLockStart && nextDay < calendarLockStart) {
+                        setCalendarDate(calendarLockStart);
+                        return;
+                      }
+                      setCalendarDate(nextDay);
+                    }}
                     startAccessor="start"
                     endAccessor="end"
-                    onSelectEvent={handleEventClick}
+                    scrollToTime={calendarLockStart ? calendarLockStart : new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}                    onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
+                    dayPropGetter={calendarDayPropGetter}
+                    slotPropGetter={calendarSlotPropGetter}
                     // ── Custom event component with panel ✓ icon ──────────────
                     components={{ event: CalendarEventComponent }}
                     style={{ height: '100%' }}
@@ -1098,8 +1348,8 @@ const AvailabilityViewPage = () => {
                     defaultView="week"
                     step={60}
                     timeslots={1}
-                    min={new Date(1970, 0, 1, 7, 0)}
-                    max={new Date(1970, 0, 1, 19, 0)}
+                    min={new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}
+                    max={new Date(1970, 0, 1, CALENDAR_MAX_HOUR, 0)}
                     tooltipAccessor={tooltipAccessor}
                     popup
                     showMultiDayTimes

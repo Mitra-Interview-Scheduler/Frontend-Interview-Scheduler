@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Plus, X, Loader2, Search, ChevronDown, TrendingUp } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const SKILL_CATEGORIES = [
   'Programming Language',
@@ -30,7 +31,7 @@ const SKILL_CATEGORIES = [
 ];
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, syncUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,6 +89,13 @@ const ProfilePage = () => {
       setDesignations(desList);
       setTiers(tierList);
       setInterviewerTechs(interviewerTechList);
+
+      syncUser?.({
+        ...user,
+        ...profileData,
+        profilePicture: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePicture || null,
+        profilePictureUrl: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePictureUrl || null,
+      });
 
       // ── FIX: initialize selectedTierId from the loaded profile
       setSelectedTierId(profileData.currentDesignation?.tier?.id ?? null);
@@ -208,6 +216,14 @@ const ProfilePage = () => {
     if (!profile) return 'U';
     return `${profile.firstName?.[0] || ''}${profile.lastName?.[0] || ''}`.toUpperCase();
   };
+
+  const profileImage = normalizeImageUrl(
+    profile?.profilePictureUrl ||
+      profile?.profilePicture ||
+      user?.profilePicture ||
+      user?.profilePictureUrl ||
+      null
+  );
 
   const handleSelectFromDropdown = async (tech) => {
     setShowSkillDropdown(false);
@@ -354,6 +370,12 @@ const ProfilePage = () => {
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <Avatar className="w-32 h-32">
+                  <AvatarImage
+                    src={profileImage || undefined}
+                    alt="Profile"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                  />
                   <AvatarFallback className="gradient-primary text-white text-3xl font-semibold">
                     {getInitials()}
                   </AvatarFallback>

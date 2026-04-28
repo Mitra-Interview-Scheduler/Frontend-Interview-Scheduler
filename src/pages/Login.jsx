@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar, Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,31 +15,38 @@ const Login = () => {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const validationErrors = { email: '', password: '' };
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+
+  const navigateByRole = (user) => {
+    if (user.role === 'ADMIN') {
+      navigate('/admin/dashboard');
+    } else if (user.role === 'HR') {
+      navigate('/hr/dashboard');
+    } else if (user.role === 'INTERVIEWER') {
+      navigate('/interviewer/dashboard');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    const validationErrors = { email: '', password: '' };
     if (!email.trim()) validationErrors.email = 'Email is required';
     if (!password.trim()) validationErrors.password = 'Password is required';
+
     if (validationErrors.email || validationErrors.password) {
       setFieldErrors(validationErrors);
       return;
     }
+
     setFieldErrors({ email: '', password: '' });
     setLoading(true);
 
     try {
       const user = await login(email, password);
-      if (user.role === 'ADMIN') {
-        navigate('/admin/dashboard');
-      } else if (user.role === 'HR') {
-        navigate('/hr/dashboard');
-      } else if (user.role === 'INTERVIEWER') {
-        navigate('/interviewer/dashboard');
-      }
+      navigateByRole(user);
     } catch (err) {
       setError(err.message || 'Invalid credentials. Please try again.');
     } finally {
@@ -46,7 +54,19 @@ const Login = () => {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
+    setLoading(true);
 
+    try {
+      const user = await loginWithGoogle(credentialResponse);
+      navigateByRole(user);
+    } catch (err) {
+      setError(err.message || 'Google login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-subtle p-4">
@@ -57,11 +77,11 @@ const Login = () => {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <motion.div 
+          <motion.div
             className="flex items-center justify-center mb-4"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring" }}
+            transition={{ delay: 0.2, type: 'spring' }}
           >
             <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-lg">
               <Calendar className="w-8 h-8 text-white" />
@@ -77,7 +97,7 @@ const Login = () => {
 
         <Card className="shadow-elegant">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center" >Sign In</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
             <CardDescription className="text-center">
               Enter your credentials to access your dashboard
             </CardDescription>
@@ -143,7 +163,20 @@ const Login = () => {
               </Button>
             </form>
 
-           
+            <div className="my-4 flex items-center">
+              <div className="h-px flex-1 bg-border" />
+              <span className="px-3 text-xs text-muted-foreground">OR</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            
+              <div className="rounded-2xl bg-muted "> 
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google login failed. Please try again.')}
+                />
+              </div> 
+            
           </CardContent>
         </Card>
       </motion.div>
