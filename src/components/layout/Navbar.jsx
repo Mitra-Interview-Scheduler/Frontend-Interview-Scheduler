@@ -24,8 +24,8 @@ const Navbar = ({ onMenuClick }) => {
     return `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const getRoleBadgeColor = () => {
-    switch (user?.role) {
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
       case 'ADMIN': return 'bg-primary text-primary-foreground';
       case 'HR': return 'bg-secondary text-secondary-foreground';
       case 'INTERVIEWER': return 'bg-success text-success-foreground';
@@ -79,9 +79,19 @@ const Navbar = ({ onMenuClick }) => {
                     <p className="text-sm font-medium text-foreground">
                       {user?.firstName} {user?.lastName}
                     </p>
-                    <Badge className={`text-xs ${getRoleBadgeColor()}`}>
-                      {user?.role}
-                    </Badge>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {user?.roles && user.roles.length > 0 ? (
+                        user.roles.map((role) => (
+                          <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
+                            {role}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge className={`text-xs ${getRoleBadgeColor(user?.role)}`}>
+                          {user?.role}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <Avatar className="w-10 h-10">
                     <AvatarImage
@@ -102,6 +112,15 @@ const Navbar = ({ onMenuClick }) => {
                 <div>
                   <p className="font-medium">{user?.firstName} {user?.lastName}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  {user?.roles && user.roles.length > 0 && (
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      {user.roles.map((role) => (
+                        <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

@@ -37,10 +37,33 @@ const Sidebar = ({ isOpen }) => {
   const { user } = useAuth();
   const location = useLocation();
 
-  const links = 
-    user?.role === 'ADMIN' ? adminLinks :
-    user?.role === 'HR' ? hrLinks :
-    interviewerLinks;
+  // Get links based on all user roles (not just primary role)
+  const getUserLinks = () => {
+    const userRoles = user?.roles || (user?.role ? [user.role] : []);
+    const linkMap = new Map();
+
+    userRoles.forEach((role) => {
+      let roleLinks = [];
+      if (role === 'ADMIN') {
+        roleLinks = adminLinks;
+      } else if (role === 'HR') {
+        roleLinks = hrLinks;
+      } else if (role === 'INTERVIEWER') {
+        roleLinks = interviewerLinks;
+      }
+
+      // Add links to map (avoiding duplicates by path)
+      roleLinks.forEach((link) => {
+        if (!linkMap.has(link.path)) {
+          linkMap.set(link.path, link);
+        }
+      });
+    });
+
+    return Array.from(linkMap.values());
+  };
+
+  const links = getUserLinks();
 
   return (
     <aside 

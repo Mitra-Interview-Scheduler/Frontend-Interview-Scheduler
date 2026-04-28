@@ -19,11 +19,22 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to extract primary role from roles array
+  const getPrimaryRole = (roles) => {
+    if (Array.isArray(roles) && roles.length > 0) {
+      return roles[0];
+    }
+    return 'INTERVIEWER'; // default fallback
+  };
+
   const syncUser = (userData) => {
     const nextUser = {
       ...userData,
       profilePicture: userData.profilePicture || userData.profilePictureUrl || null,
       profilePictureUrl: userData.profilePictureUrl || userData.profilePicture || null,
+      // Handle both old 'role' and new 'roles' array from backend
+      role: userData.role || getPrimaryRole(userData.roles),
+      roles: Array.isArray(userData.roles) ? userData.roles : (userData.role ? [userData.role] : []),
     };
 
     localStorage.setItem('user', JSON.stringify(nextUser));
@@ -61,7 +72,8 @@ export const AuthProvider = ({ children }) => {
         email: response.email,
         firstName: response.firstName,
         lastName: response.lastName,
-        role: response.role,
+        role: response.role || (Array.isArray(response.roles) ? response.roles[0] : 'INTERVIEWER'),
+        roles: response.roles,
         profilePicture: response.profilePictureUrl || response.profilePicture || null,
         profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
       };
@@ -89,7 +101,8 @@ export const AuthProvider = ({ children }) => {
         email: response.email,
         firstName: response.firstName,
         lastName: response.lastName,
-        role: response.role,
+        role: response.role || (Array.isArray(response.roles) ? response.roles[0] : 'INTERVIEWER'),
+        roles: response.roles,
         profilePicture: response.profilePictureUrl || response.profilePicture || null,
         profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
       };

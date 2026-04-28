@@ -31,6 +31,7 @@ api.interceptors.response.use(
 export const authAPI = {
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
+    console.log('Login response:', response.data);
     return response.data;
   },
   googleLogin: async (token) => {
