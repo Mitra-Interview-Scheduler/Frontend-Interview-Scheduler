@@ -284,13 +284,13 @@ const AvailabilityViewPage = () => {
 
   // ── Initial load ──────────────────────────────────────────────────────────
 
-
   useEffect(() => {
+
+    
     // Check if we arrived here via the "Schedule" button
     const incomingFilter = location.state?.filterData;
     
     if (incomingFilter) {
-      // Store the incoming filter to process after tiers/designations load
       setPendingFilter(incomingFilter);
       
       // 1. Set the Date Range
@@ -305,19 +305,12 @@ const AvailabilityViewPage = () => {
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
       }
 
-      if (incomingFilter.minTierOrder) {
-
-      }
-
       // 3. Set the pre-selected candidate for the Booking Dialog later
       setRequestForm(prev => ({
         ...prev,
         candidateId: incomingFilter.candidateId,
         candidateName: incomingFilter.candidateName
       }));
-      
-      // Note: Tier and Level will be set in subsequent useEffects
-      // after tiers and designations are loaded
     }
   }, [location.state]);
 
@@ -393,11 +386,12 @@ const AvailabilityViewPage = () => {
       if (minLevelOrder != null) {
         // Find the designation with matching levelOrder
         const matchingDesignation = designationsForSelectedTier.find(d => d.id === minLevelOrder);
-        // console.log('Finding matching designation for levelOrder:', minLevelOrder, 'Found:', matchingDesignation);
         if (matchingDesignation) {
           setMinDesignationLevel(matchingDesignation.levelOrder.toString());
         }
       }
+      // ✅ Clear pendingFilter after cascading tier/level updates complete
+      setPendingFilter(null);
     }
   }, [pendingFilter, designationsForSelectedTier]);
 
@@ -411,9 +405,14 @@ const AvailabilityViewPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!loading) applyFilters();
-  }, [filterDept, filterTech, minExperience, dateRange,
-      selectedDeptForDesignation, selectedTierInDept, minDesignationLevel]);
+  if (loading || (pendingFilter && !selectedTierInDept)) return;
+
+  applyFilters();
+}, [
+  filterDept, filterTech, minExperience, dateRange,
+  selectedDeptForDesignation, selectedTierInDept, minDesignationLevel,
+  pendingFilter
+]);
 
   useEffect(() => {
     if (dateRange.start) {
@@ -438,18 +437,18 @@ const AvailabilityViewPage = () => {
 
   const applyFilters = async () => {
     try {
-      // // ── Log all filter states ────────────────────────────────────────────────
-      // console.group('📊 FILTER STATE');
-      // console.log('filterDept[]:', filterDept);
-      // console.log('filterTech[]:', filterTech);
-      // console.log('minExperience:', minExperience);
-      // console.log('dateRange:', dateRange);
-      // console.log('selectedDeptForDesignation:', selectedDeptForDesignation);
-      // console.log('selectedTierInDept:', selectedTierInDept);
-      // console.log('minDesignationLevel:', minDesignationLevel);
-      // console.log('tiersForSelectedDept[]:', tiersForSelectedDept);
-      // console.log('designationsForSelectedTier[]:', designationsForSelectedTier);
-      // console.groupEnd();
+      // ── Log all filter states ────────────────────────────────────────────────
+      console.group('📊 FILTER STATE');
+      console.log('filterDept[]:', filterDept);
+      console.log('filterTech[]:', filterTech);
+      console.log('minExperience:', minExperience);
+      console.log('dateRange:', dateRange);
+      console.log('selectedDeptForDesignation:', selectedDeptForDesignation);
+      console.log('selectedTierInDept:', selectedTierInDept);
+      console.log('minDesignationLevel:', minDesignationLevel);
+      console.log('tiersForSelectedDept[]:', tiersForSelectedDept);
+      console.log('designationsForSelectedTier[]:', designationsForSelectedTier);
+      console.groupEnd();
 
       let tierOrderToSend = null;
       if (selectedTierInDept) {
@@ -464,18 +463,18 @@ const AvailabilityViewPage = () => {
       }
 
       // // ── Log conversion process ───────────────────────────────────────────────
-      // console.group('🔄 CONVERSION');
-      // console.log('Tier Conversion:', {
-      //   selectedTierInDept,
-      //   matchingTier: tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept),
-      //   tierOrderToSend,
-      // });
-      // console.log('Level Conversion:', {
-      //   minDesignationLevel,
-      //   matchingDesignation: designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel),
-      //   levelOrderToSend,
-      // });
-      // console.groupEnd();
+      console.group('🔄 CONVERSION');
+      console.log('Tier Conversion:', {
+        selectedTierInDept,
+        matchingTier: tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept),
+        tierOrderToSend,
+      });
+      console.log('Level Conversion:', {
+        minDesignationLevel,
+        matchingDesignation: designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel),
+        levelOrderToSend,
+      });
+      console.groupEnd();
 
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
@@ -489,34 +488,34 @@ const AvailabilityViewPage = () => {
       };
 
       // ── Log final filters object ─────────────────────────────────────────────
-      // console.group('📤 SENDING TO API');
-      // console.table(filters);
-      // console.groupEnd();
+      console.group('📤 SENDING TO API');
+      console.table(filters);
+      console.groupEnd();
 
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
 
       // ── Log retrieved data ───────────────────────────────────────────────────
-      // console.group('📥 RECEIVED DATA');
-      // console.log(`Total slots: ${data.length}`);
-      // console.table(data.map(slot => ({
-      //   slotId: slot.slotId,
-      //   interviewerName: slot.interviewerName,
-      //   interviewerLevelOrder: slot.interviewerLevelOrder,
-      //   interviewerTierOrder: slot.interviewerTierOrder,
-      //   startDateTime: slot.startDateTime,
-      //   status: slot.status,
-      // })));
-      // console.groupEnd();
+      console.group('📥 RECEIVED DATA');
+      console.log(`Total slots: ${data.length}`);
+      console.table(data.map(slot => ({
+        slotId: slot.slotId,
+        interviewerName: slot.interviewerName,
+        interviewerLevelOrder: slot.interviewerLevelOrder,
+        interviewerTierOrder: slot.interviewerTierOrder,
+        startDateTime: slot.startDateTime,
+        status: slot.status,
+      })));
+      console.groupEnd();
 
-      // // ── Summary ──────────────────────────────────────────────────────────────
-      // console.group('✅ SUMMARY');
-      // console.log(`Filter applied. Returned: ${data.length} slots`);
-      // const byStatus = data.reduce((acc, slot) => {
-      //   acc[slot.status] = (acc[slot.status] || 0) + 1;
-      //   return acc;
-      // }, {});
-      // console.table(byStatus);
-      // console.groupEnd();
+      // ── Summary ──────────────────────────────────────────────────────────────
+      console.group('✅ SUMMARY');
+      console.log(`Filter applied. Returned: ${data.length} slots`);
+      const byStatus = data.reduce((acc, slot) => {
+        acc[slot.status] = (acc[slot.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.table(byStatus);
+      console.groupEnd();
 
       const colorMap = buildColorMap(data);
       setRawSlots(data);
@@ -834,6 +833,7 @@ const AvailabilityViewPage = () => {
     setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
     setMinDesignationLevel(''); setSelectedTierInDept('');
     setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
     setCalendarDate(new Date());
   };
 
@@ -1203,7 +1203,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">From (Date & Time)</Label>
                 <Input
-                  type="datetime-local"
+                  type="date"
                   value={formatInputDateTime(dateRange.start)}
                   onChange={(e) => handleStartDateTimeChange(e.target.value)}
                 />
