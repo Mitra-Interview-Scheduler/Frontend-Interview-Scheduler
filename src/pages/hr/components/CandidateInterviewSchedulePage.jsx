@@ -11,12 +11,21 @@ import { Separator } from '@/components/ui/separator';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
-  const [availabilityDate, setAvailabilityDate] = useState('');
+
+  const getTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const [availabilityDate, setAvailabilityDate] = useState(getTodayDate());
 
   // Reset state on close
   useEffect(() => {
     if (!open) {
-      setAvailabilityDate('');
+      setAvailabilityDate(getTodayDate()); // Reset to current date-time
     }
   }, [open]);
 
@@ -28,10 +37,14 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    // const hours = String(now.getHours()).padStart(2, '0');
+    // const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
+
+
+
+  
 
   const handleGoToAvailability = () => {
     if (!availabilityDate) return;
@@ -133,8 +146,8 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               
               <Input
                 id="availability"
-                type="datetime-local"
-                min={getMinDateTime()}
+                type="date"
+                min={getTodayDate()}
                 value={availabilityDate}
                 onChange={(e) => setAvailabilityDate(e.target.value)}
                 className="h-14 text-lg border-2 border-slate-200 focus:border-primary focus:ring-primary shadow-sm px-4"
