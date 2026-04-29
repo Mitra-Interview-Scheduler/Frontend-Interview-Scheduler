@@ -156,7 +156,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               <div className="flex items-start gap-3 text-sm text-blue-600 bg-blue-50 p-4 rounded-xl border border-blue-100">
                 <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
                 <p>
-                  Matching interviewers must be from <strong>{candidate.departmentName || 'the same department'}</strong> and hold a <strong>Tier {candidate.targetDesignationTierOrder}</strong> seniority or higher.
+                  Matching interviewers must be from <strong>{candidate.departmentName || 'the same department'}</strong> and hold a <strong>Tier {candidate.tierOrder}</strong> seniority or higher.
                 </p>
               </div>
             </div>
