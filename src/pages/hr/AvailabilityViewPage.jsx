@@ -1,10 +1,5 @@
-// src/pages/hr/AvailabilityViewPage.jsx
-// Changes in this version:
-//   1. Custom RBC EventComponent — selected panel slots show a ✓ badge
-//   2. Privilege check — blocks scheduling if interviewer is less senior than candidate
-//   3. Slot merge is handled server-side (no frontend change needed)
-import { useLocation } from 'react-router-dom'; // Add this import
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom'; 
+import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -22,11 +17,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import { Calendar } from 'react-big-calendar';
 import {
   format, parse, startOfWeek, getDay, addMinutes, startOfDay,
 } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
@@ -40,125 +34,15 @@ import { technologyAPI } from '@/services/technologyAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
+import { INTERVIEWER_PALETTES, BOOKED_OVERLAY, PANEL_PALETTE ,CalendarEventComponent, getEventStyle, getTooltipText} from './utils/AvailabilityViewPageUiUtils';
+import {localizer, formatLocalDateTime, formatInputDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege,  formatSlots} from './utils/AvailabilityViewPageHelperUtils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
 
 const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
 const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
-const localizer = dateFnsLocalizer({
-  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
-});
 
-// ── Per-interviewer color palette ────────────────────────────────────────────
-const INTERVIEWER_PALETTES = [
-  { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', solid: '#f59e0b', border: '#78350f', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#ec4899,#db2777)', solid: '#ec4899', border: '#831843', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#14b8a6,#0d9488)', solid: '#14b8a6', border: '#134e4a', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', solid: '#8b5cf6', border: '#3b0764', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#ef4444,#dc2626)', solid: '#ef4444', border: '#7f1d1d', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#06b6d4,#0891b2)', solid: '#06b6d4', border: '#164e63', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#84cc16,#65a30d)', solid: '#84cc16', border: '#365314', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f97316,#ea580c)', solid: '#f97316', border: '#7c2d12', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#a855f7,#9333ea)', solid: '#a855f7', border: '#4a044e', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#10b981,#059669)', solid: '#10b981', border: '#064e3b', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)', solid: '#3b82f6', border: '#1e3a8a', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#d946ef,#c026d3)', solid: '#d946ef', border: '#581c87', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#64748b,#475569)', solid: '#64748b', border: '#1e293b', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f43f5e,#e11d48)', solid: '#f43f5e', border: '#881337', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', solid: '#0ea5e9', border: '#0c4a6e', text: '#fff' },
-];
-
-const PANEL_PALETTE = {
-  bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
-  solid: '#0ea5e9',
-  border: '#0c4a6e',
-  text: '#fff',
-};
-
-const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg,#10b981,#059669)',
-  solid: '#10b981',
-  border: '#064e3b',
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const pad = (n) => String(n).padStart(2, '0');
-const formatLocalDateTime = (date) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-  `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
-
-const formatInputDateTime = (date) => {
-  if (!date) return '';
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-const generateTimeOptions = (startDate, endDate) => {
-  const options = [];
-  let cur = new Date(startDate);
-  while (cur <= endDate) {
-    options.push({ label: format(cur, 'h:mm a'), value: format(cur, 'HH:mm'), date: new Date(cur) });
-    cur = addMinutes(cur, 30);
-  }
-  return options;
-};
-
-const parseTimeOnDate = (timeStr, referenceDate) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  const r = new Date(referenceDate);
-  r.setHours(h, m, 0, 0);
-  return r;
-};
-
-// ── Privilege check ───────────────────────────────────────────────────────────
-/**
- * Returns an error string if the interviewer is less senior than the candidate,
- * or null if the check passes (or data is missing).
- *
- * Logic:
- *  - First compare tierOrder: higher tier = more senior
- *  - If same tier, compare levelOrder: higher level = more senior
- *  - interviewer must be >= candidate on both dimensions
- *
- * Requires backend to expose interviewerTierOrder / interviewerLevelOrder on
- * the slot resource, and targetDesignationTierOrder / targetDesignationLevelOrder
- * on the candidate (see BACKEND_DTO_ADDITIONS.java).
- */
-const checkInterviewerPrivilege = (slotResource, candidate) => {
-  if (!slotResource || !candidate) return null;
-
-  const ivTier  = slotResource.interviewerTierOrder;
-  const ivLevel = slotResource.interviewerLevelOrder;
-  const cTier   = candidate.targetDesignationTierOrder;
-  const cLevel  = candidate.targetDesignationLevelOrder;
-
-  // If we don't have numeric data from the backend, skip the check gracefully
-  if (ivTier == null || cTier == null) return null;
-
-  if (ivTier < cTier) {
-    return `The interviewer's tier (Tier ${ivTier}) is below the candidate's required tier (Tier ${cTier}). Please choose a more senior interviewer.`;
-  }
-  if (ivTier === cTier && ivLevel != null && cLevel != null && ivLevel < cLevel) {
-    return `The interviewer is at the same tier but a lower level (Level ${ivLevel}) than the candidate requires (Level ${cLevel}). Please choose a more senior interviewer.`;
-  }
-  return null;
-};
-
-/**
- * For panel interviews: check ALL selected interviewers.
- * Returns a list of { name, reason } for any that fail.
- */
-const checkPanelPrivilege = (panelSlots, candidate) => {
-  if (!candidate) return [];
-  return panelSlots
-    .map((ps) => {
-      const err = checkInterviewerPrivilege(ps.slot.resource, candidate);
-      return err ? { name: ps.slot.resource.interviewer, reason: err } : null;
-    })
-    .filter(Boolean);
-};
 
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
@@ -228,8 +112,51 @@ const AvailabilityViewPage = () => {
     ? checkPanelPrivilege(panelSlots, selectedCandidate)
     : [];
 
-  // ── Build color map ────────────────────────────────────────────────────────
-  const buildColorMap = useCallback((slots) => {
+    const eventStyleGetter = useCallback((event) => 
+    getEventStyle(event, panelSlots), 
+  [panelSlots]);
+
+  const tooltipAccessor = useCallback((event) => 
+    getTooltipText(event, panelSlots), 
+  [panelSlots]);
+
+  // For the calendar components prop
+  const calendarComponents = useMemo(() => ({
+    event: (props) => <CalendarEventComponent {...props} panelSlots={panelSlots} />
+  }), [panelSlots]);
+
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
+          hrAvailabilityAPI.getAllAvailability(),
+          departmentAPI.getAllDepartments(),
+          technologyAPI.getAllTechnologies(),
+          designationAPI.getAllDesignations(),
+          tierAPI.getAllTiers(),
+          candidateAPI.getAllCandidates(),
+        ]);
+        setDepartments(deptData);
+        setTechnologies(techData);
+        setDesignations(desigData);
+        setTiers(tierData);
+        setCandidates(candData);
+        setRawSlots(availData);
+        setEvents(formatSlots(availData, buildColorMap(availData)));
+      } catch (err) {
+        toast(
+          { title: 'Error loading availability', description: err.message, variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+
+
+// ── Build color map ────────────────────────────────────────────────────────
+   const buildColorMap = (slots) => {
     const map = {};
     let idx = 0;
     slots.forEach((slot) => {
@@ -241,56 +168,20 @@ const AvailabilityViewPage = () => {
     });
     setInterviewerColorMap(map);
     return map;
+  };
+
+    useEffect(() => {
+    loadInitialData();
   }, []);
 
-  // ── Format slots → calendar events ───────────────────────────────────────
-  const formatSlots = useCallback((data, colorMap) => {
-    return data.map((slot) => {
-      const isBooked = slot.status === 'BOOKED';
-      const paletteIdx = colorMap[slot.interviewerId] ?? 0;
-      const palette = isBooked ? BOOKED_OVERLAY : INTERVIEWER_PALETTES[paletteIdx];
-      const skills = slot.technologies || [];
-      const skillLabel = skills.length
-        ? ` · ${skills.slice(0, 2).join(', ')}${skills.length > 2 ? ' +' + (skills.length - 2) : ''}`
-        : '';
 
-      return {
-        id: slot.slotId,
-        interviewerId: slot.interviewerId,
-        paletteIdx,
-        title: isBooked
-          ? `🔒 ${slot.interviewerName}${slot.candidateName ? ' → ' + slot.candidateName : ''}`
-          : `${slot.interviewerName}${skillLabel}`,
-        start: new Date(slot.startDateTime),
-        end: new Date(slot.endDateTime),
-        resource: {
-          ...slot,
-          interviewer: slot.interviewerName,
-          department: slot.department,
-          designation: slot.designation,
-          skills,
-          yearsOfExperience: slot.yearsOfExperience,
-          status: slot.status,
-          candidateName: slot.candidateName,
-          requestId: slot.requestId ?? null,
-          palette,
-          // Tier / level for privilege check (populated by backend)
-          interviewerTierOrder:  slot.interviewerTierOrder  ?? null,
-          interviewerLevelOrder: slot.interviewerLevelOrder ?? null,
-        },
-      };
-    });
-  }, []);
 
-  // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-
-    
-    // Check if we arrived here via the "Schedule" button
     const incomingFilter = location.state?.filterData;
     
     if (incomingFilter) {
+      console.log('Applying incoming filter from navigation state:', incomingFilter);
       setPendingFilter(incomingFilter);
       
       // 1. Set the Date Range
@@ -314,51 +205,8 @@ const AvailabilityViewPage = () => {
     }
   }, [location.state]);
 
-  // ── Auto-set candidate designation after candidates load ─────────────────
-  useEffect(() => {
-    if (requestForm.candidateId && candidates.length > 0) {
-      const candidate = candidates.find(c => c.id === requestForm.candidateId);
-      if (candidate && candidate.targetDesignationId) {
-        setRequestForm(prev => ({
-          ...prev,
-          candidateDesignationId: candidate.targetDesignationId
-        }));
-      }
-    }
-  }, [requestForm.candidateId, candidates]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
-          hrAvailabilityAPI.getAllAvailability(),
-          departmentAPI.getAllDepartments(),
-          technologyAPI.getAllTechnologies(),
-          designationAPI.getAllDesignations(),
-          tierAPI.getAllTiers(),
-          candidateAPI.getAllCandidates(),
-        ]);
-        setDepartments(deptData);
-        setTechnologies(techData);
-        setDesignations(desigData);
-        setTiers(tierData);
-        setCandidates(candData);
-        const colorMap = buildColorMap(availData);
-        setRawSlots(availData);
-        setEvents(formatSlots(availData, colorMap));
-      } catch (err) {
-        toast({ title: 'Error loading availability', description: err.message, variant: 'destructive' });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [buildColorMap, formatSlots]);
-
-  useEffect(() => {
-    if (selectedDeptForDesignation) loadTiersForDept(selectedDeptForDesignation);
-    else { setTiersForSelectedDept([]); setSelectedTierInDept(''); setMinDesignationLevel(''); }
-  }, [selectedDeptForDesignation]);
+  
 
   // ── Auto-set Tier from pending filter ───────────────────────────────────────
   useEffect(() => {
@@ -374,11 +222,39 @@ const AvailabilityViewPage = () => {
     }
   }, [pendingFilter, tiersForSelectedDept]);
 
+
+
+  
   useEffect(() => {
-    if (selectedTierInDept) loadDesignationsForTier(parseInt(selectedTierInDept));
-    else { setDesignationsForSelectedTier([]); setMinDesignationLevel(''); }
+    if (selectedDeptForDesignation) {
+      loadTiersForDept(selectedDeptForDesignation);
+    }
+    else {
+        setTiersForSelectedDept([]);
+        setSelectedTierInDept('');
+        setMinDesignationLevel(''); 
+      }
+  }, [selectedDeptForDesignation]);
+
+
+  useEffect(() => {
+    if (selectedTierInDept) {
+      loadDesignationsForTier(parseInt(selectedTierInDept));
+    }else {
+      setDesignationsForSelectedTier([]);
+      setMinDesignationLevel(''); }
   }, [selectedTierInDept]);
 
+
+
+  useEffect(() => {
+    if (dateRange.start) {
+      setCalendarDate(new Date(dateRange.start));
+    }
+  }, [dateRange.start]);
+
+
+  
   // ── Auto-set Level from pending filter ───────────────────────────────────────
   useEffect(() => {
     if (pendingFilter && designationsForSelectedTier.length > 0) {
@@ -414,11 +290,23 @@ const AvailabilityViewPage = () => {
   pendingFilter
 ]);
 
+  
+  
+  // ── Auto-set candidate designation after candidates load ─────────────────
   useEffect(() => {
-    if (dateRange.start) {
-      setCalendarDate(new Date(dateRange.start));
+    if (requestForm.candidateId && candidates.length > 0) {
+      const candidate = candidates.find(c => c.id === requestForm.candidateId);
+      if (candidate && candidate.targetDesignationId) {
+        setRequestForm(prev => ({
+          ...prev,
+          candidateDesignationId: candidate.targetDesignationId
+        }));
+      }
     }
-  }, [dateRange.start]);
+  }, [requestForm.candidateId, candidates]);
+
+
+
 
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {
@@ -458,7 +346,7 @@ const AvailabilityViewPage = () => {
 
       let levelOrderToSend = null;
       if (minDesignationLevel) {
-        const d = designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel);
+        const d = designationsForSelectedTier.find((d) => d.levelOrder.toString() === minDesignationLevel);
         levelOrderToSend = d ? d.levelOrder : null;
       }
 
@@ -471,7 +359,7 @@ const AvailabilityViewPage = () => {
       });
       console.log('Level Conversion:', {
         minDesignationLevel,
-        matchingDesignation: designationsForSelectedTier.find((d) => d.id.toString() === minDesignationLevel),
+        matchingDesignation: designationsForSelectedTier.find((d) => d.levelOrder.toString() === minDesignationLevel),
         levelOrderToSend,
       });
       console.groupEnd();
@@ -606,114 +494,6 @@ const AvailabilityViewPage = () => {
     setRequestDialogOpen(true);
   };
 
-  // ── Custom calendar event component ──────────────────────────────────────
-  // Shows a ✓ icon + "Panel" label when a slot is selected in panel mode.
-  const CalendarEventComponent = useCallback(({ event }) => {
-    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
-    const isBooked   = event.resource?.status === 'BOOKED';
-
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3,
-        overflow: 'hidden',
-        height: '100%',
-        width: '100%',
-      }}>
-        {/* Panel-selected indicator */}
-        {isInPanel && (
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 2,
-            background: 'rgba(255,255,255,0.25)',
-            borderRadius: 3,
-            padding: '1px 4px',
-            fontSize: 10,
-            fontWeight: 700,
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}>
-            <CheckCircle2 style={{ width: 9, height: 9 }} />
-            Panel
-          </span>
-        )}
-        {/* Lock icon for booked */}
-        {isBooked && !isInPanel && (
-          <span style={{ fontSize: 10, flexShrink: 0 }}>🔒</span>
-        )}
-        {/* Title text */}
-        <span style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 11,
-          flex: 1,
-          minWidth: 0,
-        }}>
-          {/* Strip leading emoji from title if we already show the icon */}
-          {isBooked
-            ? event.title.replace(/^🔒\s*/, '')
-            : event.resource?.interviewer || event.title}
-        </span>
-      </div>
-    );
-  }, [panelSlots]);
-
-  // ── Event style ───────────────────────────────────────────────────────────
-  const eventStyleGetter = useCallback((event) => {
-    const isBooked   = event.resource?.status === 'BOOKED';
-    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
-    let palette;
-
-    if (isInPanel) {
-      palette = PANEL_PALETTE;
-    } else {
-      palette = event.resource?.palette || INTERVIEWER_PALETTES[0];
-    }
-
-    return {
-      style: {
-        background: palette.bg,
-        borderRadius: '5px',
-        opacity: isBooked ? 0.82 : 0.94,
-        color: 'white',
-        borderLeft: `3px solid ${palette.border || palette.solid}`,
-        borderTop: 'none',
-        borderRight: 'none',
-        borderBottom: 'none',
-        padding: '3px 6px',
-        fontSize: '11px',
-        fontWeight: '500',
-        boxShadow: isInPanel
-          ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-          : `0 1px 4px ${palette.solid}30`,
-        cursor: 'pointer',
-        overflow: 'hidden',
-        maxWidth: '100%',
-        outline: 'none',
-      },
-    };
-  }, [panelSlots]);
-
-  // ── Tooltip ───────────────────────────────────────────────────────────────
-  const tooltipAccessor = (event) => {
-    const r = event.resource;
-    const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-    if (r?.status === 'BOOKED')
-      return `🔒 BOOKED — ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick to cancel & restore slot`;
-    if (isInPanel)
-      return `✅ PANEL SELECTED — ${r.interviewer}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick again to remove from panel`;
-    return [
-      `👤 ${r.interviewer}`,
-      r.designation ? `📋 ${r.designation}` : null,
-      r.department  ? `🏢 ${r.department}` : null,
-      r.yearsOfExperience ? `⏱ ${r.yearsOfExperience} yrs` : null,
-      r.skills?.length ? `💻 ${r.skills.join(', ')}` : null,
-      `🕐 ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`,
-    ].filter(Boolean).join('\n');
-  };
 
   // ── Candidate helpers ─────────────────────────────────────────────────────
   const handleSelectCandidate = (c) =>
@@ -1032,17 +812,15 @@ const calendarSlotPropGetter = useCallback((date) => {
           className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">Interviewer Availability</h1>
-            <p className="text-muted-foreground text-lg">
+            {/* <p className="text-muted-foreground text-lg">
               View and book interviewer availability · each color = one interviewer
-            </p>
+            </p> */}
           </div>
-          <Button variant="outline" onClick={clearFilters} className="gap-2">
-            <X className="w-4 h-4" /> Clear Filters
-          </Button>
+         
         </motion.div>
 
         {/* Interviewer color legend */}
-        {interviewerLegend.length > 0 && (
+        {/* {interviewerLegend.length > 0 && (
           <div className="hr-interviewer-legend">
             {interviewerLegend.map(({ id, name, palette }) => (
               <div key={id} className="hr-interviewer-legend-chip"
@@ -1057,10 +835,10 @@ const calendarSlotPropGetter = useCallback((date) => {
               🔒 Booked (click to cancel)
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Slot counts */}
-        <div className="flex items-center gap-6 px-1 flex-wrap">
+        {/* <div className="flex items-center gap-6 px-1 flex-wrap">
           {[
             { color: '#6366f1', label: 'Available slots', count: availableCount, textColor: 'text-indigo-600' },
             { color: '#10b981', label: 'Booked slots',    count: bookedCount,    textColor: 'text-emerald-600' },
@@ -1072,7 +850,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               {count > 0 && <span className={`text-xs font-bold ${textColor} px-1.5 py-0.5 rounded-full`}>{count}</span>}
             </div>
           ))}
-        </div>
+        </div> */}
 
         {/* Filters */}
         <Card>
@@ -1186,7 +964,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Min. Level in Tier</Label>
+                <Label className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Min. Designation </Label>
                 <Select value={minDesignationLevel || 'ANY'}
                   onValueChange={(v) => setMinDesignationLevel(v === 'ANY' ? '' : v)}
                   disabled={!selectedTierInDept}>
@@ -1204,13 +982,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <Label className="flex items-center gap-2">From (Date & Time)</Label>
                 <Input
                   type="date"
-                  value={formatInputDateTime(dateRange.start)}
+                  value={formatInputDate(dateRange.start)}
                   onChange={(e) => handleStartDateTimeChange(e.target.value)}
                 />
               </div>
+
+              
             </div>
 
+            
 
+ 
             
 
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
@@ -1229,6 +1011,11 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
                     <span className="text-sm"><span className="font-bold text-slate-600">{events.length}</span><span className="text-muted-foreground ml-1">total</span></span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={clearFilters} className="gap-2">
+                     <X className="w-4 h-4" /> Clear Filters
+                  </Button>
+                </div>
                 </div>
               </div>
             </div>
@@ -1323,8 +1110,10 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="availability-calendar-container hr-calendar"
                   style={{ height: '720px' }}>
+
                   <Calendar
                     localizer={localizer}
+                    components={calendarComponents}
                     events={events}
                     date={calendarDate}
                     onNavigate={(nextDate) => {
@@ -1342,7 +1131,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     dayPropGetter={calendarDayPropGetter}
                     slotPropGetter={calendarSlotPropGetter}
                     // ── Custom event component with panel ✓ icon ──────────────
-                    components={{ event: CalendarEventComponent }}
+                    // components={{ event: CalendarEventComponent }}
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
