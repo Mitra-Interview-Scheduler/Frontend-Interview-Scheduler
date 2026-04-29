@@ -29,7 +29,6 @@ const hrLinks = [
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
- 
   { icon: Settings, label: 'Profile', path: '/interviewer/profile' },
 ];
 
@@ -37,33 +36,43 @@ const Sidebar = ({ isOpen }) => {
   const { user } = useAuth();
   const location = useLocation();
 
-  // Get links based on all user roles (not just primary role)
-  const getUserLinks = () => {
+  // Get links grouped by role
+  const getRoleGroupedLinks = () => {
     const userRoles = user?.roles || (user?.role ? [user.role] : []);
-    const linkMap = new Map();
+    const roleLinks = [];
+
+    const roleConfig = {
+      ADMIN: adminLinks,
+      HR: hrLinks,
+      INTERVIEWER: interviewerLinks,
+    };
 
     userRoles.forEach((role) => {
-      let roleLinks = [];
-      if (role === 'ADMIN') {
-        roleLinks = adminLinks;
-      } else if (role === 'HR') {
-        roleLinks = hrLinks;
-      } else if (role === 'INTERVIEWER') {
-        roleLinks = interviewerLinks;
+      if (roleConfig[role]) {
+        roleLinks.push({
+          role,
+          links: roleConfig[role],
+        });
       }
-
-      // Add links to map (avoiding duplicates by path)
-      roleLinks.forEach((link) => {
-        if (!linkMap.has(link.path)) {
-          linkMap.set(link.path, link);
-        }
-      });
     });
 
-    return Array.from(linkMap.values());
+    return roleLinks;
   };
 
-  const links = getUserLinks();
+  const roleGroupedLinks = getRoleGroupedLinks();
+
+  const getRoleColor = (role) => {
+    switch (role) {
+      case 'ADMIN':
+        return 'text-primary';
+      case 'HR':
+        return 'text-secondary';
+      case 'INTERVIEWER':
+        return 'text-emerald-500';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
 
   return (
     <aside 
@@ -72,27 +81,39 @@ const Sidebar = ({ isOpen }) => {
         isOpen ? "translate-x-0 w-64" : "-translate-x-full w-0"
       )}
     >
-      <nav className="p-4 space-y-2">
-        {links.map((link) => {
-          const Icon = link.icon;
-          const isActive = location.pathname === link.path;
-          
-          return (
-            <Link
-              key={link.path}
-              to={link.path}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
-                isActive 
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-                  : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5" />
-              <span>{link.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="p-4 space-y-6">
+        {roleGroupedLinks.map((roleGroup) => (
+          <div key={roleGroup.role} className="space-y-2">
+            {/* Role Header */}
+            <div className={cn("px-4 py-2 font-semibold text-sm uppercase tracking-wider", getRoleColor(roleGroup.role))}>
+              {roleGroup.role}
+            </div>
+
+            {/* Role Links */}
+            <div className="space-y-1">
+              {roleGroup.links.map((link) => {
+                const Icon = link.icon;
+                const isActive = location.pathname === link.path;
+
+                return (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-sm">{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );
