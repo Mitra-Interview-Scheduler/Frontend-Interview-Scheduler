@@ -63,6 +63,11 @@ export const usersAPI = {
     const response = await api.patch(`/admin/users/${id}/role`, { role });
     return response.data;
   },
+  updateRoles: async (id, roles) => {
+    const response = await api.put(`/admin/users/${id}/roles`, { roles });
+    console.log('Update roles response:', response.data);
+    return response.data;
+  },
   toggleStatus: async (id) => {
     const response = await api.patch(`/admin/users/${id}/status`);
     return response.data;

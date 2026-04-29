@@ -59,9 +59,18 @@ const AdminDashboard = () => {
 
   // Derived counts from real data
   const totalUsers = users.length;
-  const admins = users.filter((u) => u.role === 'ADMIN').length;
-  const hrs = users.filter((u) => u.role === 'HR').length;
-  const interviewers = users.filter((u) => u.role === 'INTERVIEWER').length;
+  const admins = users.filter((u) => {
+    const userRoles = u.roles || (u.role ? [u.role] : []);
+    return userRoles.includes('ADMIN');
+  }).length;
+  const hrs = users.filter((u) => {
+    const userRoles = u.roles || (u.role ? [u.role] : []);
+    return userRoles.includes('HR');
+  }).length;
+  const interviewers = users.filter((u) => {
+    const userRoles = u.roles || (u.role ? [u.role] : []);
+    return userRoles.includes('INTERVIEWER');
+  }).length;
   const activeUsers = users.filter((u) => u.active !== false).length;
 
   // Recent 5 users (most recently added, assuming sorted by id desc or just last 5)
@@ -150,9 +159,19 @@ const AdminDashboard = () => {
                         </p>
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                       </div>
-                      <Badge className={`text-xs shrink-0 ${roleColor(user.role)}`}>
-                        {user.role}
-                      </Badge>
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        {user.roles && user.roles.length > 0 ? (
+                          user.roles.map((role) => (
+                            <Badge key={role} className={`text-xs shrink-0 ${roleColor(role)}`}>
+                              {role}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge className={`text-xs shrink-0 ${roleColor(user.role)}`}>
+                            {user.role}
+                          </Badge>
+                        )}
+                      </div>
                     </motion.div>
                   ))}
                 </div>

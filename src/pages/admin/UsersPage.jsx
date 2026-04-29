@@ -315,8 +315,9 @@ export default function UsersPage() {
   const filtered = users.filter((u) => {
     const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.toLowerCase();
     const q    = search.toLowerCase();
+    const userRoles = u.roles || (u.role ? [u.role] : []);
     return (name.includes(q) || u.email.toLowerCase().includes(q))
-        && (roleFilter === 'ALL' || u.role === roleFilter);
+        && (roleFilter === 'ALL' || userRoles.includes(roleFilter));
   });
 
   const handleToggle = async (user) => {
@@ -331,8 +332,9 @@ export default function UsersPage() {
   };
 
   const initiateDelete = (user) => {
-    if (user.role === 'ADMIN') { setGuardTarget(user); }
-    else                        { executeDelete(user.id); }
+    const userRoles = user.roles || (user.role ? [user.role] : []);
+    if (userRoles.includes('ADMIN')) { setGuardTarget(user); }
+    else                              { executeDelete(user.id); }
   };
 
   const executeDelete = async (id) => {
@@ -359,9 +361,18 @@ export default function UsersPage() {
 
   const counts = {
     ALL:         users.length,
-    ADMIN:       users.filter((u) => u.role === 'ADMIN').length,
-    HR:          users.filter((u) => u.role === 'HR').length,
-    INTERVIEWER: users.filter((u) => u.role === 'INTERVIEWER').length,
+    ADMIN:       users.filter((u) => {
+      const userRoles = u.roles || (u.role ? [u.role] : []);
+      return userRoles.includes('ADMIN');
+    }).length,
+    HR:          users.filter((u) => {
+      const userRoles = u.roles || (u.role ? [u.role] : []);
+      return userRoles.includes('HR');
+    }).length,
+    INTERVIEWER: users.filter((u) => {
+      const userRoles = u.roles || (u.role ? [u.role] : []);
+      return userRoles.includes('INTERVIEWER');
+    }).length,
   };
 
   const FILTERS = [
@@ -453,9 +464,18 @@ export default function UsersPage() {
                         <span className="text-sm font-medium">
                           {user.firstName} {user.lastName}
                         </span>
-                        <Badge className={`text-[10px] px-1.5 py-0 h-4 border font-medium ${roleBadge(user.role)}`}>
-                          {ROLE_META[user.role]?.label ?? user.role}
-                        </Badge>
+                        {/* Display all roles */}
+                        {user.roles && user.roles.length > 0 ? (
+                          user.roles.map((role) => (
+                            <Badge key={role} className={`text-[10px] px-1.5 py-0 h-4 border font-medium ${roleBadge(role)}`}>
+                              {ROLE_META[role]?.label ?? role}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge className={`text-[10px] px-1.5 py-0 h-4 border font-medium ${roleBadge(user.role)}`}>
+                            {ROLE_META[user.role]?.label ?? user.role}
+                          </Badge>
+                        )}
                         <Badge className={`text-[10px] px-1.5 py-0 h-4 border ${activeBadge(user.active)}`}>
                           {user.active !== false ? 'Active' : 'Inactive'}
                         </Badge>
