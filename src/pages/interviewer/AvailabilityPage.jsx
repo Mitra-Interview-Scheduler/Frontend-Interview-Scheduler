@@ -190,7 +190,7 @@ const AvailabilityPage = () => {
   // ── Calendar interactions ─────────────────────────────────────────────────
 
   /** Clicking an empty slot on the calendar — open dialog to set time. */
-  const handleSelectSlot = ({ start }) => {
+  const handleSelectSlot = ({ start, end }) => {
     const now = new Date();
 
     // Reject past days outright
@@ -225,10 +225,15 @@ const AvailabilityPage = () => {
       }
     }
 
-    const end = new Date(startDate.getTime() + 60 * 60 * 1000);
+    // Use the actual end time from calendar selection if available, otherwise default to 1 hour
+    let endDate = new Date(end);
+    if (isMonthClick || endDate <= startDate) {
+      endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    }
+
     setCalendarSlotDate(startDate);
     setCalendarSlotStart(format(startDate, 'HH:mm'));
-    setCalendarSlotEnd(format(end, 'HH:mm'));
+    setCalendarSlotEnd(format(endDate, 'HH:mm'));
     setCalendarSlotDialogOpen(true);
   };
 
