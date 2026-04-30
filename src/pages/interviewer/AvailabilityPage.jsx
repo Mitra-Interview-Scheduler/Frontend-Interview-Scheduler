@@ -1,13 +1,3 @@
-// src/pages/interviewer/AvailabilityPage.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Interviewer availability calendar.
-//
-// Slot validation rules (also enforced backend-side in AvailabilityService):
-//   • Past days  → always blocked / greyed out
-//   • Same day   → only allowed if start ≥ now + 2 h
-//   • Future days → always allowed
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import {
@@ -119,7 +109,8 @@ const AvailabilityPage = () => {
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting]           = useState(false);
-
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+// ... existing state
   // ── Data loading ──────────────────────────────────────────────────────────
   const loadAvailability = useCallback(async () => {
     try {
@@ -230,64 +221,98 @@ const AvailabilityPage = () => {
   //   });
   // };
 /** Clicking or dragging a slot on the calendar */
+// const handleSelectSlot = ({ start, end }) => {
+//   const now = new Date();
+
+//   // 1. Reject past days
+//   if (isPastDay(start)) {
+//     toast({
+//       title: 'Past date',
+//       description: 'Please select a future date.',
+//       variant: 'destructive',
+//     });
+//     return;
+//   }
+
+//   let startDate = new Date(start);
+//   let endDate = new Date(end);
+
+//   // 2. Handle Month View clicks (which come in as 00:00 to 00:00)
+//   // If the selection is exactly 24 hours or starts at midnight, 
+//   // we default to a standard 9-10 AM slot for that day.
+//   const isMidnight = startDate.getHours() === 0 && startDate.getMinutes() === 0;
+//   const isFullDay = (endDate - startDate) === 86400000;
+
+//   if (isMidnight && (isFullDay || endDate.getHours() === 0)) {
+//     startDate.setHours(9, 0, 0, 0);
+//     endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1hr
+//   }
+
+//   // 3. Same-day buffer validation (now + 2 hours)
+//   if (isSameDay(startDate, now)) {
+//     const earliest = minimumAllowedStart();
+//     if (isBefore(startDate, earliest)) {
+//       startDate = new Date(earliest);
+//       startDate.setMinutes(0, 0, 0);
+//       // Ensure start is at least the next clean hour if it's too early
+//       if (isBefore(startDate, earliest)) {
+//         startDate.setHours(startDate.getHours() + 1);
+//       }
+//       // Re-adjust endDate to maintain the selected duration if it's now invalid
+//       if (isBefore(endDate, addHours(startDate, 1))) {
+//         endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+//       }
+//     }
+//   }
+
+//   // 4. Update the actual UI strings dynamically
+//   const startStr = format(startDate, 'HH:mm');
+//   const endStr = format(endDate, 'HH:mm');
+
+//   setSelectedDate(startDate);
+//   setStartTime(startStr);
+//   setEndTime(endStr); // <--- This now maps exactly to the calendar selection
+
+//   toast({
+//     title: 'Time range selected',
+//     description: `${format(startDate, 'MMM dd')} · ${startStr} – ${endStr}`,
+//   });
+// };
+  
 const handleSelectSlot = ({ start, end }) => {
   const now = new Date();
-
-  // 1. Reject past days
   if (isPastDay(start)) {
-    toast({
-      title: 'Past date',
-      description: 'Please select a future date.',
-      variant: 'destructive',
-    });
+    toast({ title: 'Past date', variant: 'destructive' });
     return;
   }
 
   let startDate = new Date(start);
   let endDate = new Date(end);
 
-  // 2. Handle Month View clicks (which come in as 00:00 to 00:00)
-  // If the selection is exactly 24 hours or starts at midnight, 
-  // we default to a standard 9-10 AM slot for that day.
-  const isMidnight = startDate.getHours() === 0 && startDate.getMinutes() === 0;
-  const isFullDay = (endDate - startDate) === 86400000;
-
-  if (isMidnight && (isFullDay || endDate.getHours() === 0)) {
+  // Month view/Midnight fix
+  if (startDate.getHours() === 0 && startDate.getMinutes() === 0) {
     startDate.setHours(9, 0, 0, 0);
-    endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1hr
+    endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
   }
 
-  // 3. Same-day buffer validation (now + 2 hours)
+  // Same-day buffer
   if (isSameDay(startDate, now)) {
     const earliest = minimumAllowedStart();
     if (isBefore(startDate, earliest)) {
       startDate = new Date(earliest);
       startDate.setMinutes(0, 0, 0);
-      // Ensure start is at least the next clean hour if it's too early
-      if (isBefore(startDate, earliest)) {
-        startDate.setHours(startDate.getHours() + 1);
-      }
-      // Re-adjust endDate to maintain the selected duration if it's now invalid
-      if (isBefore(endDate, addHours(startDate, 1))) {
-        endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-      }
+      if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
+      endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
     }
   }
 
-  // 4. Update the actual UI strings dynamically
-  const startStr = format(startDate, 'HH:mm');
-  const endStr = format(endDate, 'HH:mm');
-
   setSelectedDate(startDate);
-  setStartTime(startStr);
-  setEndTime(endStr); // <--- This now maps exactly to the calendar selection
-
-  toast({
-    title: 'Time range selected',
-    description: `${format(startDate, 'MMM dd')} · ${startStr} – ${endStr}`,
-  });
+  setStartTime(format(startDate, 'HH:mm'));
+  setEndTime(format(endDate, 'HH:mm'));
+  setAddDialogOpen(true); // Open the modal automatically
 };
-  /** Clicking an existing event. */
+
+/** Clicking an existing event. */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
       toast({
@@ -537,49 +562,8 @@ const handleSelectSlot = ({ start, end }) => {
               <span className="text-indigo-600 font-semibold">Available</span> event to edit it
             </p>
           </div>
-          <Button
-            className="gap-2 px-6 py-3 text-base font-semibold rounded-2xl shadow-md hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
-            onClick={() => {
-              // Default to tomorrow 09:00 so the button always opens a valid date
-              const tomorrow = new Date();
-              tomorrow.setDate(tomorrow.getDate() + 1);
-              tomorrow.setHours(9, 0, 0, 0);
-              setSelectedDate(tomorrow);
-              setStartTime('09:00');
-              setEndTime('10:00');
-              setDescription('');
-            }}
-          >
-            <Plus className="w-5 h-5" /> Add Time Slot
-          </Button>
+         
         </motion.div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { label: 'Available Slots', value: stats.availableSlots,  color: 'text-indigo-600',  bg: 'bg-indigo-50',  icon: CalendarIcon },
-            { label: 'Booked Slots',    value: stats.bookedSlots,     color: 'text-emerald-600', bg: 'bg-emerald-50', icon: Clock },
-            { label: 'Total Hours',
-              value: Math.round((stats.availableSlots + stats.bookedSlots) * 1.5),
-              color: 'text-amber-600', bg: 'bg-amber-50', icon: AlertCircle },
-          ].map(({ label, value, color, bg, icon: Icon }, i) => (
-            <motion.div key={label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * (i + 1) }}>
-              <Card className="shadow-lg hover:shadow-xl transition-shadow overflow-hidden">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
-                      <p className={`text-4xl font-bold ${color} mt-1`}>{value}</p>
-                    </div>
-                    <div className={`p-4 ${bg} rounded-xl`}>
-                      <Icon className={`w-7 h-7 ${color}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
 
         {/* Calendar + Sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -597,29 +581,13 @@ const handleSelectSlot = ({ start, end }) => {
                     <CardTitle className="text-2xl">Availability Calendar</CardTitle>
                     <CardDescription className="mt-1">
                       Click an empty slot to add availability · click an <strong>Available</strong> event to edit ·
-                      🔒 = already booked · <span className="text-red-400">red tint</span> = within 2-hour buffer
+                      🔒 = already booked ·
                     </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-5 mt-3 flex-wrap">
-                  {Object.entries(STATUS_COLORS).map(([key, { solid, label }]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded-md shadow-sm"
-                        style={{ background: `linear-gradient(135deg, ${solid}, ${solid}cc)` }} />
-                      <span className="text-sm font-medium text-muted-foreground">{label}</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-md" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }} />
-                    <span className="text-sm font-medium text-muted-foreground">2-hour buffer</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground italic ml-2">
-                    <Pencil className="w-3 h-3" /> Click Available event to edit
                   </div>
                 </div>
               </CardHeader>
 
-              <CardContent className="p-6">
+              <CardContent className="p-1">
                 <AnimatePresence mode="wait">
                   {loading ? (
                     <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -634,7 +602,7 @@ const handleSelectSlot = ({ start, end }) => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container" style={{ height: '700px' }}>
+                      className="availability-calendar-container" style={{ width: '100%', height : '65vh' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
@@ -651,8 +619,8 @@ const handleSelectSlot = ({ start, end }) => {
                         defaultView="week"
                         step={60}
                         timeslots={1}
-                        min={new Date(1970, 0, 1, 7, 0)}
-                        max={new Date(1970, 0, 1, 19, 0)}
+                        min={new Date(1970, 0, 1, 0, 0, 0)}
+                        max={new Date(1970, 0, 1, 23, 59, 59)}
                         scrollToTime={new Date(1970, 0, 1, 8, 0)}
                         popup
                         showMultiDayTimes
@@ -678,151 +646,126 @@ const handleSelectSlot = ({ start, end }) => {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
             className="space-y-6">
 
-            {/* Add slot card */}
-            <Card className="shadow-lg border-t-4 border-t-indigo-500 hover:shadow-xl transition-shadow">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-indigo-500" /> Add Availability Slot
-                </CardTitle>
-                <CardDescription>Click a calendar date then set the time range</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 py-2">
-                  <AnimatePresence>
-                    {selectedDate && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="p-4 bg-gradient-to-r from-indigo-50 to-indigo-100/50 rounded-lg border-2 border-indigo-200">
-                        <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
-                          <CalendarIcon className="w-4 h-4" />
-                          {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
-                        </p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* Add slot card */}
+                  {/* ══ ADD SLOT DIALOG ═══════════════════════════════════════════════ */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-700">
+              <Plus className="w-5 h-5" /> Add Availability Slot
+            </DialogTitle>
+            <DialogDescription>
+              Set your available time range for interviews.
+            </DialogDescription>
+          </DialogHeader>
 
-                  {/* Validation error banner */}
-                  {addError && (
-                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                      <p className="text-xs text-red-700">{addError}</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Description (Optional)</Label>
-                    <Input
-                      placeholder="e.g., Technical Interview, Code Review"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="border-2 focus:border-indigo-400 transition-colors"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Start Time</Label>
-                      <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                        <input
-                          type="number"
-                          min="0"
-                          max="23"
-                          value={startTime.split(':')[0]}
-                          onChange={(e) => {
-                            const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                            const m = startTime.split(':')[1] || '00';
-                            const newTime = `${String(h).padStart(2, '0')}:${m}`;
-                            setStartTime(newTime);
-                            const [sh, sm] = newTime.split(':').map(Number);
-                            const [eh, em] = endTime.split(':').map(Number);
-                            if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
-                              const newEnd = sh * 60 + sm + 60;
-                              if (Math.floor(newEnd / 60) < 19)
-                                setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
-                            }
-                          }}
-                          className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                          placeholder="09"
-                        />
-                        <span className="text-2xl font-bold text-indigo-400">:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="59"
-                          value={startTime.split(':')[1]}
-                          onChange={(e) => {
-                            const h = startTime.split(':')[0] || '09';
-                            const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                            const newTime = `${h}:${String(m).padStart(2, '0')}`;
-                            setStartTime(newTime);
-                            const [sh, sm] = newTime.split(':').map(Number);
-                            const [eh, em] = endTime.split(':').map(Number);
-                            if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
-                              const newEnd = sh * 60 + sm + 60;
-                              if (Math.floor(newEnd / 60) < 19)
-                                setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
-                            }
-                          }}
-                          className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                          placeholder="00"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">End Time</Label>
-                      <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                        <input
-                          type="number"
-                          min="0"
-                          max="23"
-                          value={endTime.split(':')[0]}
-                          onChange={(e) => {
-                            const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                            const m = endTime.split(':')[1] || '00';
-                            const newTime = `${String(h).padStart(2, '0')}:${m}`;
-                            const [sh, sm] = startTime.split(':').map(Number);
-                            const [eh, em] = newTime.split(':').map(Number);
-                            if ((eh * 60 + em) - (sh * 60 + sm) >= 60) setEndTime(newTime);
-                            else toast({ title: 'End time must be at least 1 hour after start', variant: 'destructive' });
-                          }}
-                          className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                          placeholder="10"
-                        />
-                        <span className="text-2xl font-bold text-indigo-400">:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="59"
-                          value={endTime.split(':')[1]}
-                          onChange={(e) => {
-                            const h = endTime.split(':')[0] || '10';
-                            const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                            const newTime = `${h}:${String(m).padStart(2, '0')}`;
-                            const [sh, sm] = startTime.split(':').map(Number);
-                            const [eh, em] = newTime.split(':').map(Number);
-                            if ((eh * 60 + em) - (sh * 60 + sm) >= 60) setEndTime(newTime);
-                            else toast({ title: 'End time must be at least 1 hour after start', variant: 'destructive' });
-                          }}
-                          className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                          placeholder="00"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <div className="flex justify-end gap-2 px-6 pb-6">
-                <Button variant="outline" className="border-2"
-                  onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); setAddError(null); }}>
-                  Clear
-                </Button>
-                <Button onClick={handleAddSlot} disabled={!!addError || !selectedDate}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all">
-                  Add Slot
-                </Button>
+          <div className="space-y-4 py-2">
+            {selectedDate && (
+              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4" />
+                  {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
+                </p>
               </div>
-            </Card>
+            )}
 
+            {addError && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-red-700">{addError}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label className="font-semibold">Description (Optional)</Label>
+              <Input
+                placeholder="e.g., Technical Interview"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="font-semibold">Start Time</Label>
+                <Input 
+                  type="time" 
+                  value={startTime} 
+                  onChange={(e) => setStartTime(e.target.value)} 
+                  className="border-2"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">End Time</Label>
+                <Input 
+                  type="time" 
+                  value={endTime} 
+                  onChange={(e) => setEndTime(e.target.value)} 
+                  className="border-2"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={async () => {
+                await handleAddSlot();
+                setAddDialogOpen(false); // Close on success
+              }} 
+              disabled={!!addError || !selectedDate}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              Create Slot
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              Availability Overview
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-1 ">
+              {/* Available Slots */}
+              <div className="flex flex-col ">
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarIcon className="w-4 h-4 text-indigo-600" />
+                  <p className="text-xs font-medium text-muted-foreground">Available Slots</p>
+                </div>
+                <p className="text-3xl font-bold text-indigo-600 text-center">
+                  {stats.availableSlots}
+                </p>
+              </div>
+
+              {/* Booked Slots */}
+              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
+                <div className="flex items-center gap-2 mb-1 ">
+                  <Clock className="w-4 h-4 text-emerald-600" />
+                  <p className="text-xs font-medium text-muted-foreground">Booked Slots</p>
+                </div>
+                <p className="text-3xl font-bold text-emerald-600 text-center">
+                  {stats.bookedSlots}
+                </p>
+              </div>
+
+              {/* Total Hours */}
+              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
+                <div className="flex items-center gap-2 mb-1 ">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <p className="text-xs font-medium text-muted-foreground">Est. Total Hours</p>
+                </div>
+                <p className="text-3xl font-bold text-amber-600 text-center">
+                  {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
             {/* Upcoming slots */}
             <Card className="shadow-lg">
               <CardHeader className="pb-4">
