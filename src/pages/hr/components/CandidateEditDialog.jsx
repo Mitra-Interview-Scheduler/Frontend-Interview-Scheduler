@@ -154,8 +154,8 @@ function CandidateEditDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleClose}> 
+      <DialogContent >
         <DialogHeader>
           <DialogTitle>Edit Candidate</DialogTitle>
         </DialogHeader>

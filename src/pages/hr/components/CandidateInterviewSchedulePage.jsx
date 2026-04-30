@@ -37,8 +37,6 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    // const hours = String(now.getHours()).padStart(2, '0');
-    // const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -64,15 +62,11 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* CHANGED: 'sm:max-w-[600px]' (increased width) 
-        and added 'min-h-[400px]' for better vertical presence 
-      */}
-      <DialogContent className="sm:max-w-[600px] min-h-[500px] p-0 overflow-hidden border-t-8 border-t-primary">
+    <Dialog open={open} onOpenChange={onOpenChange}>     
+      <DialogContent className="sm:max-w-[600px] min-h-[500px] p-0 overflow-hidden border-t-8 border-t-primary" onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="p-8 flex flex-col h-full">
-          <DialogHeader className="mb-8">
-            <DialogTitle className="flex items-center gap-4 text-3xl font-extrabold tracking-tight">
-              <CalendarClock className="w-10 h-10 text-primary" />
+          <DialogHeader>
+            <DialogTitle >
               Schedule Interview
             </DialogTitle>
             <DialogDescription className="text-base text-muted-foreground pt-2">
@@ -164,18 +158,18 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
         </div>
 
         {/* Action Footer - Larger Buttons */}
-        <DialogFooter className="bg-slate-50 p-8 flex items-center sm:justify-between gap-6 border-t mt-auto">
+        <DialogFooter className="bg-slate-50 p-8 flex items-center  sm:justify-between gap-6 border-t mt-auto">
           <Button 
             variant="ghost" 
             onClick={() => onOpenChange(false)}
-            className="text-base font-medium text-slate-500 hover:text-slate-800 h-12 px-6"
+            className="text-base font-medium text-black  border  shadow-primary/20 transition-all hover:text-slate-800 h-12 px-6  "
           >
             Cancel
           </Button>
           <Button 
             onClick={handleGoToAvailability} 
             disabled={!availabilityDate}
-            className="h-12 px-10 text-base font-bold shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
+            className="h-12 px-10 text-base font-bold shadow-xl  shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
           >
             Find Matching Interviewers
           </Button>

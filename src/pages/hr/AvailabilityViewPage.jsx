@@ -1109,7 +1109,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               ) : (
                 <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="availability-calendar-container hr-calendar"
-                  style={{ height: '720px' }}>
+                  style={{ width: '100%', height : '65vh' }}>
 
                   <Calendar
                     localizer={localizer}
@@ -1126,19 +1126,20 @@ const calendarSlotPropGetter = useCallback((date) => {
                     }}
                     startAccessor="start"
                     endAccessor="end"
-                    scrollToTime={calendarLockStart ? calendarLockStart : new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}                    onSelectEvent={handleEventClick}
+                    scrollToTime={calendarLockStart ? 
+                    calendarLockStart : new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}
+                    onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
                     dayPropGetter={calendarDayPropGetter}
                     slotPropGetter={calendarSlotPropGetter}
-                    // ── Custom event component with panel ✓ icon ──────────────
-                    // components={{ event: CalendarEventComponent }}
+                    
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
                     step={60}
                     timeslots={1}
-                    min={new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}
-                    max={new Date(1970, 0, 1, CALENDAR_MAX_HOUR, 0)}
+                    min={new Date(1970, 0, 1, 0, 0, 0)}
+                    max={new Date(1970, 0, 1, 23, 59, 59)}
                     tooltipAccessor={tooltipAccessor}
                     popup
                     showMultiDayTimes
