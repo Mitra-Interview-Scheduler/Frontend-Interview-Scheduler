@@ -63,10 +63,6 @@ const STATUS_COLORS = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const TIME_SLOTS = Array.from({ length: 12 }, (_, i) =>
-  `${String(i + 7).padStart(2, '0')}:00`
-);
-
 const parseTimeOnDate = (timeStr, referenceDate) => {
   const [h, m] = timeStr.split(':').map(Number);
   const d = new Date(referenceDate);
@@ -109,6 +105,12 @@ const AvailabilityPage = () => {
   const [endTime, setEndTime]             = useState('10:00');
   const [description, setDescription]     = useState('');
   const [addError, setAddError]           = useState(null);
+
+  // Calendar slot picker dialog state
+  const [calendarSlotDialogOpen, setCalendarSlotDialogOpen] = useState(false);
+  const [calendarSlotDate, setCalendarSlotDate] = useState(null);
+  const [calendarSlotStart, setCalendarSlotStart] = useState('09:00');
+  const [calendarSlotEnd, setCalendarSlotEnd] = useState('10:00');
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
@@ -187,8 +189,8 @@ const AvailabilityPage = () => {
 
   // ── Calendar interactions ─────────────────────────────────────────────────
 
-  /** Clicking an empty slot on the calendar — select the date for the Add form. */
-  const handleSelectSlot = ({ start }) => {
+  /** Clicking an empty slot on the calendar — open dialog to set time. */
+  const handleSelectSlot = ({ start, end }) => {
     const now = new Date();
 
     // Reject past days outright
@@ -223,14 +225,28 @@ const AvailabilityPage = () => {
       }
     }
 
-    const end = new Date(startDate.getTime() + 60 * 60 * 1000);
-    setSelectedDate(startDate);
-    setStartTime(format(startDate, 'HH:mm'));
-    setEndTime(format(end, 'HH:mm'));
+    // Use the actual end time from calendar selection if available, otherwise default to 1 hour
+    let endDate = new Date(end);
+    if (isMonthClick || endDate <= startDate) {
+      endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    }
 
+    setCalendarSlotDate(startDate);
+    setCalendarSlotStart(format(startDate, 'HH:mm'));
+    setCalendarSlotEnd(format(endDate, 'HH:mm'));
+    setCalendarSlotDialogOpen(true);
+  };
+
+  /** Confirm time selection from calendar dialog and move to sidebar. */
+  const handleConfirmCalendarSlot = () => {
+    if (!calendarSlotDate) return;
+    setSelectedDate(calendarSlotDate);
+    setStartTime(calendarSlotStart);
+    setEndTime(calendarSlotEnd);
+    setCalendarSlotDialogOpen(false);
     toast({
       title: 'Date selected',
-      description: `${format(startDate, 'MMM dd, yyyy')} · ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
+      description: `${format(calendarSlotDate, 'EEEE, MMMM dd, yyyy')} · ${calendarSlotStart} – ${calendarSlotEnd}`,
     });
   };
 
@@ -625,94 +641,7 @@ const AvailabilityPage = () => {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
             className="space-y-6">
 
-            {/* Add slot card */}
-            <Card className="shadow-lg border-t-4 border-t-indigo-500 hover:shadow-xl transition-shadow">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-indigo-500" /> Add Availability Slot
-                </CardTitle>
-                <CardDescription>Click a calendar date then set the time range</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 py-2">
-                  <AnimatePresence>
-                    {selectedDate && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="p-4 bg-gradient-to-r from-indigo-50 to-indigo-100/50 rounded-lg border-2 border-indigo-200">
-                        <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
-                          <CalendarIcon className="w-4 h-4" />
-                          {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
-                        </p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Validation error banner */}
-                  {addError && (
-                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                      <p className="text-xs text-red-700">{addError}</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Description (Optional)</Label>
-                    <Input
-                      placeholder="e.g., Technical Interview, Code Review"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="border-2 focus:border-indigo-400 transition-colors"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Start</Label>
-                      <Select value={startTime} onValueChange={(v) => {
-                        setStartTime(v);
-                        const [sh, sm] = v.split(':').map(Number);
-                        const [eh, em] = endTime.split(':').map(Number);
-                        if ((eh * 60 + em) - (sh * 60 + sm) < 60) {
-                          const newEnd = sh * 60 + sm + 60;
-                          if (Math.floor(newEnd / 60) < 19)
-                            setEndTime(`${String(Math.floor(newEnd / 60)).padStart(2, '0')}:${String(newEnd % 60).padStart(2, '0')}`);
-                        }
-                      }}>
-                        <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">End</Label>
-                      <Select value={endTime} onValueChange={(v) => {
-                        const [sh, sm] = startTime.split(':').map(Number);
-                        const [eh, em] = v.split(':').map(Number);
-                        if ((eh * 60 + em) - (sh * 60 + sm) >= 60) setEndTime(v);
-                        else toast({ title: 'End time must be at least 1 hour after start', variant: 'destructive' });
-                      }}>
-                        <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <div className="flex justify-end gap-2 px-6 pb-6">
-                <Button variant="outline" className="border-2"
-                  onClick={() => { setSelectedDate(null); setStartTime('09:00'); setEndTime('10:00'); setDescription(''); setAddError(null); }}>
-                  Clear
-                </Button>
-                <Button onClick={handleAddSlot} disabled={!!addError || !selectedDate}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all">
-                  Add Slot
-                </Button>
-              </div>
-            </Card>
+          
 
             {/* Upcoming slots */}
             <Card className="shadow-lg">
@@ -827,23 +756,67 @@ const AvailabilityPage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label className="font-semibold">Start Time</Label>
-                  <Select value={editStart} onValueChange={setEditStart}>
-                    <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={editStart.split(':')[0]}
+                      onChange={(e) => {
+                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
+                        const m = editStart.split(':')[1] || '00';
+                        setEditStart(`${String(h).padStart(2, '0')}:${m}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="09"
+                    />
+                    <span className="text-2xl font-bold text-indigo-400">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={editStart.split(':')[1]}
+                      onChange={(e) => {
+                        const h = editStart.split(':')[0] || '09';
+                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                        setEditStart(`${h}:${String(m).padStart(2, '0')}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="00"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="font-semibold">End Time</Label>
-                  <Select value={editEnd} onValueChange={setEditEnd}>
-                    <SelectTrigger className="border-2"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIME_SLOTS.filter((t) => t > editStart).map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={editEnd.split(':')[0]}
+                      onChange={(e) => {
+                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
+                        const m = editEnd.split(':')[1] || '00';
+                        setEditEnd(`${String(h).padStart(2, '0')}:${m}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="10"
+                    />
+                    <span className="text-2xl font-bold text-indigo-400">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={editEnd.split(':')[1]}
+                      onChange={(e) => {
+                        const h = editEnd.split(':')[0] || '10';
+                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                        setEditEnd(`${h}:${String(m).padStart(2, '0')}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="00"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -900,6 +873,113 @@ const AvailabilityPage = () => {
                 ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting…</>
                 : <><Trash2 className="w-4 h-4" /> Delete Slot</>
               }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══ CALENDAR SLOT PICKER DIALOG ════════════════════════════════════ */}
+      <Dialog open={calendarSlotDialogOpen} onOpenChange={setCalendarSlotDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-700">
+              <CalendarIcon className="w-5 h-5" /> Select Time Slot
+            </DialogTitle>
+            <DialogDescription>
+              Set the start and end time for your availability slot
+            </DialogDescription>
+          </DialogHeader>
+
+          {calendarSlotDate && (
+            <div className="space-y-4 py-2">
+              <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
+                <p className="text-xs text-muted-foreground mb-1">Selected Date</p>
+                <p className="font-semibold text-sm">{format(calendarSlotDate, 'EEEE, MMMM dd, yyyy')}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="font-semibold">Start Time</Label>
+                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={calendarSlotStart.split(':')[0]}
+                      onChange={(e) => {
+                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
+                        const m = calendarSlotStart.split(':')[1] || '00';
+                        setCalendarSlotStart(`${String(h).padStart(2, '0')}:${m}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="09"
+                    />
+                    <span className="text-2xl font-bold text-indigo-400">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={calendarSlotStart.split(':')[1]}
+                      onChange={(e) => {
+                        const h = calendarSlotStart.split(':')[0] || '09';
+                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                        setCalendarSlotStart(`${h}:${String(m).padStart(2, '0')}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="00"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-semibold">End Time</Label>
+                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={calendarSlotEnd.split(':')[0]}
+                      onChange={(e) => {
+                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
+                        const m = calendarSlotEnd.split(':')[1] || '00';
+                        setCalendarSlotEnd(`${String(h).padStart(2, '0')}:${m}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="10"
+                    />
+                    <span className="text-2xl font-bold text-indigo-400">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={calendarSlotEnd.split(':')[1]}
+                      onChange={(e) => {
+                        const h = calendarSlotEnd.split(':')[0] || '10';
+                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                        setCalendarSlotEnd(`${h}:${String(m).padStart(2, '0')}`);
+                      }}
+                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
+                      placeholder="00"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {calendarSlotStart && calendarSlotEnd && calendarSlotEnd > calendarSlotStart && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  <p className="text-sm text-green-800">
+                    <strong>Slot:</strong> {calendarSlotStart} – {calendarSlotEnd}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCalendarSlotDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleConfirmCalendarSlot} disabled={calendarSlotEnd <= calendarSlotStart}
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+              <CheckCircle2 className="w-4 h-4" /> Confirm Time
             </Button>
           </DialogFooter>
         </DialogContent>
