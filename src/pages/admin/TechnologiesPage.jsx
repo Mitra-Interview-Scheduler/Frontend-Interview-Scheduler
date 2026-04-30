@@ -364,7 +364,7 @@ const TechnologiesPage = () => {
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Technology</DialogTitle>
               <DialogDescription>
