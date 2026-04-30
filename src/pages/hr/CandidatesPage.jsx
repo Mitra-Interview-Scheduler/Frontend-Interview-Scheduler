@@ -527,7 +527,7 @@ const CandidatesPage = () => {
 
         {/* ══ ADD DIALOG ═══════════════════════════════════════════════════ */}
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto ">
             <DialogHeader>
               <DialogTitle>Add New Candidate</DialogTitle>
             </DialogHeader>

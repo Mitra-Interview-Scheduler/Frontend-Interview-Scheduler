@@ -65,9 +65,8 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     <Dialog open={open} onOpenChange={onOpenChange}>     
       <DialogContent className="sm:max-w-[600px] min-h-[500px] p-0 overflow-hidden border-t-8 border-t-primary" onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="p-8 flex flex-col h-full">
-          <DialogHeader className="mb-8">
-            <DialogTitle className="flex items-center gap-4 text-3xl font-extrabold tracking-tight">
-              <CalendarClock className="w-10 h-10 text-primary" />
+          <DialogHeader>
+            <DialogTitle >
               Schedule Interview
             </DialogTitle>
             <DialogDescription className="text-base text-muted-foreground pt-2">
