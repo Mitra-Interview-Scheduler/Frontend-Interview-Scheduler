@@ -34,6 +34,7 @@ const roleBadge = (r) => ROLE_META[r]?.badge ?? 'bg-muted text-muted-foreground'
 const activeBadge = (a) => a !== false
   ? 'bg-green-100 text-green-700 border-green-200'
   : 'bg-gray-100 text-gray-400 border-gray-200';
+const USERS_PER_PAGE = 10;
 
 const initials = (u) =>
   `${u.firstName?.[0] ?? u.email[0]}${u.lastName?.[0] ?? ''}`.toUpperCase();
@@ -298,27 +299,46 @@ export default function UsersPage() {
   const [guardTarget, setGuardTarget] = useState(null); // user pending admin-delete guard
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      setUsers(await usersAPI.getAll());
+      const data = await usersAPI.getAll(
+        { page: currentPage - 1, size: USERS_PER_PAGE },
+        { search, role: roleFilter }
+      );
+      if (Array.isArray(data)) {
+        setUsers(data);
+        setTotalUsers(data.length);
+        setTotalPages(1);
+      } else {
+        setUsers(data?.content || []);
+        setTotalUsers(data?.totalElements ?? 0);
+        setTotalPages(data?.totalPages || 1);
+      }
     } catch (err) {
       toast({ title: 'Failed to load users', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, search, roleFilter]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
-  const filtered = users.filter((u) => {
-    const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.toLowerCase();
-    const q    = search.toLowerCase();
-    const userRoles = u.roles || (u.role ? [u.role] : []);
-    return (name.includes(q) || u.email.toLowerCase().includes(q))
-        && (roleFilter === 'ALL' || userRoles.includes(roleFilter));
-  });
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter]);
+
+  const startIndex = (currentPage - 1) * USERS_PER_PAGE;
 
   const handleToggle = async (user) => {
     setActionId(user.id);
@@ -359,21 +379,7 @@ export default function UsersPage() {
     setSelectedUser((prev) => (prev?.id === updatedUser.id ? { ...prev, ...updatedUser } : prev));
   };
 
-  const counts = {
-    ALL:         users.length,
-    ADMIN:       users.filter((u) => {
-      const userRoles = u.roles || (u.role ? [u.role] : []);
-      return userRoles.includes('ADMIN');
-    }).length,
-    HR:          users.filter((u) => {
-      const userRoles = u.roles || (u.role ? [u.role] : []);
-      return userRoles.includes('HR');
-    }).length,
-    INTERVIEWER: users.filter((u) => {
-      const userRoles = u.roles || (u.role ? [u.role] : []);
-      return userRoles.includes('INTERVIEWER');
-    }).length,
-  };
+  const counts = { ALL: totalUsers, ADMIN: null, HR: null, INTERVIEWER: null };
 
   const FILTERS = [
     { label: 'All',         value: 'ALL' },
@@ -391,7 +397,7 @@ export default function UsersPage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">User Management</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {counts.ALL} total · {users.filter((u) => u.active !== false).length} active
+              {totalUsers} total in current filter
             </p>
           </div>
           <div className="flex gap-2">
@@ -417,7 +423,9 @@ export default function UsersPage() {
                     : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
               >
                 {f.label}
-                <span className="ml-1.5 opacity-60 text-xs">{counts[f.value]}</span>
+                {counts[f.value] !== null && (
+                  <span className="ml-1.5 opacity-60 text-xs">{counts[f.value]}</span>
+                )}
               </button>
             ))}
           </div>
@@ -440,11 +448,11 @@ export default function UsersPage() {
               <div className="flex justify-center py-16">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : users.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-16">No users found.</p>
             ) : (
               <div className="divide-y">
-                {filtered.map((user, i) => (
+                {users.map((user, i) => (
                   <motion.div
                     key={user.id}
                     initial={{ opacity: 0 }}
@@ -514,6 +522,35 @@ export default function UsersPage() {
             )}
           </CardContent>
         </Card>
+
+        {!loading && totalUsers > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {startIndex + 1}-{Math.min(startIndex + USERS_PER_PAGE, totalUsers)} of {totalUsers}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <RegisterDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={fetchUsers} />
