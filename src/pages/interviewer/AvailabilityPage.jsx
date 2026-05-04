@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge }    from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -27,6 +28,8 @@ import {
   Pencil, Save, X, CheckCircle2,
 } from 'lucide-react';
 import Layout   from '@/components/layout/Layout';
+import TimePicker from '@/components/TimePicker';
+import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
@@ -85,6 +88,7 @@ const getSlotStartError = (start) => {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const AvailabilityPage = () => {
+  const calendarFormats = useCalendarFormats();
   const [events, setEvents]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
@@ -365,8 +369,8 @@ const handleSelectSlot = ({ start, end }) => {
 
     try {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
-        startDateTime: start.toISOString(),
-        endDateTime:   end.toISOString(),
+        startDateTime: start,
+        endDateTime:   end,
         description:   description || null,
       });
       setEvents((prev) => [
@@ -419,8 +423,8 @@ const handleSelectSlot = ({ start, end }) => {
     setEditSaving(true);
     try {
       const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
-        startDateTime: newStart.toISOString(),
-        endDateTime:   newEnd.toISOString(),
+        startDateTime: newStart,
+        endDateTime:   newEnd,
         description:   editDescription || null,
       });
 
@@ -566,27 +570,12 @@ const handleSelectSlot = ({ start, end }) => {
         </motion.div>
 
         {/* Calendar + Sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="flex flex-col lg:flex-row gap-3 ">
 
           {/* Calendar */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
-            className="lg:col-span-3">
-            <Card className="shadow-xl border-t-4 border-t-indigo-400">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-50 rounded-lg">
-                    <CalendarIcon className="w-6 h-6 text-indigo-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-2xl">Availability Calendar</CardTitle>
-                    <CardDescription className="mt-1">
-                      Click an empty slot to add availability · click an <strong>Available</strong> event to edit ·
-                      🔒 = already booked ·
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-
+            className="flex-1">
+            <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
                 <AnimatePresence mode="wait">
                   {loading ? (
@@ -602,7 +591,7 @@ const handleSelectSlot = ({ start, end }) => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container" style={{ width: '100%', height : '65vh' }}>
+                      className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
@@ -626,14 +615,10 @@ const handleSelectSlot = ({ start, end }) => {
                         showMultiDayTimes
                         tooltipAccessor={(event) => {
                           if (event.status === 'booked')
-                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
-                          return `✏️ Click to edit\n${event.title}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
+                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                          return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                         }}
-                        formats={{
-                          timeGutterFormat: 'HH:mm',
-                          eventTimeRangeFormat: ({ start, end }) =>
-                            `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-                        }}
+                        formats={calendarFormats}
                       />
                     </motion.div>
                   )}
@@ -643,197 +628,231 @@ const handleSelectSlot = ({ start, end }) => {
           </motion.div>
 
           {/* Sidebar */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
-            className="space-y-6">
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }} 
+            animate={{ opacity: 1, x: 0 }} 
+            transition={{ delay: 0.5 }}
+            className="flex-2 min-w-[420px] flex flex-col"
+          >
 
-                  {/* Add slot card */}
-                  {/* ══ ADD SLOT DIALOG ═══════════════════════════════════════════════ */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-indigo-700">
-              <Plus className="w-5 h-5" /> Add Availability Slot
-            </DialogTitle>
-            <DialogDescription>
-              Set your available time range for interviews.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {selectedDate && (
-              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4" />
-                  {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
-                </p>
-              </div>
-            )}
-
-            {addError && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-700">{addError}</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label className="font-semibold">Description (Optional)</Label>
-              <Input
-                placeholder="e.g., Technical Interview"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="font-semibold">Start Time</Label>
-                <Input 
-                  type="time" 
-                  value={startTime} 
-                  onChange={(e) => setStartTime(e.target.value)} 
-                  className="border-2"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="font-semibold">End Time</Label>
-                <Input 
-                  type="time" 
-                  value={endTime} 
-                  onChange={(e) => setEndTime(e.target.value)} 
-                  className="border-2"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={async () => {
-                await handleAddSlot();
-                setAddDialogOpen(false); // Close on success
-              }} 
-              disabled={!!addError || !selectedDate}
-              className="bg-indigo-600 hover:bg-indigo-700"
-            >
-              Create Slot
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              Availability Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-1 ">
-              {/* Available Slots */}
-              <div className="flex flex-col ">
-                <div className="flex items-center gap-2 mb-1">
-                  <CalendarIcon className="w-4 h-4 text-indigo-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Available Slots</p>
-                </div>
-                <p className="text-3xl font-bold text-indigo-600 text-center">
-                  {stats.availableSlots}
-                </p>
-              </div>
-
-              {/* Booked Slots */}
-              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
-                <div className="flex items-center gap-2 mb-1 ">
-                  <Clock className="w-4 h-4 text-emerald-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Booked Slots</p>
-                </div>
-                <p className="text-3xl font-bold text-emerald-600 text-center">
-                  {stats.bookedSlots}
-                </p>
-              </div>
-
-              {/* Total Hours */}
-              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
-                <div className="flex items-center gap-2 mb-1 ">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Est. Total Hours</p>
-                </div>
-                <p className="text-3xl font-bold text-amber-600 text-center">
-                  {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-            {/* Upcoming slots */}
-            <Card className="shadow-lg">
-              <CardHeader className="pb-4">
+               
+            <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
+              <CardHeader className="pb-3 bg-slate-50/50">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
                 </CardTitle>
-                <CardDescription>Click Available to edit · hover for delete</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-2">
-                  {upcomingEvents.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground font-medium">No upcoming slots</p>
-                    </div>
-                  ) : (
-                    upcomingEvents.map((event, index) => {
-                      const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
-                      const isAvailable = event.status === 'available';
-                      return (
-                        <motion.div key={event.id}
-                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.04 }}
-                          className={`group flex items-start justify-between p-3 rounded-lg border-2 transition-all cursor-pointer
-                            ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40' : 'hover:bg-accent/30 cursor-default'}`}
-                          onClick={() => isAvailable && handleEventClick(event)}>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: colors.solid }} />
-                              <span className="text-sm font-semibold truncate">{format(event.start, 'MMM dd, yyyy')}</span>
-                              {isAvailable && (
-                                <Pencil className="w-3 h-3 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </div>
-                            {event.status === 'booked' && event.candidateName && (
-                              <div className="flex items-center gap-1 mb-1">
-                                <User className="w-3 h-3 text-emerald-600" />
-                                <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground font-medium">
-                              {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                            </p>
-                            <Badge className="mt-2 text-xs capitalize" variant="outline"
-                              style={{ borderColor: colors.solid + '40', color: colors.solid, backgroundColor: colors.solid + '10' }}>
-                              {event.status}
-                            </Badge>
-                          </div>
-                          {isAvailable && (
-                            <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => { e.stopPropagation(); handleEventClick(event); }} title="Edit slot">
-                                <Pencil className="w-3.5 h-3.5 text-indigo-500" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => openDeleteDialog(event, e)} title="Delete slot">
-                                <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                              </Button>
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })
-                  )}
+                
+                {/* INTEGRATED AVAILABILITY OVERVIEW */}
+                <div className="grid grid-cols-3 gap-1 mt-4 pt-4 border-t border-slate-200">
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Available</p>
+                    <p className="text-lg font-bold text-indigo-600">{stats.availableSlots}</p>
+                  </div>
+                  <div className="text-center border-x border-slate-200">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Booked</p>
+                    <p className="text-lg font-bold text-emerald-600">{stats.bookedSlots}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
+                    <p className="text-lg font-bold text-amber-600">
+                      {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
+                    </p>
+                  </div>
                 </div>
+              </CardHeader>
+
+              <CardContent className="flex-grow flex flex-col overflow-hidden p-0">
+                <Tabs defaultValue="available" className="flex flex-col h-full">
+                  <TabsList className="w-full rounded-none border-b bg-slate-50 p-0">
+                    <TabsTrigger 
+                      value="available" 
+                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-white"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-sm font-semibold">Available</span>
+                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'available').length}</Badge>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="booked" 
+                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-white"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-sm font-semibold">Booked</span>
+                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'booked').length}</Badge>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Available Slots Tab */}
+                  <TabsContent value="available" className="flex-grow overflow-hidden p-3">
+                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
+                      {upcomingEvents.filter(e => e.status === 'available').length === 0 ? (
+                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
+                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
+                          <p className="text-xs text-muted-foreground font-medium">No available slots</p>
+                        </div>
+                      ) : (
+                        upcomingEvents
+                          .filter(e => e.status === 'available')
+                          .map((event, index) => {
+                            const colors = STATUS_COLORS[event.status];
+                            return (
+                              <motion.div key={event.id}
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.04 }}
+                                className="group relative flex flex-col p-2.5 rounded-xl border-2 border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all cursor-pointer"
+                                onClick={() => handleEventClick(event)}>
+                                
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                                  
+                                </div>
+
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                                </div>
+
+                                {event.description && (
+                                  <p className="text-[10px] text-slate-600 mt-1 truncate">{event.description}</p>
+                                )}
+
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-indigo-100" onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}>
+                                    <Pencil className="w-4 h-4 text-indigo-600" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-red-100" onClick={(e) => openDeleteDialog(event, e)}>
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </Button>
+                                </div>
+                              </motion.div>
+                            );
+                          })
+                      )}
+                    </div>
+                  </TabsContent>
+
+                  {/* Booked Slots Tab */}
+                  <TabsContent value="booked" className="flex-grow overflow-hidden p-3">
+                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
+                      {upcomingEvents.filter(e => e.status === 'booked').length === 0 ? (
+                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
+                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
+                          <p className="text-xs text-muted-foreground font-medium">No booked slots</p>
+                        </div>
+                      ) : (
+                        upcomingEvents
+                          .filter(e => e.status === 'booked')
+                          .map((event, index) => {
+                            const colors = STATUS_COLORS[event.status];
+                            return (
+                              <motion.div key={event.id}
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.04 }}
+                                className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all">
+                                
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                                  <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
+                                    Booked
+                                  </Badge>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                                </div>
+
+                                {event.candidateName && (
+                                  <div className="mt-1.5 flex items-center gap-1 bg-emerald-100 p-1.5 rounded border border-emerald-200">
+                                    <User className="w-3 h-3 text-emerald-700" />
+                                    <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
+                                  </div>
+                                )}
+                              </motion.div>
+                            );
+                          })
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
+
+
+
+
+                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-indigo-700">
+                  <Plus className="w-5 h-5" /> Add Availability Slot
+                </DialogTitle>
+                <DialogDescription>
+                  Set your available time range for interviews.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                {selectedDate && (
+                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4" />
+                      {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
+                    </p>
+                  </div>
+                )}
+
+                {addError && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-red-700">{addError}</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="font-semibold">Description (Optional)</Label>
+                  <Input
+                    placeholder="e.g., Technical Interview"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <TimePicker
+                    value={startTime}
+                    onChange={setStartTime}
+                    label="Start Time"
+                  />
+                  <TimePicker
+                    value={endTime}
+                    onChange={setEndTime}
+                    label="End Time"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+                <Button 
+                  onClick={async () => {
+                    await handleAddSlot();
+                    setAddDialogOpen(false); // Close on success
+                  }} 
+                  disabled={!!addError || !selectedDate}
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Create Slot
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           </motion.div>
+          
         </div>
       </div>
 
@@ -877,70 +896,16 @@ const handleSelectSlot = ({ start, end }) => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="font-semibold">Start Time</Label>
-                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={editStart.split(':')[0]}
-                      onChange={(e) => {
-                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                        const m = editStart.split(':')[1] || '00';
-                        setEditStart(`${String(h).padStart(2, '0')}:${m}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="09"
-                    />
-                    <span className="text-2xl font-bold text-indigo-400">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={editStart.split(':')[1]}
-                      onChange={(e) => {
-                        const h = editStart.split(':')[0] || '09';
-                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                        setEditStart(`${h}:${String(m).padStart(2, '0')}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="00"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-semibold">End Time</Label>
-                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={editEnd.split(':')[0]}
-                      onChange={(e) => {
-                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                        const m = editEnd.split(':')[1] || '00';
-                        setEditEnd(`${String(h).padStart(2, '0')}:${m}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="10"
-                    />
-                    <span className="text-2xl font-bold text-indigo-400">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={editEnd.split(':')[1]}
-                      onChange={(e) => {
-                        const h = editEnd.split(':')[0] || '10';
-                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                        setEditEnd(`${h}:${String(m).padStart(2, '0')}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="00"
-                    />
-                  </div>
-                </div>
+                <TimePicker
+                  value={editStart}
+                  onChange={setEditStart}
+                  label="Start Time"
+                />
+                <TimePicker
+                  value={editEnd}
+                  onChange={setEditEnd}
+                  label="End Time"
+                />
               </div>
 
               {editStart && editEnd && editEnd > editStart && !editError && (
@@ -959,6 +924,17 @@ const handleSelectSlot = ({ start, end }) => {
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                setEditDialogOpen(false);
+                openDeleteDialog(editTarget);
+              }} 
+              disabled={editSaving}
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </Button>
             <Button onClick={handleEditSave} disabled={editSaving || !!editError || editEnd <= editStart}
               className="gap-2 bg-indigo-600 hover:bg-indigo-700">
               {editSaving

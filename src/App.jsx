@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { TimeFormatProvider } from "@/context/TimeFormatContext";
+import { TimeZoneProvider } from "@/context/TimeZoneContext";
 import { PrivateRoute } from "@/components/PrivateRoute";
 
 import Login from "./pages/Login";
@@ -23,6 +25,7 @@ import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
 import ProfilePage from "./pages/interviewer/ProfilePage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,12 +33,14 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
+      <TimeZoneProvider>
+        <TimeFormatProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<Login />} />
             
             {/* Admin Routes */}
             <Route
@@ -195,11 +200,23 @@ const App = () => (
               }
             />
             
+            {/* Settings Route - Available to all authenticated users */}
+            <Route
+              path="/settings"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN', 'HR', 'INTERVIEWER']}>
+                  <SettingsPage />
+                </PrivateRoute>
+              }
+            />
+            
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </TimeFormatProvider>
+      </TimeZoneProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
