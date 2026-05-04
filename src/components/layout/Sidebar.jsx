@@ -1,12 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
   UserCheck, BarChart3, Clock, FileText, 
-  Shield, Briefcase, Bell
+  Shield, Briefcase, Bell, ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const adminLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
@@ -35,6 +37,7 @@ const interviewerLinks = [
 const Sidebar = ({ isOpen }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const [expandedRoles, setExpandedRoles] = useState({});
 
   // Get links grouped by role
   const getRoleGroupedLinks = () => {
@@ -59,6 +62,13 @@ const Sidebar = ({ isOpen }) => {
     return roleLinks;
   };
 
+  const toggleRole = (role) => {
+    setExpandedRoles((prev) => ({
+      ...prev,
+      [role]: !prev[role],
+    }));
+  };
+
   const roleGroupedLinks = getRoleGroupedLinks();
 
   const getRoleColor = (role) => {
@@ -81,56 +91,85 @@ const Sidebar = ({ isOpen }) => {
         isOpen ? "translate-x-0 w-64" : "-translate-x-full w-0"
       )}
     >
-      <nav className="p-4 space-y-6 flex flex-col h-full">
-        <div className="space-y-6">
-          {roleGroupedLinks.map((roleGroup) => (
-            <div key={roleGroup.role} className="space-y-2">
-              {/* Role Header */}
-              <div className={cn("px-4 py-2 font-semibold text-sm uppercase tracking-wider", getRoleColor(roleGroup.role))}>
-                {roleGroup.role}
-              </div>
+      <nav className="p-4 space-y-2 flex flex-col h-full">
+        <div className="space-y-2 flex-1 overflow-y-auto">
+          {roleGroupedLinks.map((roleGroup) => {
+            const isExpanded = expandedRoles[roleGroup.role] !== false; // Default to expanded
 
-              {/* Role Links */}
-              <div className="space-y-1">
-                {roleGroup.links.map((link) => {
-                  const Icon = link.icon;
-                  const isActive = location.pathname === link.path;
+            return (
+              <div key={roleGroup.role} className="space-y-1">
+                {/* Role Header - Clickable */}
+                <button
+                  onClick={() => toggleRole(roleGroup.role)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors",
+                    "hover:bg-sidebar-accent/30"
+                  )}
+                >
+                  <span className={cn("font-semibold text-xs uppercase tracking-wider", getRoleColor(roleGroup.role))}>
+                    {roleGroup.role}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 transition-transform",
+                      getRoleColor(roleGroup.role),
+                      isExpanded ? "rotate-180" : ""
+                    )}
+                  />
+                </button>
 
-                  return (
-                    <Link
-                      key={link.path}
-                      to={link.path}
-                      className={cn(
-                        "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
-                      )}
+                {/* Role Links - Animated */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-1 overflow-hidden"
                     >
-                      <Icon className="w-4 h-4" />
-                      <span className="text-sm">{link.label}</span>
-                    </Link>
-                  );
-                })}
+                      {roleGroup.links.map((link) => {
+                        const Icon = link.icon;
+                        const isActive = location.pathname === link.path;
+
+                        return (
+                          <Link
+                            key={link.path}
+                            to={link.path}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ml-2 text-sm",
+                              isActive
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                            )}
+                          >
+                            <Icon className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{link.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Separator and Settings */}
-        <div className="mt-auto pt-6 border-t border-sidebar-accent/30">
+        {/* Separator and Settings - Stays at bottom */}
+        <div className="pt-4 border-t border-sidebar-accent/30">
           <div className="space-y-1">
             <Link
               to="/settings"
               className={cn(
-                "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
+                "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm",
                 location.pathname === '/settings'
                   ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
               )}
             >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm">Settings</span>
+              <Settings className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">Settings</span>
             </Link>
           </div>
         </div>
