@@ -369,8 +369,8 @@ const handleSelectSlot = ({ start, end }) => {
 
     try {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
-        startDateTime: start.toISOString(),
-        endDateTime:   end.toISOString(),
+        startDateTime: start,
+        endDateTime:   end,
         description:   description || null,
       });
       setEvents((prev) => [
@@ -423,8 +423,8 @@ const handleSelectSlot = ({ start, end }) => {
     setEditSaving(true);
     try {
       const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
-        startDateTime: newStart.toISOString(),
-        endDateTime:   newEnd.toISOString(),
+        startDateTime: newStart,
+        endDateTime:   newEnd,
         description:   editDescription || null,
       });
 

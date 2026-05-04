@@ -22,8 +22,8 @@ export const availabilityAPI = {
   getAvailabilityByDateRange: async (start, end) => {
     const response = await api.get('/availability/range', {
       params: {
-        start: start.toISOString(),
-        end:   end.toISOString(),
+        start: formatLocalDateTime(start),
+        end:   formatLocalDateTime(end),
       },
     });
     return response.data;

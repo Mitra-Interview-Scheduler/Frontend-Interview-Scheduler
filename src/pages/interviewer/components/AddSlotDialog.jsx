@@ -63,8 +63,8 @@ const AddSlotDialog = ({
     setIsSubmitting(true);
     try {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
-        startDateTime: start.toISOString(),
-        endDateTime: end.toISOString(),
+        startDateTime: start,
+        endDateTime: end,
         description: description || null,
       });
 

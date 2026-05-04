@@ -3,10 +3,16 @@ import { useTimeFormat } from '@/context/TimeFormatContext';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Check } from 'lucide-react';
+import { Clock, Check, Globe } from 'lucide-react';
 
 const SettingsPage = () => {
   const { timeFormat, setTimeFormat, is12h, is24h } = useTimeFormat();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const timezoneOffset = new Intl.DateTimeFormat('en-US', {
+    timeZoneName: 'shortOffset',
+  })
+    .formatToParts(new Date())
+    .find((part) => part.type === 'timeZoneName')?.value || 'UTC';
 
   return (
     <Layout>
@@ -72,7 +78,27 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
-    
+        {/* Time Zone Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-sm">Current Time Zone</h2>
+                <Badge variant="outline" className="ml-auto">
+                  Auto-detected
+                </Badge>
+              </div>
+
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="text-sm font-medium">{timezone}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Offset: {timezoneOffset}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
