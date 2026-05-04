@@ -34,8 +34,11 @@ export const hrAvailabilityAPI = {
   /**
    * Get all interview requests created by the current HR user.
    */
-  getHRRequests: async () => {
-    const response = await api.get('/hr/interviews/my-requests');
+  getHRRequests: async (params = null) => {
+    const query = new URLSearchParams();
+    if (params?.size !== undefined) query.append('size', params.size);
+    const queryString = query.toString();
+    const response = await api.get(queryString ? `/hr/interviews/my-requests?${queryString}` : '/hr/interviews/my-requests');
     return response.data;
   },
 
@@ -59,8 +62,11 @@ export const hrAvailabilityAPI = {
   /**
    * Get all panel interviews created by the current HR user.
    */
-  getMyPanels: async () => {
-    const response = await api.get('/hr/panels/my-panels');
+  getMyPanels: async (params = null) => {
+    const query = new URLSearchParams();
+    if (params?.size !== undefined) query.append('size', params.size);
+    const queryString = query.toString();
+    const response = await api.get(queryString ? `/hr/panels/my-panels?${queryString}` : '/hr/panels/my-panels');
     return response.data;
   },
 

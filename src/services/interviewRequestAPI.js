@@ -15,8 +15,11 @@ export const interviewRequestAPI = {
   },
 
   // Get upcoming interviews for interviewer
-  getUpcomingInterviews: async () => {
-    const response = await api.get('/interview-requests/upcoming');
+  getUpcomingInterviews: async (params = null) => {
+    const query = new URLSearchParams();
+    if (params?.size !== undefined) query.append('size', params.size);
+    const queryString = query.toString();
+    const response = await api.get(queryString ? `/interview-requests/upcoming?${queryString}` : '/interview-requests/upcoming');
     return response.data;
   },
 
