@@ -566,27 +566,12 @@ const handleSelectSlot = ({ start, end }) => {
         </motion.div>
 
         {/* Calendar + Sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="flex flex-col lg:flex-row gap-3 ">
 
           {/* Calendar */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
-            className="lg:col-span-3">
-            <Card className="shadow-xl border-t-4 border-t-indigo-400">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-50 rounded-lg">
-                    <CalendarIcon className="w-6 h-6 text-indigo-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-2xl">Availability Calendar</CardTitle>
-                    <CardDescription className="mt-1">
-                      Click an empty slot to add availability · click an <strong>Available</strong> event to edit ·
-                      🔒 = already booked ·
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-
+            className="flex-1">
+            <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
                 <AnimatePresence mode="wait">
                   {loading ? (
@@ -602,7 +587,7 @@ const handleSelectSlot = ({ start, end }) => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container" style={{ width: '100%', height : '65vh' }}>
+                      className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
                       <Calendar
                         localizer={localizer}
                         events={events}
@@ -643,143 +628,47 @@ const handleSelectSlot = ({ start, end }) => {
           </motion.div>
 
           {/* Sidebar */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
-            className="space-y-6">
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }} 
+            animate={{ opacity: 1, x: 0 }} 
+            transition={{ delay: 0.5 }}
+            className="flex-2 min-w-[420px] flex flex-col"
+          >
 
-                  {/* Add slot card */}
-                  {/* ══ ADD SLOT DIALOG ═══════════════════════════════════════════════ */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-indigo-700">
-              <Plus className="w-5 h-5" /> Add Availability Slot
-            </DialogTitle>
-            <DialogDescription>
-              Set your available time range for interviews.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {selectedDate && (
-              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4" />
-                  {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
-                </p>
-              </div>
-            )}
-
-            {addError && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-700">{addError}</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label className="font-semibold">Description (Optional)</Label>
-              <Input
-                placeholder="e.g., Technical Interview"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="font-semibold">Start Time</Label>
-                <Input 
-                  type="time" 
-                  value={startTime} 
-                  onChange={(e) => setStartTime(e.target.value)} 
-                  className="border-2"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="font-semibold">End Time</Label>
-                <Input 
-                  type="time" 
-                  value={endTime} 
-                  onChange={(e) => setEndTime(e.target.value)} 
-                  className="border-2"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={async () => {
-                await handleAddSlot();
-                setAddDialogOpen(false); // Close on success
-              }} 
-              disabled={!!addError || !selectedDate}
-              className="bg-indigo-600 hover:bg-indigo-700"
-            >
-              Create Slot
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              Availability Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-1 ">
-              {/* Available Slots */}
-              <div className="flex flex-col ">
-                <div className="flex items-center gap-2 mb-1">
-                  <CalendarIcon className="w-4 h-4 text-indigo-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Available Slots</p>
-                </div>
-                <p className="text-3xl font-bold text-indigo-600 text-center">
-                  {stats.availableSlots}
-                </p>
-              </div>
-
-              {/* Booked Slots */}
-              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
-                <div className="flex items-center gap-2 mb-1 ">
-                  <Clock className="w-4 h-4 text-emerald-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Booked Slots</p>
-                </div>
-                <p className="text-3xl font-bold text-emerald-600 text-center">
-                  {stats.bookedSlots}
-                </p>
-              </div>
-
-              {/* Total Hours */}
-              <div className="flex flex-col  md: md:pl-8 border-slate-100 ">
-                <div className="flex items-center gap-2 mb-1 ">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
-                  <p className="text-xs font-medium text-muted-foreground">Est. Total Hours</p>
-                </div>
-                <p className="text-3xl font-bold text-amber-600 text-center">
-                  {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-            {/* Upcoming slots */}
-            <Card className="shadow-lg">
-              <CardHeader className="pb-4">
+               
+            <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
+              <CardHeader className="pb-3 bg-slate-50/50">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
                 </CardTitle>
-                <CardDescription>Click Available to edit · hover for delete</CardDescription>
+                
+                {/* INTEGRATED AVAILABILITY OVERVIEW */}
+                <div className="grid grid-cols-3 gap-1 mt-4 pt-4 border-t border-slate-200">
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Available</p>
+                    <p className="text-lg font-bold text-indigo-600">{stats.availableSlots}</p>
+                  </div>
+                  <div className="text-center border-x border-slate-200">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Booked</p>
+                    <p className="text-lg font-bold text-emerald-600">{stats.bookedSlots}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
+                    <p className="text-lg font-bold text-amber-600">
+                      {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
+                    </p>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-2">
+
+              <CardContent className="flex-grow flex flex-col overflow-hidden p-3">
+                <p className="text-[11px] text-muted-foreground mb-3 px-1 italic">Click Available to edit · scroll to view more</p>
+                
+                <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar">
                   {upcomingEvents.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground font-medium">No upcoming slots</p>
+                    <div className="text-center py-10">
+                      <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-xs text-muted-foreground font-medium">No upcoming slots</p>
                     </div>
                   ) : (
                     upcomingEvents.map((event, index) => {
@@ -787,42 +676,38 @@ const handleSelectSlot = ({ start, end }) => {
                       const isAvailable = event.status === 'available';
                       return (
                         <motion.div key={event.id}
-                          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.04 }}
-                          className={`group flex items-start justify-between p-3 rounded-lg border-2 transition-all cursor-pointer
-                            ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40' : 'hover:bg-accent/30 cursor-default'}`}
+                          className={`group relative flex flex-col p-2.5 rounded-xl border-2 transition-all cursor-pointer
+                            ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40 border-slate-100' : 'bg-slate-50 border-transparent cursor-default'}`}
                           onClick={() => isAvailable && handleEventClick(event)}>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: colors.solid }} />
-                              <span className="text-sm font-semibold truncate">{format(event.start, 'MMM dd, yyyy')}</span>
-                              {isAvailable && (
-                                <Pencil className="w-3 h-3 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </div>
-                            {event.status === 'booked' && event.candidateName && (
-                              <div className="flex items-center gap-1 mb-1">
-                                <User className="w-3 h-3 text-emerald-600" />
-                                <p className="text-xs font-medium text-emerald-700">{event.candidateName}</p>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground font-medium">
-                              {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                            </p>
-                            <Badge className="mt-2 text-xs capitalize" variant="outline"
-                              style={{ borderColor: colors.solid + '40', color: colors.solid, backgroundColor: colors.solid + '10' }}>
+                          
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                            <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
                               {event.status}
                             </Badge>
                           </div>
+
+                          <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                          </div>
+
+                          {event.status === 'booked' && event.candidateName && (
+                            <div className="mt-1.5 flex items-center gap-1 bg-emerald-50 p-1 rounded border border-emerald-100">
+                              <User className="w-2.5 h-2.5 text-emerald-600" />
+                              <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
+                            </div>
+                          )}
+
                           {isAvailable && (
-                            <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => { e.stopPropagation(); handleEventClick(event); }} title="Edit slot">
-                                <Pencil className="w-3.5 h-3.5 text-indigo-500" />
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 p-1 rounded-md shadow-sm">
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}>
+                                <Pencil className="w-3 h-3 text-indigo-500" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                onClick={(e) => openDeleteDialog(event, e)} title="Delete slot">
-                                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => openDeleteDialog(event, e)}>
+                                <Trash2 className="w-3 h-3 text-destructive" />
                               </Button>
                             </div>
                           )}
@@ -833,7 +718,86 @@ const handleSelectSlot = ({ start, end }) => {
                 </div>
               </CardContent>
             </Card>
+
+
+
+
+                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-indigo-700">
+                  <Plus className="w-5 h-5" /> Add Availability Slot
+                </DialogTitle>
+                <DialogDescription>
+                  Set your available time range for interviews.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                {selectedDate && (
+                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4" />
+                      {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
+                    </p>
+                  </div>
+                )}
+
+                {addError && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-red-700">{addError}</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="font-semibold">Description (Optional)</Label>
+                  <Input
+                    placeholder="e.g., Technical Interview"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-semibold">Start Time</Label>
+                    <Input 
+                      type="time" 
+                      value={startTime} 
+                      onChange={(e) => setStartTime(e.target.value)} 
+                      className="border-2"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-semibold">End Time</Label>
+                    <Input 
+                      type="time" 
+                      value={endTime} 
+                      onChange={(e) => setEndTime(e.target.value)} 
+                      className="border-2"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+                <Button 
+                  onClick={async () => {
+                    await handleAddSlot();
+                    setAddDialogOpen(false); // Close on success
+                  }} 
+                  disabled={!!addError || !selectedDate}
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Create Slot
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           </motion.div>
+          
         </div>
       </div>
 
