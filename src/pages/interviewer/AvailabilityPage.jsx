@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge }    from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -660,61 +661,124 @@ const handleSelectSlot = ({ start, end }) => {
                 </div>
               </CardHeader>
 
-              <CardContent className="flex-grow flex flex-col overflow-hidden p-3">
-                <p className="text-[11px] text-muted-foreground mb-3 px-1 italic">Click Available to edit · scroll to view more</p>
-                
-                <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-                  {upcomingEvents.length === 0 ? (
-                    <div className="text-center py-10">
-                      <CalendarIcon className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                      <p className="text-xs text-muted-foreground font-medium">No upcoming slots</p>
+              <CardContent className="flex-grow flex flex-col overflow-hidden p-0">
+                <Tabs defaultValue="available" className="flex flex-col h-full">
+                  <TabsList className="w-full rounded-none border-b bg-slate-50 p-0">
+                    <TabsTrigger 
+                      value="available" 
+                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-white"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-sm font-semibold">Available</span>
+                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'available').length}</Badge>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="booked" 
+                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-white"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-sm font-semibold">Booked</span>
+                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'booked').length}</Badge>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Available Slots Tab */}
+                  <TabsContent value="available" className="flex-grow overflow-hidden p-3">
+                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
+                      {upcomingEvents.filter(e => e.status === 'available').length === 0 ? (
+                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
+                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
+                          <p className="text-xs text-muted-foreground font-medium">No available slots</p>
+                        </div>
+                      ) : (
+                        upcomingEvents
+                          .filter(e => e.status === 'available')
+                          .map((event, index) => {
+                            const colors = STATUS_COLORS[event.status];
+                            return (
+                              <motion.div key={event.id}
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.04 }}
+                                className="group relative flex flex-col p-2.5 rounded-xl border-2 border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all cursor-pointer"
+                                onClick={() => handleEventClick(event)}>
+                                
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                                  
+                                </div>
+
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                                </div>
+
+                                {event.description && (
+                                  <p className="text-[10px] text-slate-600 mt-1 truncate">{event.description}</p>
+                                )}
+
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-indigo-100" onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}>
+                                    <Pencil className="w-4 h-4 text-indigo-600" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-red-100" onClick={(e) => openDeleteDialog(event, e)}>
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </Button>
+                                </div>
+                              </motion.div>
+                            );
+                          })
+                      )}
                     </div>
-                  ) : (
-                    upcomingEvents.map((event, index) => {
-                      const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
-                      const isAvailable = event.status === 'available';
-                      return (
-                        <motion.div key={event.id}
-                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.04 }}
-                          className={`group relative flex flex-col p-2.5 rounded-xl border-2 transition-all cursor-pointer
-                            ${isAvailable ? 'hover:border-indigo-300 hover:bg-indigo-50/40 border-slate-100' : 'bg-slate-50 border-transparent cursor-default'}`}
-                          onClick={() => isAvailable && handleEventClick(event)}>
-                          
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
-                            <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
-                              {event.status}
-                            </Badge>
-                          </div>
+                  </TabsContent>
 
-                          <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                          </div>
+                  {/* Booked Slots Tab */}
+                  <TabsContent value="booked" className="flex-grow overflow-hidden p-3">
+                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
+                      {upcomingEvents.filter(e => e.status === 'booked').length === 0 ? (
+                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
+                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
+                          <p className="text-xs text-muted-foreground font-medium">No booked slots</p>
+                        </div>
+                      ) : (
+                        upcomingEvents
+                          .filter(e => e.status === 'booked')
+                          .map((event, index) => {
+                            const colors = STATUS_COLORS[event.status];
+                            return (
+                              <motion.div key={event.id}
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.04 }}
+                                className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all">
+                                
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                                  <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
+                                    Booked
+                                  </Badge>
+                                </div>
 
-                          {event.status === 'booked' && event.candidateName && (
-                            <div className="mt-1.5 flex items-center gap-1 bg-emerald-50 p-1 rounded border border-emerald-100">
-                              <User className="w-2.5 h-2.5 text-emerald-600" />
-                              <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
-                            </div>
-                          )}
+                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                                </div>
 
-                          {isAvailable && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 p-1 rounded-md shadow-sm">
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}>
-                                <Pencil className="w-3 h-3 text-indigo-500" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => openDeleteDialog(event, e)}>
-                                <Trash2 className="w-3 h-3 text-destructive" />
-                              </Button>
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </div>
+                                {event.candidateName && (
+                                  <div className="mt-1.5 flex items-center gap-1 bg-emerald-100 p-1.5 rounded border border-emerald-200">
+                                    <User className="w-3 h-3 text-emerald-700" />
+                                    <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
+                                  </div>
+                                )}
+                              </motion.div>
+                            );
+                          })
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 
@@ -860,6 +924,17 @@ const handleSelectSlot = ({ start, end }) => {
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                setEditDialogOpen(false);
+                openDeleteDialog(editTarget);
+              }} 
+              disabled={editSaving}
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </Button>
             <Button onClick={handleEditSave} disabled={editSaving || !!editError || editEnd <= editStart}
               className="gap-2 bg-indigo-600 hover:bg-indigo-700">
               {editSaving
