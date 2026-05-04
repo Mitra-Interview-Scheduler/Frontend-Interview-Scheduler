@@ -65,7 +65,7 @@ const InterviewerDashboard = () => {
     try {
       const results = await Promise.allSettled([
         availabilityAPI.getAvailabilityStats(),
-        interviewRequestAPI.getUpcomingInterviews(),
+        interviewRequestAPI.getUpcomingInterviews({ size: 10 }),
       ]);
 
       const [statsRes, upcomingRes] = results;
@@ -95,7 +95,7 @@ const InterviewerDashboard = () => {
         upcomingInterviews: upcomingData.length,
         completedThisMonth: 0,
       });
-      setUpcomingInterviews(upcomingData.slice(0, 5));
+      setUpcomingInterviews(upcomingData.slice(0, 10));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast({
@@ -274,7 +274,7 @@ const InterviewerDashboard = () => {
                       )}
                     </motion.div>
                   ))}
-                  {stats.upcomingInterviews > 5 && (
+                  {stats.upcomingInterviews > 10 && (
                     <Button
                       variant="ghost"
                       className="w-full"

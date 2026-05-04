@@ -54,6 +54,7 @@ const STATUS_COLORS = {
     border:'#92400e', solid:'#f59e0b', label:'Blocked',
   },
 };
+const UPCOMING_SLOTS_PER_PAGE = 5;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const parseTimeOnDate = (timeStr, referenceDate) => {
@@ -114,6 +115,8 @@ const AvailabilityPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting]           = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [availablePage, setAvailablePage] = useState(1);
+  const [bookedPage, setBookedPage] = useState(1);
 // ... existing state
   // ── Data loading ──────────────────────────────────────────────────────────
   const loadAvailability = useCallback(async () => {
@@ -548,8 +551,24 @@ const handleSelectSlot = ({ start, end }) => {
   // ── Derived list ──────────────────────────────────────────────────────────
   const upcomingEvents = events
     .filter((e) => isAfter(new Date(e.start), new Date()))
-    .sort((a, b) => new Date(a.start) - new Date(b.start))
-    .slice(0, 8);
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  const availableUpcomingEvents = upcomingEvents.filter((e) => e.status === 'available');
+  const bookedUpcomingEvents = upcomingEvents.filter((e) => e.status === 'booked');
+  const availableTotalPages = Math.max(1, Math.ceil(availableUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
+  const bookedTotalPages = Math.max(1, Math.ceil(bookedUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
+  const availablePageItems = availableUpcomingEvents.slice(
+    (availablePage - 1) * UPCOMING_SLOTS_PER_PAGE,
+    availablePage * UPCOMING_SLOTS_PER_PAGE
+  );
+  const bookedPageItems = bookedUpcomingEvents.slice(
+    (bookedPage - 1) * UPCOMING_SLOTS_PER_PAGE,
+    bookedPage * UPCOMING_SLOTS_PER_PAGE
+  );
+
+  useEffect(() => {
+    if (availablePage > availableTotalPages) setAvailablePage(availableTotalPages);
+    if (bookedPage > bookedTotalPages) setBookedPage(bookedTotalPages);
+  }, [availablePage, bookedPage, availableTotalPages, bookedTotalPages]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -671,7 +690,7 @@ const handleSelectSlot = ({ start, end }) => {
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4" />
                         <span className="text-sm font-semibold">Available</span>
-                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'available').length}</Badge>
+                        <Badge className="text-xs" variant="outline">{availableUpcomingEvents.length}</Badge>
                       </div>
                     </TabsTrigger>
                     <TabsTrigger 
@@ -681,7 +700,7 @@ const handleSelectSlot = ({ start, end }) => {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4" />
                         <span className="text-sm font-semibold">Booked</span>
-                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'booked').length}</Badge>
+                        <Badge className="text-xs" variant="outline">{bookedUpcomingEvents.length}</Badge>
                       </div>
                     </TabsTrigger>
                   </TabsList>
@@ -689,15 +708,13 @@ const handleSelectSlot = ({ start, end }) => {
                   {/* Available Slots Tab */}
                   <TabsContent value="available" className="flex-grow overflow-hidden p-3">
                     <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {upcomingEvents.filter(e => e.status === 'available').length === 0 ? (
+                      {availableUpcomingEvents.length === 0 ? (
                         <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                           <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
                           <p className="text-xs text-muted-foreground font-medium">No available slots</p>
                         </div>
                       ) : (
-                        upcomingEvents
-                          .filter(e => e.status === 'available')
-                          .map((event, index) => {
+                        availablePageItems.map((event, index) => {
                             const colors = STATUS_COLORS[event.status];
                             return (
                               <motion.div key={event.id}
@@ -732,21 +749,46 @@ const handleSelectSlot = ({ start, end }) => {
                             );
                           })
                       )}
+                      {availableUpcomingEvents.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t mt-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            Page {availablePage} of {availableTotalPages}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={availablePage === 1}
+                              onClick={() => setAvailablePage((p) => Math.max(1, p - 1))}
+                            >
+                              Prev
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={availablePage === availableTotalPages}
+                              onClick={() => setAvailablePage((p) => Math.min(availableTotalPages, p + 1))}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
 
                   {/* Booked Slots Tab */}
                   <TabsContent value="booked" className="flex-grow overflow-hidden p-3">
                     <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {upcomingEvents.filter(e => e.status === 'booked').length === 0 ? (
+                      {bookedUpcomingEvents.length === 0 ? (
                         <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                           <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
                           <p className="text-xs text-muted-foreground font-medium">No booked slots</p>
                         </div>
                       ) : (
-                        upcomingEvents
-                          .filter(e => e.status === 'booked')
-                          .map((event, index) => {
+                        bookedPageItems.map((event, index) => {
                             const colors = STATUS_COLORS[event.status];
                             return (
                               <motion.div key={event.id}
@@ -775,6 +817,33 @@ const handleSelectSlot = ({ start, end }) => {
                               </motion.div>
                             );
                           })
+                      )}
+                      {bookedUpcomingEvents.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t mt-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            Page {bookedPage} of {bookedTotalPages}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={bookedPage === 1}
+                              onClick={() => setBookedPage((p) => Math.max(1, p - 1))}
+                            >
+                              Prev
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={bookedPage === bookedTotalPages}
+                              onClick={() => setBookedPage((p) => Math.min(bookedTotalPages, p + 1))}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </TabsContent>
