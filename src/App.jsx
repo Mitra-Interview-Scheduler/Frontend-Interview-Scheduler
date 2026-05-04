@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { TimeFormatProvider } from "@/context/TimeFormatContext";
+import { TimeZoneProvider } from "@/context/TimeZoneContext";
 import { PrivateRoute } from "@/components/PrivateRoute";
 
 import Login from "./pages/Login";
@@ -32,11 +33,12 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TimeFormatProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+      <TimeZoneProvider>
+        <TimeFormatProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
             
@@ -211,9 +213,10 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-      </TimeFormatProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </TimeFormatProvider>
+      </TimeZoneProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

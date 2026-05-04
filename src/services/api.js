@@ -11,7 +11,11 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
-    config.headers['X-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const selectedTimeZone =
+      localStorage.getItem('preferredTimeZone') ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      'UTC';
+    config.headers['X-Timezone'] = selectedTimeZone;
     return config;
   },
   (error) => Promise.reject(error)

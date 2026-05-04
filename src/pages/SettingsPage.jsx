@@ -1,15 +1,27 @@
 import React from 'react';
 import { useTimeFormat } from '@/context/TimeFormatContext';
+import { useTimeZone } from '@/context/TimeZoneContext';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock, Check, Globe } from 'lucide-react';
 
 const SettingsPage = () => {
   const { timeFormat, setTimeFormat, is12h, is24h } = useTimeFormat();
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const {
+    selectedTimeZone,
+    detectedTimeZone,
+    isUsingAutoDetected,
+    availableTimeZones,
+    setSelectedTimeZone,
+    resetToDetectedTimeZone,
+  } = useTimeZone();
+
   const timezoneOffset = new Intl.DateTimeFormat('en-US', {
     timeZoneName: 'shortOffset',
+    timeZone: selectedTimeZone,
   })
     .formatToParts(new Date())
     .find((part) => part.type === 'timeZoneName')?.value || 'UTC';
@@ -84,18 +96,36 @@ const SettingsPage = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-indigo-600" />
-                <h2 className="font-semibold text-sm">Current Time Zone</h2>
+                <h2 className="font-semibold text-sm">Time Zone</h2>
                 <Badge variant="outline" className="ml-auto">
-                  Auto-detected
+                  {isUsingAutoDetected ? 'Auto-detected' : 'Custom'}
                 </Badge>
               </div>
 
-              <div className="rounded-md border bg-muted/40 p-3">
-                <p className="text-sm font-medium">{timezone}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Offset: {timezoneOffset}
-                </p>
+              <Select value={selectedTimeZone} onValueChange={setSelectedTimeZone}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {availableTimeZones.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                <p className="text-sm font-medium">{selectedTimeZone}</p>
+                <p className="text-xs text-muted-foreground">Offset: {timezoneOffset}</p>
+                <p className="text-xs text-muted-foreground">Detected: {detectedTimeZone}</p>
               </div>
+
+              {!isUsingAutoDetected && (
+                <Button variant="outline" onClick={resetToDetectedTimeZone}>
+                  Use Auto-detected Time Zone
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
