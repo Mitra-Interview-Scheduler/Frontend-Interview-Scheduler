@@ -27,6 +27,8 @@ import {
   Pencil, Save, X, CheckCircle2,
 } from 'lucide-react';
 import Layout   from '@/components/layout/Layout';
+import TimePicker from '@/components/TimePicker';
+import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
@@ -85,6 +87,7 @@ const getSlotStartError = (start) => {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const AvailabilityPage = () => {
+  const calendarFormats = useCalendarFormats();
   const [events, setEvents]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
@@ -611,14 +614,10 @@ const handleSelectSlot = ({ start, end }) => {
                         showMultiDayTimes
                         tooltipAccessor={(event) => {
                           if (event.status === 'booked')
-                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
-                          return `✏️ Click to edit\n${event.title}\n${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`;
+                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                          return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                         }}
-                        formats={{
-                          timeGutterFormat: 'HH:mm',
-                          eventTimeRangeFormat: ({ start, end }) =>
-                            `${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-                        }}
+                        formats={calendarFormats}
                       />
                     </motion.div>
                   )}
@@ -759,25 +758,17 @@ const handleSelectSlot = ({ start, end }) => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-semibold">Start Time</Label>
-                    <Input 
-                      type="time" 
-                      value={startTime} 
-                      onChange={(e) => setStartTime(e.target.value)} 
-                      className="border-2"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-semibold">End Time</Label>
-                    <Input 
-                      type="time" 
-                      value={endTime} 
-                      onChange={(e) => setEndTime(e.target.value)} 
-                      className="border-2"
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <TimePicker
+                    value={startTime}
+                    onChange={setStartTime}
+                    label="Start Time"
+                  />
+                  <TimePicker
+                    value={endTime}
+                    onChange={setEndTime}
+                    label="End Time"
+                  />
                 </div>
               </div>
 
@@ -841,70 +832,16 @@ const handleSelectSlot = ({ start, end }) => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="font-semibold">Start Time</Label>
-                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={editStart.split(':')[0]}
-                      onChange={(e) => {
-                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                        const m = editStart.split(':')[1] || '00';
-                        setEditStart(`${String(h).padStart(2, '0')}:${m}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="09"
-                    />
-                    <span className="text-2xl font-bold text-indigo-400">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={editStart.split(':')[1]}
-                      onChange={(e) => {
-                        const h = editStart.split(':')[0] || '09';
-                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                        setEditStart(`${h}:${String(m).padStart(2, '0')}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="00"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-semibold">End Time</Label>
-                  <div className="flex items-center gap-2 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={editEnd.split(':')[0]}
-                      onChange={(e) => {
-                        const h = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
-                        const m = editEnd.split(':')[1] || '00';
-                        setEditEnd(`${String(h).padStart(2, '0')}:${m}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="10"
-                    />
-                    <span className="text-2xl font-bold text-indigo-400">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={editEnd.split(':')[1]}
-                      onChange={(e) => {
-                        const h = editEnd.split(':')[0] || '10';
-                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                        setEditEnd(`${h}:${String(m).padStart(2, '0')}`);
-                      }}
-                      className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
-                      placeholder="00"
-                    />
-                  </div>
-                </div>
+                <TimePicker
+                  value={editStart}
+                  onChange={setEditStart}
+                  label="Start Time"
+                />
+                <TimePicker
+                  value={editEnd}
+                  onChange={setEditEnd}
+                  label="End Time"
+                />
               </div>
 
               {editStart && editEnd && editEnd > editStart && !editError && (

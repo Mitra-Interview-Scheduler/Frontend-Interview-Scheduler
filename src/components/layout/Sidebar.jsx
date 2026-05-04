@@ -81,39 +81,59 @@ const Sidebar = ({ isOpen }) => {
         isOpen ? "translate-x-0 w-64" : "-translate-x-full w-0"
       )}
     >
-      <nav className="p-4 space-y-6">
-        {roleGroupedLinks.map((roleGroup) => (
-          <div key={roleGroup.role} className="space-y-2">
-            {/* Role Header */}
-            <div className={cn("px-4 py-2 font-semibold text-sm uppercase tracking-wider", getRoleColor(roleGroup.role))}>
-              {roleGroup.role}
-            </div>
+      <nav className="p-4 space-y-6 flex flex-col h-full">
+        <div className="space-y-6">
+          {roleGroupedLinks.map((roleGroup) => (
+            <div key={roleGroup.role} className="space-y-2">
+              {/* Role Header */}
+              <div className={cn("px-4 py-2 font-semibold text-sm uppercase tracking-wider", getRoleColor(roleGroup.role))}>
+                {roleGroup.role}
+              </div>
 
-            {/* Role Links */}
-            <div className="space-y-1">
-              {roleGroup.links.map((link) => {
-                const Icon = link.icon;
-                const isActive = location.pathname === link.path;
+              {/* Role Links */}
+              <div className="space-y-1">
+                {roleGroup.links.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = location.pathname === link.path;
 
-                return (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
-                      isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                        : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="text-sm">{link.label}</span>
-                  </Link>
-                );
-              })}
+                  return (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="text-sm">{link.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
+          ))}
+        </div>
+
+        {/* Separator and Settings */}
+        <div className="mt-auto pt-6 border-t border-sidebar-accent/30">
+          <div className="space-y-1">
+            <Link
+              to="/settings"
+              className={cn(
+                "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ml-2",
+                location.pathname === '/settings'
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+              )}
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm">Settings</span>
+            </Link>
           </div>
-        ))}
+        </div>
       </nav>
     </aside>
   );

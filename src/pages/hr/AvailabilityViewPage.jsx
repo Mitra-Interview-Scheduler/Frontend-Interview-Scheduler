@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
+import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
@@ -47,6 +48,7 @@ const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
   const location = useLocation();
+  const calendarFormats = useCalendarFormats();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -1144,9 +1146,8 @@ const calendarSlotPropGetter = useCallback((date) => {
                     popup
                     showMultiDayTimes
                     formats={{
-                      timeGutterFormat: 'HH:mm',
-                      eventTimeRangeFormat: ({ start, end }) =>
-                        `${format(start, 'HH:mm')}–${format(end, 'HH:mm')}`,
+                      timeGutterFormat: calendarFormats.timeGutterFormat,
+                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
                     }}
                   />
                 </motion.div>
