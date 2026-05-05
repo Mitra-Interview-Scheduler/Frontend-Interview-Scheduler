@@ -125,8 +125,8 @@ const HRDashboard = () => {
     try {
       const results = await Promise.allSettled([
         candidateAPI.getAllCandidates(),
-        hrAvailabilityAPI.getHRRequests(),
-        hrAvailabilityAPI.getMyPanels(),
+        hrAvailabilityAPI.getHRRequests({ size: 10 }),
+        hrAvailabilityAPI.getMyPanels({ size: 10 }),
         hrAvailabilityAPI.getAllAvailability(),
       ]);
       const [cRes, rRes, pRes, sRes] = results;
@@ -219,7 +219,7 @@ const HRDashboard = () => {
       ? new Date(item.endDateTime)
       : new Date(new Date(item.startDateTime).getTime() + 60 * 60 * 1000);
     return end > new Date() && item.status === 'ACCEPTED';
-  });
+  }).slice(0, 10);
   const recentRequests   = [...requests]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);

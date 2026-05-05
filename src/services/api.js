@@ -56,8 +56,14 @@ export const authAPI = {
 // You'll need to add GET /api/admin/users and DELETE /api/admin/users/{id}
 // and PATCH /api/admin/users/{id}/status to your Spring Boot AdminController
 export const usersAPI = {
-  getAll: async () => {
-    const response = await api.get('/admin/users');
+  getAll: async (pagination = null, filters = null) => {
+    const params = new URLSearchParams();
+    if (pagination?.page !== undefined) params.append('page', pagination.page);
+    if (pagination?.size !== undefined) params.append('size', pagination.size);
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.role && filters.role !== 'ALL') params.append('role', filters.role);
+    const queryString = params.toString();
+    const response = await api.get(queryString ? `/admin/users?${queryString}` : '/admin/users');
     return response.data; // expects List<UserDto>
   },
   // update: async (id, userData) => {

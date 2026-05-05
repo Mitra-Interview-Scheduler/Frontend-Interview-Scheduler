@@ -54,6 +54,7 @@ const STATUS_COLORS = {
     border:'#92400e', solid:'#f59e0b', label:'Blocked',
   },
 };
+const UPCOMING_SLOTS_PER_PAGE = 5;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const parseTimeOnDate = (timeStr, referenceDate) => {
@@ -70,7 +71,7 @@ const isPastDay = (date) => {
 };
 
 /** Minimum allowed start for a slot: now + 2 hours. */
-const minimumAllowedStart = () => addHours(new Date(), 2);
+const minimumAllowedStart = () => addHours(new Date(), 0.5);
 
 /**
  * Validate a proposed start time.
@@ -81,7 +82,7 @@ const getSlotStartError = (start) => {
   if (isPastDay(start)) return 'Cannot add slots for past dates.';
   if (isSameDay(start, new Date()) && isBefore(start, minimumAllowedStart())) {
     const earliest = format(minimumAllowedStart(), 'HH:mm');
-    return `Same-day slots must start at least 2 hours from now (earliest: ${earliest}).`;
+    return `Same-day slots must start at least 30 Minutes from now (earliest: ${earliest}).`;
   }
   return null;
 };
@@ -95,16 +96,16 @@ const AvailabilityPage = () => {
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
-  const [startTime, setStartTime]         = useState('09:00');
-  const [endTime, setEndTime]             = useState('10:00');
+  const [startTime, setStartTime]         = useState('');
+  const [endTime, setEndTime]             = useState('');
   const [description, setDescription]     = useState('');
   const [addError, setAddError]           = useState(null);
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editStart, setEditStart]         = useState('09:00');
-  const [editEnd, setEditEnd]             = useState('10:00');
+  const [editStart, setEditStart]         = useState('');
+  const [editEnd, setEditEnd]             = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editSaving, setEditSaving]       = useState(false);
   const [editError, setEditError]         = useState(null);
@@ -114,6 +115,8 @@ const AvailabilityPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting]           = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [availablePage, setAvailablePage] = useState(1);
+  const [bookedPage, setBookedPage] = useState(1);
 // ... existing state
   // ── Data loading ──────────────────────────────────────────────────────────
   const loadAvailability = useCallback(async () => {
@@ -176,112 +179,7 @@ const AvailabilityPage = () => {
     setEditError(getSlotStartError(newStart));
   }, [editTarget, editStart]);
 
-  // ── Calendar interactions ─────────────────────────────────────────────────
 
-  /** Clicking an empty slot on the calendar — select the date for the Add form. */
-  // const handleSelectSlot = ({ start }) => {
-  //   const now = new Date();
-
-  //   // Reject past days outright
-  //   if (isPastDay(start)) {
-  //     toast({
-  //       title: 'Past date',
-  //       description: 'Please select a future date.',
-  //       variant: 'destructive',
-  //     });
-  //     return;
-  //   }
-
-  //   // Normalise month-view clicks (they come in at midnight)
-  //   let startDate = new Date(start);
-  //   const isMonthClick = startDate.getHours() === 0 && startDate.getMinutes() === 0;
-  //   if (isMonthClick) startDate.setHours(9, 0, 0, 0);
-
-  //   // For same-day: bump to earliest valid hour (now+2, rounded up to next hour)
-  //   if (isSameDay(startDate, now)) {
-  //     const earliest = minimumAllowedStart();
-  //     if (isBefore(startDate, earliest)) {
-  //       startDate = new Date(earliest);
-  //       startDate.setMinutes(0, 0, 0); // round up to next clean hour
-  //       if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
-  //     }
-  //     // If even now+2h is past 19:00, default to 09:00 tomorrow
-  //     if (startDate.getHours() >= 19) {
-  //       const tomorrow = new Date(now);
-  //       tomorrow.setDate(tomorrow.getDate() + 1);
-  //       tomorrow.setHours(9, 0, 0, 0);
-  //       startDate = tomorrow;
-  //     }
-  //   }
-
-  //   const end = new Date(startDate.getTime() + 60 * 60 * 1000);
-  //   setSelectedDate(startDate);
-  //   setStartTime(format(startDate, 'HH:mm'));
-  //   setEndTime(format(end, 'HH:mm'));
-
-  //   toast({
-  //     title: 'Date selected',
-  //     description: `${format(startDate, 'MMM dd, yyyy')} · ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-  //   });
-  // };
-/** Clicking or dragging a slot on the calendar */
-// const handleSelectSlot = ({ start, end }) => {
-//   const now = new Date();
-
-//   // 1. Reject past days
-//   if (isPastDay(start)) {
-//     toast({
-//       title: 'Past date',
-//       description: 'Please select a future date.',
-//       variant: 'destructive',
-//     });
-//     return;
-//   }
-
-//   let startDate = new Date(start);
-//   let endDate = new Date(end);
-
-//   // 2. Handle Month View clicks (which come in as 00:00 to 00:00)
-//   // If the selection is exactly 24 hours or starts at midnight, 
-//   // we default to a standard 9-10 AM slot for that day.
-//   const isMidnight = startDate.getHours() === 0 && startDate.getMinutes() === 0;
-//   const isFullDay = (endDate - startDate) === 86400000;
-
-//   if (isMidnight && (isFullDay || endDate.getHours() === 0)) {
-//     startDate.setHours(9, 0, 0, 0);
-//     endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1hr
-//   }
-
-//   // 3. Same-day buffer validation (now + 2 hours)
-//   if (isSameDay(startDate, now)) {
-//     const earliest = minimumAllowedStart();
-//     if (isBefore(startDate, earliest)) {
-//       startDate = new Date(earliest);
-//       startDate.setMinutes(0, 0, 0);
-//       // Ensure start is at least the next clean hour if it's too early
-//       if (isBefore(startDate, earliest)) {
-//         startDate.setHours(startDate.getHours() + 1);
-//       }
-//       // Re-adjust endDate to maintain the selected duration if it's now invalid
-//       if (isBefore(endDate, addHours(startDate, 1))) {
-//         endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-//       }
-//     }
-//   }
-
-//   // 4. Update the actual UI strings dynamically
-//   const startStr = format(startDate, 'HH:mm');
-//   const endStr = format(endDate, 'HH:mm');
-
-//   setSelectedDate(startDate);
-//   setStartTime(startStr);
-//   setEndTime(endStr); // <--- This now maps exactly to the calendar selection
-
-//   toast({
-//     title: 'Time range selected',
-//     description: `${format(startDate, 'MMM dd')} · ${startStr} – ${endStr}`,
-//   });
-// };
   
 const handleSelectSlot = ({ start, end }) => {
   const now = new Date();
@@ -313,7 +211,7 @@ const handleSelectSlot = ({ start, end }) => {
   setSelectedDate(startDate);
   setStartTime(format(startDate, 'HH:mm'));
   setEndTime(format(endDate, 'HH:mm'));
-  setAddDialogOpen(true); // Open the modal automatically
+  setAddDialogOpen(true); 
 };
 
 /** Clicking an existing event. */
@@ -349,12 +247,21 @@ const handleSelectSlot = ({ start, end }) => {
 
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
+
+    const now = new Date();
+    const [ch, cm] = [now.getHours(), now.getMinutes()];
+    const currentDate = new Date(
+      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
+    );
+
     const start = new Date(
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0
     );
     const end = new Date(
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0
     );
+
+  
 
     // Client-side validation (mirrors backend)
     const startErr = getSlotStartError(start);
@@ -371,6 +278,7 @@ const handleSelectSlot = ({ start, end }) => {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
         startDateTime: start,
         endDateTime:   end,
+        currentTime: currentDate,
         description:   description || null,
       });
       setEvents((prev) => [
@@ -410,6 +318,13 @@ const handleSelectSlot = ({ start, end }) => {
     const newStart = parseTimeOnDate(editStart, refDate);
     const newEnd   = parseTimeOnDate(editEnd,   refDate);
 
+    
+    const now = new Date();
+    const [ch, cm] = [now.getHours(), now.getMinutes()];
+    const currentDate = new Date(
+      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
+    );
+
     const startErr = getSlotStartError(newStart);
     if (startErr) {
       toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
@@ -425,6 +340,7 @@ const handleSelectSlot = ({ start, end }) => {
       const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
         startDateTime: newStart,
         endDateTime:   newEnd,
+        currentTime:   currentDate,
         description:   editDescription || null,
       });
 
@@ -548,8 +464,24 @@ const handleSelectSlot = ({ start, end }) => {
   // ── Derived list ──────────────────────────────────────────────────────────
   const upcomingEvents = events
     .filter((e) => isAfter(new Date(e.start), new Date()))
-    .sort((a, b) => new Date(a.start) - new Date(b.start))
-    .slice(0, 8);
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  const availableUpcomingEvents = upcomingEvents.filter((e) => e.status === 'available');
+  const bookedUpcomingEvents = upcomingEvents.filter((e) => e.status === 'booked');
+  const availableTotalPages = Math.max(1, Math.ceil(availableUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
+  const bookedTotalPages = Math.max(1, Math.ceil(bookedUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
+  const availablePageItems = availableUpcomingEvents.slice(
+    (availablePage - 1) * UPCOMING_SLOTS_PER_PAGE,
+    availablePage * UPCOMING_SLOTS_PER_PAGE
+  );
+  const bookedPageItems = bookedUpcomingEvents.slice(
+    (bookedPage - 1) * UPCOMING_SLOTS_PER_PAGE,
+    bookedPage * UPCOMING_SLOTS_PER_PAGE
+  );
+
+  useEffect(() => {
+    if (availablePage > availableTotalPages) setAvailablePage(availableTotalPages);
+    if (bookedPage > bookedTotalPages) setBookedPage(bookedTotalPages);
+  }, [availablePage, bookedPage, availableTotalPages, bookedTotalPages]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -671,7 +603,7 @@ const handleSelectSlot = ({ start, end }) => {
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4" />
                         <span className="text-sm font-semibold">Available</span>
-                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'available').length}</Badge>
+                        <Badge className="text-xs" variant="outline">{availableUpcomingEvents.length}</Badge>
                       </div>
                     </TabsTrigger>
                     <TabsTrigger 
@@ -681,7 +613,7 @@ const handleSelectSlot = ({ start, end }) => {
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4" />
                         <span className="text-sm font-semibold">Booked</span>
-                        <Badge className="text-xs" variant="outline">{upcomingEvents.filter(e => e.status === 'booked').length}</Badge>
+                        <Badge className="text-xs" variant="outline">{bookedUpcomingEvents.length}</Badge>
                       </div>
                     </TabsTrigger>
                   </TabsList>
@@ -689,15 +621,13 @@ const handleSelectSlot = ({ start, end }) => {
                   {/* Available Slots Tab */}
                   <TabsContent value="available" className="flex-grow overflow-hidden p-3">
                     <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {upcomingEvents.filter(e => e.status === 'available').length === 0 ? (
+                      {availableUpcomingEvents.length === 0 ? (
                         <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                           <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
                           <p className="text-xs text-muted-foreground font-medium">No available slots</p>
                         </div>
                       ) : (
-                        upcomingEvents
-                          .filter(e => e.status === 'available')
-                          .map((event, index) => {
+                        availablePageItems.map((event, index) => {
                             const colors = STATUS_COLORS[event.status];
                             return (
                               <motion.div key={event.id}
@@ -732,21 +662,46 @@ const handleSelectSlot = ({ start, end }) => {
                             );
                           })
                       )}
+                      {availableUpcomingEvents.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t mt-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            Page {availablePage} of {availableTotalPages}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={availablePage === 1}
+                              onClick={() => setAvailablePage((p) => Math.max(1, p - 1))}
+                            >
+                              Prev
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={availablePage === availableTotalPages}
+                              onClick={() => setAvailablePage((p) => Math.min(availableTotalPages, p + 1))}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
 
                   {/* Booked Slots Tab */}
                   <TabsContent value="booked" className="flex-grow overflow-hidden p-3">
                     <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {upcomingEvents.filter(e => e.status === 'booked').length === 0 ? (
+                      {bookedUpcomingEvents.length === 0 ? (
                         <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                           <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
                           <p className="text-xs text-muted-foreground font-medium">No booked slots</p>
                         </div>
                       ) : (
-                        upcomingEvents
-                          .filter(e => e.status === 'booked')
-                          .map((event, index) => {
+                        bookedPageItems.map((event, index) => {
                             const colors = STATUS_COLORS[event.status];
                             return (
                               <motion.div key={event.id}
@@ -775,6 +730,33 @@ const handleSelectSlot = ({ start, end }) => {
                               </motion.div>
                             );
                           })
+                      )}
+                      {bookedUpcomingEvents.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t mt-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            Page {bookedPage} of {bookedTotalPages}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={bookedPage === 1}
+                              onClick={() => setBookedPage((p) => Math.max(1, p - 1))}
+                            >
+                              Prev
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              disabled={bookedPage === bookedTotalPages}
+                              onClick={() => setBookedPage((p) => Math.min(bookedTotalPages, p + 1))}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </TabsContent>

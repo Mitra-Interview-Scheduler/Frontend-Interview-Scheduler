@@ -47,6 +47,7 @@ const EMPTY_FORM = {
   resumeUrl: '', jdUrl: '', jobReferenceCode: '', location: '',
   notes: '',
 };
+const CANDIDATES_PER_PAGE = 10;
 
 // ── Status badge colours ──────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -71,6 +72,9 @@ const CandidatesPage = () => {
   const [filterStatus,  setFilterStatus] = useState('ALL');
   const [loading,       setLoading]      = useState(true);
   const [isMutating,    setIsMutating]   = useState(false);
+  const [currentPage, setCurrentPage]    = useState(1);
+  const [totalCandidatesCount, setTotalCandidatesCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // ── Add dialog state ────────────────────────────────────────────────────────
   const [isAddOpen,    setIsAddOpen]    = useState(false);
@@ -89,16 +93,28 @@ const CandidatesPage = () => {
   useEffect(() => {
     const id = setTimeout(applyFilters, 300);
     return () => clearTimeout(id);
+  }, [filterDepartment, filterStatus, searchTerm, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
   }, [filterDepartment, filterStatus, searchTerm]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const loadInitialData = async () => {
     try {
       setLoading(true);
       const [cands, depts] = await Promise.all([
-        candidateAPI.getAllCandidates(),
+        candidateAPI.getAllCandidates({}, { page: 0, size: CANDIDATES_PER_PAGE }),
         departmentAPI.getAllDepartments(),
       ]);
-      setCandidates(cands || []);
+      setCandidates(cands?.content || []);
+      setTotalCandidatesCount(cands?.totalElements ?? (cands?.content?.length || 0));
+      setTotalPages(cands?.totalPages || 1);
       setDepartments(depts || []);
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to load candidates', variant: 'destructive' });
@@ -114,8 +130,13 @@ const CandidatesPage = () => {
       if (filterDepartment !== 'ALL') filters.departmentId = parseInt(filterDepartment);
       if (filterStatus !== 'ALL')    filters.status = filterStatus;
       if (searchTerm.trim())          filters.search = searchTerm.trim();
-      const data = await candidateAPI.getAllCandidates(filters);
-      setCandidates(data || []);
+      const data = await candidateAPI.getAllCandidates(filters, {
+        page: currentPage - 1,
+        size: CANDIDATES_PER_PAGE,
+      });
+      setCandidates(data?.content || []);
+      setTotalCandidatesCount(data?.totalElements ?? (data?.content?.length || 0));
+      setTotalPages(data?.totalPages || 1);
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to filter candidates', variant: 'destructive' });
     } finally {
@@ -360,6 +381,8 @@ const CandidatesPage = () => {
     );
   }
 
+  const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
@@ -520,6 +543,35 @@ const CandidatesPage = () => {
                     </Card>
                   </motion.div>
                 ))}
+              </div>
+            )}
+
+            {!loading && totalCandidatesCount > 0 && totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between gap-2 border-t pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Showing {startIndex + 1}-{Math.min(startIndex + CANDIDATES_PER_PAGE, totalCandidatesCount)} of {totalCandidatesCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

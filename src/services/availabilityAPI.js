@@ -42,6 +42,7 @@ export const availabilityAPI = {
     const response = await api.post('/availability', {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
+      currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description || null,
     });
     return response.data;
@@ -53,6 +54,7 @@ export const availabilityAPI = {
       slots: slots.map((slot) => ({
         startDateTime: formatLocalDateTime(slot.startDateTime),
         endDateTime:   formatLocalDateTime(slot.endDateTime),
+        currentTime:   formatLocalDateTime(slot.currentTime),
         description:   slot.description || null,
       })),
     });
@@ -67,6 +69,7 @@ export const availabilityAPI = {
     const response = await api.put(`/availability/${slotId}`, {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
+      currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description ?? null,
     });
     return response.data;
