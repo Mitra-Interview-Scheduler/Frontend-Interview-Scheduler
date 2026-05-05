@@ -71,7 +71,7 @@ const isPastDay = (date) => {
 };
 
 /** Minimum allowed start for a slot: now + 2 hours. */
-const minimumAllowedStart = () => addHours(new Date(), 2);
+const minimumAllowedStart = () => addHours(new Date(), 0.5);
 
 /**
  * Validate a proposed start time.
@@ -82,7 +82,7 @@ const getSlotStartError = (start) => {
   if (isPastDay(start)) return 'Cannot add slots for past dates.';
   if (isSameDay(start, new Date()) && isBefore(start, minimumAllowedStart())) {
     const earliest = format(minimumAllowedStart(), 'HH:mm');
-    return `Same-day slots must start at least 2 hours from now (earliest: ${earliest}).`;
+    return `Same-day slots must start at least 30 Minutes from now (earliest: ${earliest}).`;
   }
   return null;
 };
@@ -96,16 +96,16 @@ const AvailabilityPage = () => {
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
-  const [startTime, setStartTime]         = useState('09:00');
-  const [endTime, setEndTime]             = useState('10:00');
+  const [startTime, setStartTime]         = useState('');
+  const [endTime, setEndTime]             = useState('');
   const [description, setDescription]     = useState('');
   const [addError, setAddError]           = useState(null);
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editStart, setEditStart]         = useState('09:00');
-  const [editEnd, setEditEnd]             = useState('10:00');
+  const [editStart, setEditStart]         = useState('');
+  const [editEnd, setEditEnd]             = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editSaving, setEditSaving]       = useState(false);
   const [editError, setEditError]         = useState(null);
@@ -179,112 +179,7 @@ const AvailabilityPage = () => {
     setEditError(getSlotStartError(newStart));
   }, [editTarget, editStart]);
 
-  // ── Calendar interactions ─────────────────────────────────────────────────
 
-  /** Clicking an empty slot on the calendar — select the date for the Add form. */
-  // const handleSelectSlot = ({ start }) => {
-  //   const now = new Date();
-
-  //   // Reject past days outright
-  //   if (isPastDay(start)) {
-  //     toast({
-  //       title: 'Past date',
-  //       description: 'Please select a future date.',
-  //       variant: 'destructive',
-  //     });
-  //     return;
-  //   }
-
-  //   // Normalise month-view clicks (they come in at midnight)
-  //   let startDate = new Date(start);
-  //   const isMonthClick = startDate.getHours() === 0 && startDate.getMinutes() === 0;
-  //   if (isMonthClick) startDate.setHours(9, 0, 0, 0);
-
-  //   // For same-day: bump to earliest valid hour (now+2, rounded up to next hour)
-  //   if (isSameDay(startDate, now)) {
-  //     const earliest = minimumAllowedStart();
-  //     if (isBefore(startDate, earliest)) {
-  //       startDate = new Date(earliest);
-  //       startDate.setMinutes(0, 0, 0); // round up to next clean hour
-  //       if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
-  //     }
-  //     // If even now+2h is past 19:00, default to 09:00 tomorrow
-  //     if (startDate.getHours() >= 19) {
-  //       const tomorrow = new Date(now);
-  //       tomorrow.setDate(tomorrow.getDate() + 1);
-  //       tomorrow.setHours(9, 0, 0, 0);
-  //       startDate = tomorrow;
-  //     }
-  //   }
-
-  //   const end = new Date(startDate.getTime() + 60 * 60 * 1000);
-  //   setSelectedDate(startDate);
-  //   setStartTime(format(startDate, 'HH:mm'));
-  //   setEndTime(format(end, 'HH:mm'));
-
-  //   toast({
-  //     title: 'Date selected',
-  //     description: `${format(startDate, 'MMM dd, yyyy')} · ${format(startDate, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-  //   });
-  // };
-/** Clicking or dragging a slot on the calendar */
-// const handleSelectSlot = ({ start, end }) => {
-//   const now = new Date();
-
-//   // 1. Reject past days
-//   if (isPastDay(start)) {
-//     toast({
-//       title: 'Past date',
-//       description: 'Please select a future date.',
-//       variant: 'destructive',
-//     });
-//     return;
-//   }
-
-//   let startDate = new Date(start);
-//   let endDate = new Date(end);
-
-//   // 2. Handle Month View clicks (which come in as 00:00 to 00:00)
-//   // If the selection is exactly 24 hours or starts at midnight, 
-//   // we default to a standard 9-10 AM slot for that day.
-//   const isMidnight = startDate.getHours() === 0 && startDate.getMinutes() === 0;
-//   const isFullDay = (endDate - startDate) === 86400000;
-
-//   if (isMidnight && (isFullDay || endDate.getHours() === 0)) {
-//     startDate.setHours(9, 0, 0, 0);
-//     endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1hr
-//   }
-
-//   // 3. Same-day buffer validation (now + 2 hours)
-//   if (isSameDay(startDate, now)) {
-//     const earliest = minimumAllowedStart();
-//     if (isBefore(startDate, earliest)) {
-//       startDate = new Date(earliest);
-//       startDate.setMinutes(0, 0, 0);
-//       // Ensure start is at least the next clean hour if it's too early
-//       if (isBefore(startDate, earliest)) {
-//         startDate.setHours(startDate.getHours() + 1);
-//       }
-//       // Re-adjust endDate to maintain the selected duration if it's now invalid
-//       if (isBefore(endDate, addHours(startDate, 1))) {
-//         endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-//       }
-//     }
-//   }
-
-//   // 4. Update the actual UI strings dynamically
-//   const startStr = format(startDate, 'HH:mm');
-//   const endStr = format(endDate, 'HH:mm');
-
-//   setSelectedDate(startDate);
-//   setStartTime(startStr);
-//   setEndTime(endStr); // <--- This now maps exactly to the calendar selection
-
-//   toast({
-//     title: 'Time range selected',
-//     description: `${format(startDate, 'MMM dd')} · ${startStr} – ${endStr}`,
-//   });
-// };
   
 const handleSelectSlot = ({ start, end }) => {
   const now = new Date();
@@ -316,7 +211,7 @@ const handleSelectSlot = ({ start, end }) => {
   setSelectedDate(startDate);
   setStartTime(format(startDate, 'HH:mm'));
   setEndTime(format(endDate, 'HH:mm'));
-  setAddDialogOpen(true); // Open the modal automatically
+  setAddDialogOpen(true); 
 };
 
 /** Clicking an existing event. */
@@ -352,12 +247,21 @@ const handleSelectSlot = ({ start, end }) => {
 
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
+
+    const now = new Date();
+    const [ch, cm] = [now.getHours(), now.getMinutes()];
+    const currentDate = new Date(
+      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
+    );
+
     const start = new Date(
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0
     );
     const end = new Date(
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0
     );
+
+  
 
     // Client-side validation (mirrors backend)
     const startErr = getSlotStartError(start);
@@ -374,6 +278,7 @@ const handleSelectSlot = ({ start, end }) => {
       const newSlot = await availabilityAPI.createAvailabilitySlot({
         startDateTime: start,
         endDateTime:   end,
+        currentTime: currentDate,
         description:   description || null,
       });
       setEvents((prev) => [
@@ -413,6 +318,13 @@ const handleSelectSlot = ({ start, end }) => {
     const newStart = parseTimeOnDate(editStart, refDate);
     const newEnd   = parseTimeOnDate(editEnd,   refDate);
 
+    
+    const now = new Date();
+    const [ch, cm] = [now.getHours(), now.getMinutes()];
+    const currentDate = new Date(
+      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
+    );
+
     const startErr = getSlotStartError(newStart);
     if (startErr) {
       toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
@@ -428,6 +340,7 @@ const handleSelectSlot = ({ start, end }) => {
       const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
         startDateTime: newStart,
         endDateTime:   newEnd,
+        currentTime:   currentDate,
         description:   editDescription || null,
       });
 
