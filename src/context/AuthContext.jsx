@@ -32,34 +32,45 @@ export const AuthProvider = ({ children }) => {
   };
 
   const syncUser = (userData) => {
-    const nextUser = {
-      firstName: userData.firstName || '',
-      lastName: userData.lastName || '',
-      
-    };
+     const nextUser = {
+    id: userData.id,
+    firstName: userData.firstName || '',
+    lastName: userData.lastName || '',
+  };
 
     localStorage.setItem('user', JSON.stringify(nextUser));
-    setUser(nextUser);
-    return nextUser;
+    setUser({
+    ...userData,
+    settings: userData.settings || {
+      timezone: getAutoDetectedTimeZone(),
+      preferredDateFormat: 'yyyy-MM-dd',
+      preferredTimeFormat: 'HH:mm',
+    },
+  });
+
+  return nextUser;
+
   };
 
   useEffect(() => {
     // Check if user is logged in
-    const initAuth = async () => {
-      const storedUser = localStorage.getItem('user');
-      const token = localStorage.getItem('token');
-      
-      if (storedUser && token) {
-        try {
-          await authAPI.verify();
-          setUser(JSON.parse(storedUser));
-        } catch (error) {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
-        }
-      }
-      setLoading(false);
-    };
+  const initAuth = async () => {
+  const token = localStorage.getItem('token');
+
+  if (token) {
+    try {
+      const response = await authAPI.verify(); // get fresh user data
+
+      syncUser(response); // rehydrate full user in memory
+    } catch (error) {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
+    }
+  }
+
+  setLoading(false);
+};
 
     initAuth();
   }, []);

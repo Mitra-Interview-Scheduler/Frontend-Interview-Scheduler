@@ -90,7 +90,7 @@ export const usersAPI = {
 
 export const userSettingsAPI = {
   updateSettings: async (timezone, preferredDateFormat, preferredTimeFormat) => {
-    const response = await api.put('/profile/settings', {
+    const response = await api.patch('/profile/settings', {
       timezone,
       preferredDateFormat,
       preferredTimeFormat,
