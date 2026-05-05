@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { useAuth } from './AuthContext';
 
 const TIMEZONE_STORAGE_KEY = 'preferredTimeZone';
 const FALLBACK_TIMEZONES = [
@@ -42,12 +43,28 @@ export const useTimeZone = () => {
 };
 
 export const TimeZoneProvider = ({ children }) => {
+  const { user } = useAuth();
   const detectedTimeZone = getDetectedTimeZone();
-  const savedTimeZone = localStorage.getItem(TIMEZONE_STORAGE_KEY);
+  
+  // Initialize from user settings or localStorage
+  const getInitialTimeZone = () => {
+    if (user?.settings?.timezone) {
+      return user.settings.timezone;
+    }
+    return localStorage.getItem(TIMEZONE_STORAGE_KEY) || detectedTimeZone;
+  };
 
   const [selectedTimeZone, setSelectedTimeZoneState] = useState(
-    savedTimeZone || detectedTimeZone
+    getInitialTimeZone()
   );
+
+  // Sync with user settings when user logs in
+  useEffect(() => {
+    if (user?.settings?.timezone) {
+      setSelectedTimeZoneState(user.settings.timezone);
+      localStorage.setItem(TIMEZONE_STORAGE_KEY, user.settings.timezone);
+    }
+  }, [user?.settings?.timezone]);
 
   const setSelectedTimeZone = (tz) => {
     setSelectedTimeZoneState(tz);
