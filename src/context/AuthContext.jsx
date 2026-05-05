@@ -27,15 +27,14 @@ export const AuthProvider = ({ children }) => {
     return 'INTERVIEWER'; // default fallback
   };
 
-  const getAutoDetectedTimeZone = () => {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  };
-
   const syncUser = (userData) => {
     const nextUser = {
-      firstName: userData.firstName || '',
-      lastName: userData.lastName || '',
-      
+      ...userData,
+      profilePicture: userData.profilePicture || userData.profilePictureUrl || null,
+      profilePictureUrl: userData.profilePictureUrl || userData.profilePicture || null,
+      // Handle both old 'role' and new 'roles' array from backend
+      role: userData.role || getPrimaryRole(userData.roles),
+      roles: Array.isArray(userData.roles) ? userData.roles : (userData.role ? [userData.role] : []),
     };
 
     localStorage.setItem('user', JSON.stringify(nextUser));
@@ -68,7 +67,6 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.login(email, password);
       
-      const autoDetectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const userData = {
         id: response.id,
         email: response.email,
@@ -78,18 +76,9 @@ export const AuthProvider = ({ children }) => {
         roles: response.roles,
         profilePicture: response.profilePictureUrl || response.profilePicture || null,
         profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
-        settings: response.settings || {
-          timezone: autoDetectedTz,
-          preferredDateFormat: 'yyyy-MM-dd',
-          preferredTimeFormat: 'HH:mm',
-        },
       };
       
       localStorage.setItem('token', response.token);
-      // Store timezone for API interceptor
-      if (userData.settings?.timezone) {
-        localStorage.setItem('preferredTimeZone', userData.settings.timezone);
-      }
       syncUser(userData);
       
       return userData;
@@ -107,7 +96,6 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.googleLogin(credentialResponse.credential);
 
-      const autoDetectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const userData = {
         id: response.id,
         email: response.email,
@@ -117,18 +105,9 @@ export const AuthProvider = ({ children }) => {
         roles: response.roles,
         profilePicture: response.profilePictureUrl || response.profilePicture || null,
         profilePictureUrl: response.profilePictureUrl || response.profilePicture || null,
-        settings: response.settings || {
-          timezone: autoDetectedTz,
-          preferredDateFormat: 'yyyy-MM-dd',
-          preferredTimeFormat: 'HH:mm',
-        },
       };
 
       localStorage.setItem('token', response.token);
-      // Store timezone for API interceptor
-      if (userData.settings?.timezone) {
-        localStorage.setItem('preferredTimeZone', userData.settings.timezone);
-      }
       syncUser(userData);
 
       return userData;

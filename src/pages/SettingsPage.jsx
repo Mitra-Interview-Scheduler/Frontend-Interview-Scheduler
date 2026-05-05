@@ -1,18 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useTimeZone } from '@/context/TimeZoneContext';
-import { useAuth } from '@/context/AuthContext';
-import { userSettingsAPI } from '@/services/api';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Check, Globe, Calendar } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Clock, Check, Globe } from 'lucide-react';
 
 const SettingsPage = () => {
-  const { timeFormat, setTimeFormat, dateFormat, setDateFormat, is12h, is24h } = useTimeFormat();
+  const { timeFormat, setTimeFormat, is12h, is24h } = useTimeFormat();
   const {
     selectedTimeZone,
     detectedTimeZone,
@@ -21,62 +18,6 @@ const SettingsPage = () => {
     setSelectedTimeZone,
     resetToDetectedTimeZone,
   } = useTimeZone();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-
-  const handleTimeFormatChange = (format) => {
-    setTimeFormat(format);
-    setHasChanges(true);
-  };
-
-  const handleDateFormatChange = (format) => {
-    setDateFormat(format);
-    setHasChanges(true);
-  };
-
-  const handleTimeZoneChange = (tz) => {
-    setSelectedTimeZone(tz);
-    setHasChanges(true);
-  };
-
-  const saveSettings = useCallback(async () => {
-    try {
-      setIsSaving(true);
-      
-      // Convert time format to backend format
-      const preferredTimeFormat = timeFormat === '24h' ? 'HH:mm' : 'hh:mm a';
-      
-      await userSettingsAPI.updateSettings(
-        selectedTimeZone,
-        dateFormat,
-        preferredTimeFormat
-      );
-
-      // Update localStorage and user in auth context
-      localStorage.setItem('preferredTimeZone', selectedTimeZone);
-      localStorage.setItem('timeFormat', timeFormat);
-      localStorage.setItem('dateFormat', dateFormat);
-
-      setHasChanges(false);
-      toast({
-        title: 'Settings Saved',
-        description: 'Your preferences have been updated successfully.',
-        variant: 'default',
-      });
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to save settings',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [selectedTimeZone, dateFormat, timeFormat, toast]);
 
   const timezoneOffset = new Intl.DateTimeFormat('en-US', {
     timeZoneName: 'shortOffset',
@@ -84,13 +25,6 @@ const SettingsPage = () => {
   })
     .formatToParts(new Date())
     .find((part) => part.type === 'timeZoneName')?.value || 'UTC';
-
-  const dateFormats = [
-    { value: 'yyyy-MM-dd', label: 'YYYY-MM-DD', example: '2024-05-15' },
-    { value: 'dd-MM-yyyy', label: 'DD-MM-YYYY', example: '15-05-2024' },
-    { value: 'MM/dd/yyyy', label: 'MM/DD/YYYY', example: '05/15/2024' },
-    { value: 'dd/MM/yyyy', label: 'DD/MM/YYYY', example: '15/05/2024' },
-  ];
 
   return (
     <Layout>
@@ -118,7 +52,7 @@ const SettingsPage = () => {
               <div className="grid grid-cols-2 gap-2">
                 {/* 24-Hour Option */}
                 <button
-                  onClick={() => handleTimeFormatChange('24h')}
+                  onClick={() => setTimeFormat('24h')}
                   className={`p-2.5 rounded border-2 transition-all text-sm ${
                     is24h
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
@@ -136,7 +70,7 @@ const SettingsPage = () => {
 
                 {/* 12-Hour Option */}
                 <button
-                  onClick={() => handleTimeFormatChange('12h')}
+                  onClick={() => setTimeFormat('12h')}
                   className={`p-2.5 rounded border-2 transition-all text-sm ${
                     is12h
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
@@ -156,45 +90,6 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
-        {/* Date Format Card */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-indigo-600" />
-                <h2 className="font-semibold text-sm">Date Format</h2>
-                <Badge variant="outline" className="ml-auto">
-                  {dateFormats.find((f) => f.value === dateFormat)?.label || 'Default'}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {dateFormats.map((fmt) => (
-                  <button
-                    key={fmt.value}
-                    onClick={() => handleDateFormatChange(fmt.value)}
-                    className={`p-2.5 rounded border-2 transition-all text-sm ${
-                      dateFormat === fmt.value
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="text-left">
-                        <p className="font-semibold text-xs">{fmt.label}</p>
-                        <p className="text-xs text-muted-foreground">{fmt.example}</p>
-                      </div>
-                      {dateFormat === fmt.value && (
-                        <Check className="w-3 h-3 text-indigo-600 flex-shrink-0 mt-0.5" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Time Zone Card */}
         <Card>
           <CardContent className="p-4">
@@ -207,7 +102,7 @@ const SettingsPage = () => {
                 </Badge>
               </div>
 
-              <Select value={selectedTimeZone} onValueChange={handleTimeZoneChange}>
+              <Select value={selectedTimeZone} onValueChange={setSelectedTimeZone}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select timezone" />
                 </SelectTrigger>
@@ -227,41 +122,13 @@ const SettingsPage = () => {
               </div>
 
               {!isUsingAutoDetected && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    resetToDetectedTimeZone();
-                    setHasChanges(true);
-                  }}
-                >
+                <Button variant="outline" onClick={resetToDetectedTimeZone}>
                   Use Auto-detected Time Zone
                 </Button>
               )}
             </div>
           </CardContent>
         </Card>
-
-        {/* Save Button */}
-        {hasChanges && (
-          <div className="flex gap-2">
-            <Button
-              onClick={saveSettings}
-              disabled={isSaving}
-              className="flex-1"
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                // Reload current settings
-                window.location.reload();
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        )}
       </div>
     </Layout>
   );
