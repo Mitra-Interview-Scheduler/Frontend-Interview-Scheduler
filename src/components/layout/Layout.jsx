@@ -14,8 +14,8 @@ const Layout = ({ children }) => {
       
       <main 
         className={cn(
-          "pt-16 transition-all duration-300 relative z-0", // Add z-0 here
-          sidebarOpen ? "lg:pl-64" : "pl-0"
+          "pt-16 transition-all duration-300 relative z-0",
+          sidebarOpen ? "pl-64" : "pl-0"
         )}
       >
         <div className="p-6">
