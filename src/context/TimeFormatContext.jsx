@@ -14,29 +14,35 @@ export const useTimeFormat = () => {
 
 export const TimeFormatProvider = ({ children }) => {
   const { user } = useAuth();
-  const [timeFormat, setTimeFormat] = useState('HH:mm');
-  const [dateFormat, setDateFormat] = useState('yyyy-MM-dd');
+  const [timeFormat, setTimeFormatState] = useState('24h');
+  const [dateFormat, setDateFormatState] = useState('yyyy-MM-dd');
 
-  // Initialize from user settings when user logs in
+  // Initialize from user settings when user logs in or settings change
   useEffect(() => {
     if (user?.settings) {
-      const format = user.settings.preferredTimeFormat === 'HH:mm' ? '24h' : '12h';
-      setTimeFormat(format);
-      setDateFormat(user.settings.preferredDateFormat);
-      localStorage.setItem('timeFormat', format);
-      localStorage.setItem('dateFormat', user.settings.preferredDateFormat);
+      // Determine time format from backend format
+      const isTimeFormat24h = 
+        user.settings.preferredTimeFormat === 'HH:mm' ||
+        !user.settings.preferredTimeFormat?.includes('a');
+      
+      setTimeFormatState(isTimeFormat24h ? '24h' : '12h');
+      setDateFormatState(user.settings.preferredDateFormat || 'yyyy-MM-dd');
+      
+      // Persist to localStorage
+      localStorage.setItem('timeFormat', isTimeFormat24h ? '24h' : '12h');
+      localStorage.setItem('dateFormat', user.settings.preferredDateFormat || 'yyyy-MM-dd');
     } else {
-      // Load from localStorage if no user settings
+      // Load from localStorage if no user or user has no settings
       const savedFormat = localStorage.getItem('timeFormat');
       if (savedFormat && (savedFormat === '12h' || savedFormat === '24h')) {
-        setTimeFormat(savedFormat);
+        setTimeFormatState(savedFormat);
       }
       const savedDateFormat = localStorage.getItem('dateFormat');
       if (savedDateFormat) {
-        setDateFormat(savedDateFormat);
+        setDateFormatState(savedDateFormat);
       }
     }
-  }, [user?.settings]);
+  }, [user?.settings?.preferredTimeFormat, user?.settings?.preferredDateFormat]);
 
   // Convert time format to display format
   const getTimeFormatString = () => {
@@ -46,13 +52,13 @@ export const TimeFormatProvider = ({ children }) => {
   // Save to localStorage whenever it changes
   const updateTimeFormat = (format) => {
     if (format === '12h' || format === '24h') {
-      setTimeFormat(format);
+      setTimeFormatState(format);
       localStorage.setItem('timeFormat', format);
     }
   };
 
   const updateDateFormat = (format) => {
-    setDateFormat(format);
+    setDateFormatState(format);
     localStorage.setItem('dateFormat', format);
   };
 

@@ -72,3 +72,41 @@ export const convertTimeFormat = (timeStr, is12h) => {
     return timeStr;
   }
 };
+
+/**
+ * Converts a Date object to display format based on user's date preference
+ * @param {Date} date - Date object to format
+ * @param {string} dateFormat - Date format string (yyyy-MM-dd, dd-MM-yyyy, etc.)
+ * @returns {string} Formatted date string
+ */
+export const formatDate = (date, dateFormat = 'yyyy-MM-dd') => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    return format(dateObj, dateFormat);
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Converts a Date with both date and time based on user preferences
+ * @param {Date} date - Date object to format
+ * @param {string} dateFormat - Date format string (yyyy-MM-dd, dd-MM-yyyy, etc.)
+ * @param {string} timeFormat - '12h' or '24h'
+ * @returns {string} Formatted date and time string
+ */
+export const formatDateTime = (date, dateFormat = 'yyyy-MM-dd', timeFormat = '24h') => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    const formattedDate = format(dateObj, dateFormat);
+    const timeStr = timeFormat === '12h' ? 'h:mm a' : 'HH:mm';
+    const formattedTime = format(dateObj, timeStr);
+    return `${formattedDate} ${formattedTime}`;
+  } catch {
+    return '';
+  }
+};
