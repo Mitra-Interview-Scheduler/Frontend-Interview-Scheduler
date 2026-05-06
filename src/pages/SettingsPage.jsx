@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback,useEffect } from 'react';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useTimeZone } from '@/context/TimeZoneContext';
 import { useAuth } from '@/context/AuthContext';
@@ -11,7 +11,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Clock, Check, Globe, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+
+
+
 const SettingsPage = () => {
+
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const dateFormats = [
+    { value: 'yyyy-MM-dd', label: 'YYYY-MM-DD', example: '2024-05-15' },
+    { value: 'dd-MM-yyyy', label: 'DD-MM-YYYY', example: '15-05-2024' },
+    { value: 'MM/dd/yyyy', label: 'MM/DD/YYYY', example: '05/15/2024' },
+    { value: 'dd/MM/yyyy', label: 'DD/MM/YYYY', example: '15/05/2024' },
+  ];
+
   const { timeFormat, setTimeFormat, dateFormat, setDateFormat, is12h, is24h } = useTimeFormat();
   const {
     selectedTimeZone,
@@ -21,8 +34,7 @@ const SettingsPage = () => {
     setSelectedTimeZone,
     resetToDetectedTimeZone,
   } = useTimeZone();
-  const { user } = useAuth();
-  const { toast } = useToast();
+  
   
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -55,11 +67,6 @@ const SettingsPage = () => {
         preferredTimeFormat
       );
 
-      // Update localStorage and user in auth context
-      localStorage.setItem('preferredTimeZone', selectedTimeZone);
-      localStorage.setItem('timeFormat', timeFormat);
-      localStorage.setItem('dateFormat', dateFormat);
-
       setHasChanges(false);
       toast({
         title: 'Settings Saved',
@@ -85,12 +92,45 @@ const SettingsPage = () => {
     .formatToParts(new Date())
     .find((part) => part.type === 'timeZoneName')?.value || 'UTC';
 
-  const dateFormats = [
-    { value: 'yyyy-MM-dd', label: 'YYYY-MM-DD', example: '2024-05-15' },
-    { value: 'dd-MM-yyyy', label: 'DD-MM-YYYY', example: '15-05-2024' },
-    { value: 'MM/dd/yyyy', label: 'MM/DD/YYYY', example: '05/15/2024' },
-    { value: 'dd/MM/yyyy', label: 'DD/MM/YYYY', example: '15/05/2024' },
-  ];
+ 
+
+  useEffect(() => {
+  const fetchSettings = async () => {
+    try {
+      const userSettingData = await userSettingsAPI.getSettings();
+      console.log('Fetched user settings:', userSettingData);
+
+      if (userSettingData) {
+        const { timezone, preferredDateFormat, preferredTimeFormat } = userSettingData;
+
+        if (timezone) {
+          setSelectedTimeZone(timezone);
+          localStorage.setItem('preferredTimeZone', timezone);
+        }
+
+        if (preferredDateFormat) {
+          setDateFormat(preferredDateFormat);
+          localStorage.setItem('dateFormat', preferredDateFormat);
+        }
+
+        if (preferredTimeFormat) {
+          const isTimeFormat24h =
+            preferredTimeFormat === 'HH:mm' || !preferredTimeFormat.includes('a');
+
+          const format = isTimeFormat24h ? '24h' : '12h';
+
+          setTimeFormat(format);
+          localStorage.setItem('timeFormat', format);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user settings', error);
+    }
+  };
+
+  fetchSettings();
+}, []);
+  
 
   return (
     <Layout>
