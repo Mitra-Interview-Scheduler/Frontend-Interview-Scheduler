@@ -32,7 +32,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 w-full max-w-2xl max-h-[90vh]  translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] overflow-hidden flex flex-col",
+        "fixed left-[50%] top-[50%] z-50  max-w-2xl max-h-[90vh] m-9 p-6 translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] overflow-hidden flex flex-col",
         className
       )}
       {...props}
@@ -44,7 +44,7 @@ const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex items-start justify-between gap-3 px-8 py-6 border-b border-gray-100 shrink-0", className)} {...props}>
+  <div className={cn("flex items-start justify-between gap-3 px-8 py-4 border-b border-gray-100 shrink-0", className)} {...props}>
     <div className="flex flex-col space-y-2 text-left">
       {children}
     </div>
@@ -58,7 +58,7 @@ DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div 
-    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end gap-3 px-8 py-6 border-t border-gray-100 shrink-0", className)} 
+    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end gap-3   py-2 border-t border-gray-100 shrink-0", className)} 
     {...props} 
   />
 );
@@ -94,7 +94,7 @@ const DialogBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div 
     ref={ref}
-    className={cn("flex-1 overflow-y-auto px-8 py-6 min-h-0 ", className)}
+    className={cn("flex-1 overflow-y-auto px-0 py-3 min-h-0 ", className)}
     {...props}
   />
 ));
