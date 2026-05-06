@@ -16,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogBody,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label }    from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -591,18 +591,16 @@ const CandidatesPage = () => {
 
         {/* ══ ADD DIALOG ═══════════════════════════════════════════════════ */}
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto ">
             <DialogHeader>
               <DialogTitle>Add New Candidate</DialogTitle>
             </DialogHeader>
-            <DialogBody>
             {renderFormFields(
               addForm, setAddForm,
               addTiers, addDesigs,
               handleAddDeptChange, handleAddTierChange,
               false  // no status field on create
             )}
-            </DialogBody>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={isMutating}>Cancel</Button>
               <Button onClick={handleAddSubmit} disabled={isMutating}>

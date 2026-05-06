@@ -21,7 +21,7 @@ import { Badge }    from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogBody,
+  DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
   Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User,
@@ -495,7 +495,7 @@ const handleSelectSlot = ({ start, end }) => {
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
             <p className="text-muted-foreground text-lg">
               Manage your interview availability · click an{' '}
-              <span className="text-indigo-600 font-semibold"></span> event to edit it
+              <span className="text-indigo-600 font-semibold">Available</span> event to edit it
             </p>
           </div>
          
@@ -767,8 +767,8 @@ const handleSelectSlot = ({ start, end }) => {
 
 
 
-            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-            <DialogContent >
+                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-indigo-700">
                   <Plus className="w-5 h-5" /> Add Availability Slot
@@ -778,7 +778,7 @@ const handleSelectSlot = ({ start, end }) => {
                 </DialogDescription>
               </DialogHeader>
 
-              <DialogBody >
+              <div className="space-y-4 py-2">
                 {selectedDate && (
                   <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
                     <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
@@ -804,7 +804,7 @@ const handleSelectSlot = ({ start, end }) => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 ">
+                <div className="grid grid-cols-2 gap-3">
                   <TimePicker
                     value={startTime}
                     onChange={setStartTime}
@@ -816,7 +816,7 @@ const handleSelectSlot = ({ start, end }) => {
                     label="End Time"
                   />
                 </div>
-              </DialogBody>
+              </div>
 
               <DialogFooter className="gap-2">
                 <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
@@ -840,7 +840,7 @@ const handleSelectSlot = ({ start, end }) => {
 
       {/* ══ EDIT SLOT DIALOG ═══════════════════════════════════════════════ */}
       <Dialog open={editDialogOpen} onOpenChange={(o) => { if (!editSaving) setEditDialogOpen(o); }}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-indigo-700">
               <Pencil className="w-5 h-5" /> Edit Availability Slot
@@ -851,7 +851,7 @@ const handleSelectSlot = ({ start, end }) => {
           </DialogHeader>
 
           {editTarget && (
-            <DialogBody className="space-y-4 py-2">
+            <div className="space-y-4 py-2">
               <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
                 <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
                 <p className="font-semibold text-sm">{format(editTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
@@ -901,7 +901,7 @@ const handleSelectSlot = ({ start, end }) => {
                   </p>
                 </div>
               )}
-            </DialogBody>
+            </div>
           )}
 
           <DialogFooter className="gap-2">
@@ -930,7 +930,7 @@ const handleSelectSlot = ({ start, end }) => {
 
       {/* ══ DELETE CONFIRM DIALOG ═════════════════════════════════════════ */}
       <Dialog open={deleteDialogOpen} onOpenChange={(o) => { if (!deleting) setDeleteDialogOpen(o); }}>
-        <DialogContent >
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Delete Slot
@@ -939,8 +939,6 @@ const handleSelectSlot = ({ start, end }) => {
               This will permanently remove the availability slot. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-
-          <DialogBody >
           {deleteTarget && (
             <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
               <p className="font-semibold text-sm">{format(deleteTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
@@ -949,8 +947,7 @@ const handleSelectSlot = ({ start, end }) => {
               </p>
             </div>
           )}
-          </DialogBody>
-          <DialogFooter >
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Keep Slot</Button>
             <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting} className="gap-2">
               {deleting

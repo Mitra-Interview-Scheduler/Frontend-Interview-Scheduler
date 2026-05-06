@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,DialogBody,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from '@/components/ui/dialog';
 import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -63,7 +63,8 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>     
-      <DialogContent >
+      <DialogContent className="sm:max-w-[600px] min-h-[500px] p-0 overflow-hidden border-t-8 border-t-primary" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <div className="p-8 flex flex-col h-full">
           <DialogHeader>
             <DialogTitle >
               Schedule Interview
@@ -72,7 +73,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               Please verify the candidate's professional profile and set their interview availability window to find matching interviewers.
             </DialogDescription>
           </DialogHeader>
-        <DialogBody>
+
           <div className="space-y-8 flex-grow">
             {/* Candidate Identity Card - Enhanced Spacing */}
             <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -154,8 +155,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               </div>
             </div>
           </div>
-        </DialogBody>
-
+        </div>
 
         {/* Action Footer - Larger Buttons */}
         <DialogFooter className="bg-slate-50 p-8 flex items-center  sm:justify-between gap-6 border-t mt-auto">

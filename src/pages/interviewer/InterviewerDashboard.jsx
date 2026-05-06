@@ -291,7 +291,7 @@ const InterviewerDashboard = () => {
           {/* Quick Actions & Info */}
           <div className="space-y-6">
             {/* Quick Actions */}
-            {/* <Card className="shadow-elegant">
+            <Card className="shadow-elegant">
               <CardHeader className="border-b bg-muted/30">
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
@@ -323,7 +323,7 @@ const InterviewerDashboard = () => {
                   </Button>
                 </div>
               </CardContent>
-            </Card> */}
+            </Card>
 
             {/* Info Card */}
             <Card className="shadow-elegant border-primary/20">
