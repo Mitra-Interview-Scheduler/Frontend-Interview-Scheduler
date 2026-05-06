@@ -46,7 +46,7 @@ export const TimeZoneProvider = ({ children }) => {
   const { user } = useAuth();
   const detectedTimeZone = getDetectedTimeZone();
   
-  // Initialize from user settings or localStorage
+  // Initialize from user settings or localStorage or detected
   const getInitialTimeZone = () => {
     if (user?.settings?.timezone) {
       return user.settings.timezone;
@@ -58,7 +58,7 @@ export const TimeZoneProvider = ({ children }) => {
     getInitialTimeZone()
   );
 
-  // Sync with user settings when user logs in
+  // Sync with user settings when user logs in or settings change
   useEffect(() => {
     if (user?.settings?.timezone) {
       setSelectedTimeZoneState(user.settings.timezone);
