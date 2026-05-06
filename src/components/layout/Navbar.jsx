@@ -43,7 +43,7 @@ const Navbar = ({ onMenuClick }) => {
             variant="ghost" 
             size="icon" 
             onClick={onMenuClick}
-            className="lg:hidden"
+            title="Toggle Sidebar"
           >
             <Menu className="w-5 h-5" />
           </Button>

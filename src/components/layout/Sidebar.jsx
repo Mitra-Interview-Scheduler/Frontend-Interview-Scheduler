@@ -94,7 +94,7 @@ const Sidebar = ({ isOpen }) => {
       <nav className="p-4 space-y-2 flex flex-col h-full">
         <div className="space-y-2 flex-1 overflow-y-auto">
           {roleGroupedLinks.map((roleGroup) => {
-            const isExpanded = expandedRoles[roleGroup.role] !== false; // Default to expanded
+            const isExpanded = expandedRoles[roleGroup.role] !== true; // Default to expanded
 
             return (
               <div key={roleGroup.role} className="space-y-1">
@@ -103,7 +103,7 @@ const Sidebar = ({ isOpen }) => {
                   onClick={() => toggleRole(roleGroup.role)}
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors",
-                    "hover:bg-sidebar-accent/30"
+                    "hover:bg-sidebar-accent/30 hover:scale-100"
                   )}
                 >
                   <span className={cn("font-semibold text-xs uppercase tracking-wider", getRoleColor(roleGroup.role))}>
@@ -140,7 +140,7 @@ const Sidebar = ({ isOpen }) => {
                               "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ml-2 text-sm",
                               isActive
                                 ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                                : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                                : "hover:bg-sidebar-accent/50 text-sidebar-foreground  hover:scale-105"
                             )}
                           >
                             <Icon className="w-4 h-4 flex-shrink-0" />

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { authAPI } from '@/services/api';
+import { authAPI ,userSettingsAPI} from '@/services/api';
 
 const AuthContext = createContext(null);
 
@@ -19,22 +19,26 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Helper to extract primary role from roles array
   const getPrimaryRole = (roles) => {
     if (Array.isArray(roles) && roles.length > 0) {
       return roles[0];
     }
-    return 'INTERVIEWER'; // default fallback
+    return 'INTERVIEWER'; 
   };
 
   const syncUser = (userData) => {
+    
     const nextUser = {
       ...userData,
       profilePicture: userData.profilePicture || userData.profilePictureUrl || null,
       profilePictureUrl: userData.profilePictureUrl || userData.profilePicture || null,
-      // Handle both old 'role' and new 'roles' array from backend
       role: userData.role || getPrimaryRole(userData.roles),
       roles: Array.isArray(userData.roles) ? userData.roles : (userData.role ? [userData.role] : []),
+    };
+
+    const filteredUser = {
+      firstName: nextUser.firstName,
+      lastName: nextUser.lastName,
     };
 
     localStorage.setItem('user', JSON.stringify(nextUser));
@@ -42,7 +46,8 @@ export const AuthProvider = ({ children }) => {
     return nextUser;
   };
 
-  useEffect(() => {
+
+   useEffect(() => {
     // Check if user is logged in
     const initAuth = async () => {
       const storedUser = localStorage.getItem('user');
@@ -63,6 +68,9 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
+
+  
+ 
   const login = async (email, password) => {
     try {
       const response = await authAPI.login(email, password);
@@ -79,6 +87,23 @@ export const AuthProvider = ({ children }) => {
       };
       
       localStorage.setItem('token', response.token);
+      
+      const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      
+      // Fetch user settings and store in localStorage
+      try {
+        const settings = await userSettingsAPI.getSettings();
+        localStorage.setItem('preferredTimeZone', settings.timezone || detectedTimeZone);
+        localStorage.setItem('dateFormat', settings.preferredDateFormat || 'yyyy-MM-dd');
+        localStorage.setItem('timeFormat', settings.preferredTimeFormat === 'HH:mm' ? '24h' : '12h');
+      } catch (settingsError) {
+        console.warn('Could not fetch settings:', settingsError);
+        // Use browser's detected timezone if settings fetch fails
+        localStorage.setItem('preferredTimeZone', detectedTimeZone);
+        localStorage.setItem('dateFormat', 'yyyy-MM-dd');
+        localStorage.setItem('timeFormat', '24h');
+      }
+      
       syncUser(userData);
       
       return userData;
@@ -86,6 +111,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Login error:', error);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('preferredTimeZone');
+      localStorage.removeItem('dateFormat');
+      localStorage.removeItem('timeFormat');
       setUser(null);
 
       throw new Error(error.response?.data?.message || 'Login failed');
@@ -108,6 +136,23 @@ export const AuthProvider = ({ children }) => {
       };
 
       localStorage.setItem('token', response.token);
+      
+      const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      
+      // Fetch user settings and store in localStorage
+      try {
+        const settings = await userSettingsAPI.getSettings();
+        localStorage.setItem('preferredTimeZone', settings.timezone || detectedTimeZone);
+        localStorage.setItem('dateFormat', settings.preferredDateFormat || 'yyyy-MM-dd');
+        localStorage.setItem('timeFormat', settings.preferredTimeFormat === 'HH:mm' ? '24h' : '12h');
+      } catch (settingsError) {
+        console.warn('Could not fetch settings:', settingsError);
+        // Use browser's detected timezone if settings fetch fails
+        localStorage.setItem('preferredTimeZone', detectedTimeZone);
+        localStorage.setItem('dateFormat', 'yyyy-MM-dd');
+        localStorage.setItem('timeFormat', '24h');
+      }
+      
       syncUser(userData);
 
       return userData;
@@ -115,6 +160,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Google login error:', error);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('preferredTimeZone');
+      localStorage.removeItem('dateFormat');
+      localStorage.removeItem('timeFormat');
       setUser(null);
 
       throw new Error(error.response?.data?.message || 'Google login failed');
@@ -125,6 +173,9 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('preferredTimeZone');
+    localStorage.removeItem('dateFormat');
+    localStorage.removeItem('timeFormat');
   };
 
   const value = {

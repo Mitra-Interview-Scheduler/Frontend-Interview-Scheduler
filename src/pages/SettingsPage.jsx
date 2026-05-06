@@ -1,15 +1,31 @@
-import React from 'react';
+import React, { useState, useCallback,useEffect } from 'react';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useTimeZone } from '@/context/TimeZoneContext';
+import { useAuth } from '@/context/AuthContext';
+import { userSettingsAPI } from '@/services/api';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Check, Globe } from 'lucide-react';
+import { Clock, Check, Globe, Calendar } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+
+
 
 const SettingsPage = () => {
-  const { timeFormat, setTimeFormat, is12h, is24h } = useTimeFormat();
+
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const dateFormats = [
+    { value: 'yyyy-MM-dd', label: 'YYYY-MM-DD', example: '2024-05-15' },
+    { value: 'dd-MM-yyyy', label: 'DD-MM-YYYY', example: '15-05-2024' },
+    { value: 'MM/dd/yyyy', label: 'MM/DD/YYYY', example: '05/15/2024' },
+    { value: 'dd/MM/yyyy', label: 'DD/MM/YYYY', example: '15/05/2024' },
+  ];
+
+  const { timeFormat, setTimeFormat, dateFormat, setDateFormat, is12h, is24h } = useTimeFormat();
   const {
     selectedTimeZone,
     detectedTimeZone,
@@ -18,6 +34,56 @@ const SettingsPage = () => {
     setSelectedTimeZone,
     resetToDetectedTimeZone,
   } = useTimeZone();
+  
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const handleTimeFormatChange = (format) => {
+    setTimeFormat(format);
+    setHasChanges(true);
+  };
+
+  const handleDateFormatChange = (format) => {
+    setDateFormat(format);
+    setHasChanges(true);
+  };
+
+  const handleTimeZoneChange = (tz) => {
+    setSelectedTimeZone(tz);
+    setHasChanges(true);
+  };
+
+  const saveSettings = useCallback(async () => {
+    try {
+      setIsSaving(true);
+      
+      // Convert time format to backend format
+      const preferredTimeFormat = timeFormat === '24h' ? 'HH:mm' : 'hh:mm a';
+      
+      await userSettingsAPI.updateSettings(
+        selectedTimeZone,
+        dateFormat,
+        preferredTimeFormat
+      );
+
+      setHasChanges(false);
+      toast({
+        title: 'Settings Saved',
+        description: 'Your preferences have been updated successfully.',
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to save settings',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedTimeZone, dateFormat, timeFormat, toast]);
 
   const timezoneOffset = new Intl.DateTimeFormat('en-US', {
     timeZoneName: 'shortOffset',
@@ -25,6 +91,46 @@ const SettingsPage = () => {
   })
     .formatToParts(new Date())
     .find((part) => part.type === 'timeZoneName')?.value || 'UTC';
+
+ 
+
+  useEffect(() => {
+  const fetchSettings = async () => {
+    try {
+      const userSettingData = await userSettingsAPI.getSettings();
+      console.log('Fetched user settings:', userSettingData);
+
+      if (userSettingData) {
+        const { timezone, preferredDateFormat, preferredTimeFormat } = userSettingData;
+
+        if (timezone) {
+          setSelectedTimeZone(timezone);
+          localStorage.setItem('preferredTimeZone', timezone);
+        }
+
+        if (preferredDateFormat) {
+          setDateFormat(preferredDateFormat);
+          localStorage.setItem('dateFormat', preferredDateFormat);
+        }
+
+        if (preferredTimeFormat) {
+          const isTimeFormat24h =
+            preferredTimeFormat === 'HH:mm' || !preferredTimeFormat.includes('a');
+
+          const format = isTimeFormat24h ? '24h' : '12h';
+
+          setTimeFormat(format);
+          localStorage.setItem('timeFormat', format);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user settings', error);
+    }
+  };
+
+  fetchSettings();
+}, []);
+  
 
   return (
     <Layout>
@@ -52,7 +158,7 @@ const SettingsPage = () => {
               <div className="grid grid-cols-2 gap-2">
                 {/* 24-Hour Option */}
                 <button
-                  onClick={() => setTimeFormat('24h')}
+                  onClick={() => handleTimeFormatChange('24h')}
                   className={`p-2.5 rounded border-2 transition-all text-sm ${
                     is24h
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
@@ -70,7 +176,7 @@ const SettingsPage = () => {
 
                 {/* 12-Hour Option */}
                 <button
-                  onClick={() => setTimeFormat('12h')}
+                  onClick={() => handleTimeFormatChange('12h')}
                   className={`p-2.5 rounded border-2 transition-all text-sm ${
                     is12h
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
@@ -90,6 +196,45 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
+        {/* Date Format Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-sm">Date Format</h2>
+                <Badge variant="outline" className="ml-auto">
+                  {dateFormats.find((f) => f.value === dateFormat)?.label || 'Default'}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {dateFormats.map((fmt) => (
+                  <button
+                    key={fmt.value}
+                    onClick={() => handleDateFormatChange(fmt.value)}
+                    className={`p-2.5 rounded border-2 transition-all text-sm ${
+                      dateFormat === fmt.value
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="text-left">
+                        <p className="font-semibold text-xs">{fmt.label}</p>
+                        <p className="text-xs text-muted-foreground">{fmt.example}</p>
+                      </div>
+                      {dateFormat === fmt.value && (
+                        <Check className="w-3 h-3 text-indigo-600 flex-shrink-0 mt-0.5" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Time Zone Card */}
         <Card>
           <CardContent className="p-4">
@@ -102,7 +247,7 @@ const SettingsPage = () => {
                 </Badge>
               </div>
 
-              <Select value={selectedTimeZone} onValueChange={setSelectedTimeZone}>
+              <Select value={selectedTimeZone} onValueChange={handleTimeZoneChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select timezone" />
                 </SelectTrigger>
@@ -122,13 +267,41 @@ const SettingsPage = () => {
               </div>
 
               {!isUsingAutoDetected && (
-                <Button variant="outline" onClick={resetToDetectedTimeZone}>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    resetToDetectedTimeZone();
+                    setHasChanges(true);
+                  }}
+                >
                   Use Auto-detected Time Zone
                 </Button>
               )}
             </div>
           </CardContent>
         </Card>
+
+        {/* Save Button */}
+        {hasChanges && (
+          <div className="flex gap-2">
+            <Button
+              onClick={saveSettings}
+              disabled={isSaving}
+              className="flex-1"
+            >
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Reload current settings
+                window.location.reload();
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
       </div>
     </Layout>
   );

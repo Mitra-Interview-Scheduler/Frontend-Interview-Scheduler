@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
+  DialogHeader, DialogTitle,DialogBody,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -1025,7 +1025,7 @@ const calendarSlotPropGetter = useCallback((date) => {
         </Card>
 
         {/* Panel mode banner */}
-        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : ''}>
+        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : '' }>
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-4">
@@ -1159,7 +1159,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
       {/* ══ CANCEL BOOKED DIALOG ═══════════════════════════════════════════ */}
       <Dialog open={cancelDialogOpen} onOpenChange={(o) => { if (!cancelling) setCancelDialogOpen(o); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="px-3 py-0 max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Cancel Interview
@@ -1182,7 +1182,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter >
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
               Keep Interview
             </Button>
@@ -1199,7 +1199,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
       {/* ══ SINGLE INTERVIEW DIALOG ════════════════════════════════════════ */}
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Send className="w-6 h-6 text-primary" /> Schedule Interview
@@ -1208,9 +1208,9 @@ const calendarSlotPropGetter = useCallback((date) => {
               Schedule an interview with {selectedSlot?.resource.interviewer}
             </DialogDescription> */}
           </DialogHeader>
-
+          <DialogBody>
           {selectedSlot && (
-            <div className="space-y-6 py-4">
+            <div className="space-y-2">
               {/* Interviewer info */}
               <Card className="bg-accent/50">
                 <CardContent className="p-4 space-y-3">
@@ -1298,6 +1298,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               {renderCandidateSection(singlePrivilegeError)}
             </div>
           )}
+          </DialogBody>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
@@ -1324,8 +1325,8 @@ const calendarSlotPropGetter = useCallback((date) => {
               One candidate — {panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''} simultaneously
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-6 py-4">
+        <DialogBody>
+          <div className="space-y-2">
             {/* Panel interviewers */}
             <Card className="border-sky-200 bg-sky-50 dark:bg-sky-950/20">
               <CardContent className="p-4">
@@ -1418,7 +1419,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}
           </div>
-
+        </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
             <Button

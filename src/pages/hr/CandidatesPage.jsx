@@ -16,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
 import { Label }    from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -84,6 +84,7 @@ const CandidatesPage = () => {
 
   // ── Edit dialog state ───────────────────────────────────────────────────────
   const [isEditOpen,   setIsEditOpen]   = useState(false);
+  const [isReadOnly,   setIsReadOnly]   = useState(false);
   const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
@@ -218,9 +219,20 @@ const CandidatesPage = () => {
 
 
   // ── Edit dialog handlers ──────────────────────────────────────────────────
+  const handleOpenView = (candidate) => {
+    setSelectedCandidate(candidate);
+    setIsReadOnly(true);
+    setIsEditOpen(true);
+  };
+
   const handleOpenEdit = (candidate) => {
     setSelectedCandidate(candidate);
+    setIsReadOnly(false);
     setIsEditOpen(true);
+  };
+
+  const handleViewToEdit = () => {
+    setIsReadOnly(false);
   };
 
    // ── InterviewSchedulePage dialog handlers ──────────────────────────────────────────────────
@@ -445,7 +457,7 @@ const CandidatesPage = () => {
                   <motion.div key={candidate.id}
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03 }}>
-                    <Card className="hover:shadow-md transition-shadow">
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                       <CardContent className="p-3">
                         <div className="flex items-center gap-4">
 
@@ -504,15 +516,15 @@ const CandidatesPage = () => {
                             {new Date(candidate.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </div>
 
-                          {/* Edit button */}
+                          {/* Action buttons */}
                           <div className="flex gap-1.5 shrink-0">
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
-                              onClick={() => handleOpenEdit(candidate)} disabled={isMutating} title="Edit">
+                              onClick={(e) => { e.stopPropagation(); handleOpenEdit(candidate); }} disabled={isMutating} title="Edit">
                               <Edit className="w-3.5 h-3.5" />
                             </Button>
 
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0"
-                              onClick={() => handleOpenInterviewSchedulePage(candidate)} disabled={isMutating} title="calender">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+                              onClick={(e) => { e.stopPropagation(); handleOpenInterviewSchedulePage(candidate); }} disabled={isMutating} title="Schedule">
                               <CalendarClockIcon className="w-3.5 h-3.5" />
                             </Button>
                           </div>
@@ -579,16 +591,18 @@ const CandidatesPage = () => {
 
         {/* ══ ADD DIALOG ═══════════════════════════════════════════════════ */}
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto ">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Candidate</DialogTitle>
             </DialogHeader>
+            <DialogBody>
             {renderFormFields(
               addForm, setAddForm,
               addTiers, addDesigs,
               handleAddDeptChange, handleAddTierChange,
               false  // no status field on create
             )}
+            </DialogBody>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={isMutating}>Cancel</Button>
               <Button onClick={handleAddSubmit} disabled={isMutating}>
@@ -599,12 +613,14 @@ const CandidatesPage = () => {
           </DialogContent>
         </Dialog>
 
-         <CandidateEditDialog
+        <CandidateEditDialog
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
           onOpenChange={setIsEditOpen}
           onSaveSuccess={applyFilters}
+          readOnly={isReadOnly}
+          onEdit={handleViewToEdit}
         />
 
 <CandidateInterviewSchedulePage

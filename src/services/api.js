@@ -88,4 +88,21 @@ export const usersAPI = {
   },
 };
 
+export const userSettingsAPI = {
+  updateSettings: async (timezone, preferredDateFormat, preferredTimeFormat) => {
+    const response = await api.put('/profile/settings', {
+      timezone,
+      preferredDateFormat,
+      preferredTimeFormat,
+    });
+    return response.data;
+  },
+
+
+  getSettings: async () => {
+    const response = await api.get('/profile/settings');
+    return response.data;
+  }
+};
+
 export default api;
