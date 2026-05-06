@@ -388,7 +388,7 @@ const HRDashboard = () => {
         </motion.div>
 
         {/* Quick Actions */}
-        <motion.div variants={itemVariants}>
+        {/* <motion.div variants={itemVariants}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Quick Actions</CardTitle>
@@ -409,7 +409,7 @@ const HRDashboard = () => {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </motion.div> */}
 
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -590,9 +590,7 @@ const HRDashboard = () => {
                       .map((candidate) => (
                         <div
                           key={candidate.id}
-                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
-                          onClick={() => navigate(`/hr/candidates/${candidate.id}`)}
-                        >
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors ">
                           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                             <span className="text-primary font-semibold text-sm">
                               {(candidate.name || '?').charAt(0).toUpperCase()}
@@ -692,7 +690,7 @@ const HRDashboard = () => {
                       </thead>
                       <tbody>
                         {recentRequests.map((req) => (
-                          <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
+                          <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors ">
                             <td className="py-2.5 px-3 font-medium">{req.candidateName}</td>
                             <td className="py-2.5 px-3 text-muted-foreground">{req.assignedInterviewerName || '—'}</td>
                             <td className="py-2.5 px-3 text-muted-foreground">

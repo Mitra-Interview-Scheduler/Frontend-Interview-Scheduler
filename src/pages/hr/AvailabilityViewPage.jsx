@@ -41,9 +41,6 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
 
-const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
-const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
-
 
 // ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
