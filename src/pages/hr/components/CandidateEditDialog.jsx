@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -34,7 +34,9 @@ function CandidateEditDialog({
   candidate, 
   departments = [],
   onOpenChange, 
-  onSaveSuccess 
+  onSaveSuccess,
+  readOnly = false,
+  onEdit
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -155,12 +157,13 @@ function CandidateEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}> 
-      <DialogContent >
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Candidate</DialogTitle>
+          <DialogTitle>{readOnly ? candidate?.name : 'Edit Candidate'}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+        <DialogBody>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* Name */}
           <div className="space-y-2">
@@ -169,7 +172,7 @@ function CandidateEditDialog({
               value={form.name} 
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="Full name" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -181,7 +184,7 @@ function CandidateEditDialog({
               value={form.email} 
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="email@example.com" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -192,7 +195,7 @@ function CandidateEditDialog({
               value={form.phone} 
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="+1234567890" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -205,7 +208,7 @@ function CandidateEditDialog({
               value={form.yearsOfExperience}
               onChange={(e) => setForm({ ...form, yearsOfExperience: e.target.value })}
               placeholder="5" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -218,7 +221,7 @@ function CandidateEditDialog({
               value={form.location} 
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               placeholder="City, Country" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -231,7 +234,7 @@ function CandidateEditDialog({
               value={form.jobReferenceCode} 
               onChange={(e) => setForm({ ...form, jobReferenceCode: e.target.value })}
               placeholder="REQ-2024-001" 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -241,7 +244,7 @@ function CandidateEditDialog({
             <Select 
               value={form.status} 
               onValueChange={(v) => setForm({ ...form, status: v })} 
-              disabled={saving}
+              disabled={saving || readOnly}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -258,7 +261,7 @@ function CandidateEditDialog({
             <Select 
               value={form.departmentId || 'NONE'} 
               onValueChange={(v) => handleDeptChange(v === 'NONE' ? '' : v)}
-              disabled={saving}
+              disabled={saving || readOnly}
             >
               <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
               <SelectContent>
@@ -280,7 +283,7 @@ function CandidateEditDialog({
             <Select 
               value={form.tierId || 'NONE'}
               onValueChange={(v) => handleTierChange(v === 'NONE' ? '' : v)}
-              disabled={saving || !form.departmentId}
+              disabled={saving || readOnly || !form.departmentId}
             >
               <SelectTrigger>
                 <SelectValue placeholder={form.departmentId ? 'Select tier' : 'Select department first'} />
@@ -304,7 +307,7 @@ function CandidateEditDialog({
             <Select 
               value={form.targetDesignationId || 'NONE'}
               onValueChange={(v) => setForm({ ...form, targetDesignationId: v === 'NONE' ? '' : v })}
-              disabled={saving || !form.tierId}
+              disabled={saving || readOnly || !form.tierId}
             >
               <SelectTrigger>
                 <SelectValue placeholder={form.tierId ? 'Select designation' : 'Select tier first'} />
@@ -329,7 +332,7 @@ function CandidateEditDialog({
               value={form.resumeUrl} 
               onChange={(e) => setForm({ ...form, resumeUrl: e.target.value })}
               placeholder="https://drive.google.com/..." 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -342,7 +345,7 @@ function CandidateEditDialog({
               value={form.jdUrl} 
               onChange={(e) => setForm({ ...form, jdUrl: e.target.value })}
               placeholder="https://careers.company.com/jd/..." 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -354,7 +357,7 @@ function CandidateEditDialog({
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="Additional notes..." 
               rows={3} 
-              disabled={saving} 
+              disabled={saving || readOnly} 
             />
           </div>
 
@@ -371,22 +374,36 @@ function CandidateEditDialog({
               </motion.p>
             )}
           </AnimatePresence>
-        </div>
+          </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving} className="min-w-[110px]">
-            {saving ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              'Update'
-            )}
-          </Button>
+          {readOnly ? (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              <Button onClick={onEdit} className="gap-2">
+                Edit Candidate
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={handleClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={saving} className="min-w-[110px]">
+                {saving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  'Update'
+                )}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
