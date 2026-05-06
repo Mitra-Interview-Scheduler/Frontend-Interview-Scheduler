@@ -172,6 +172,32 @@ All colors MUST be HSL.
   }
 }
 
+/* Dialog Body Scrollbar Styling - Modern Design */
+[role="dialog"] div[class*="overflow-y-auto"] {
+  scrollbar-color: hsl(210, 85%, 50%) transparent;
+  padding-right: 6px;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar {
+  width: px;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, hsl(210, 85%, 45%), hsl(185, 75%, 50%));
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 0 2px hsl(210, 20%, 95%);
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, hsl(210, 85%, 40%), hsl(185, 75%, 45%));
+  box-shadow: 0 0 12px hsl(210, 85%, 45% / 0.5), 0 0 0 2px hsl(210, 20%, 95%);
+}
+
 @layer utilities {
   .gradient-primary {
     background: var(--gradient-primary);
