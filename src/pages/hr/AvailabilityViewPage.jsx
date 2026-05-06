@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,DialogBody,
+  DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -40,9 +40,6 @@ import {localizer, formatLocalDateTime, formatInputDateTime, formatInputDate, ge
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
-
-const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
-const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
 
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -1159,7 +1156,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
       {/* ══ CANCEL BOOKED DIALOG ═══════════════════════════════════════════ */}
       <Dialog open={cancelDialogOpen} onOpenChange={(o) => { if (!cancelling) setCancelDialogOpen(o); }}>
-        <DialogContent className="px-3 py-0 max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Cancel Interview
@@ -1182,7 +1179,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </div>
           )}
 
-          <DialogFooter >
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
               Keep Interview
             </Button>
@@ -1199,7 +1196,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
       {/* ══ SINGLE INTERVIEW DIALOG ════════════════════════════════════════ */}
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Send className="w-6 h-6 text-primary" /> Schedule Interview
@@ -1208,9 +1205,9 @@ const calendarSlotPropGetter = useCallback((date) => {
               Schedule an interview with {selectedSlot?.resource.interviewer}
             </DialogDescription> */}
           </DialogHeader>
-          <DialogBody>
+
           {selectedSlot && (
-            <div className="space-y-2">
+            <div className="space-y-6 py-4">
               {/* Interviewer info */}
               <Card className="bg-accent/50">
                 <CardContent className="p-4 space-y-3">
@@ -1298,7 +1295,6 @@ const calendarSlotPropGetter = useCallback((date) => {
               {renderCandidateSection(singlePrivilegeError)}
             </div>
           )}
-          </DialogBody>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
@@ -1325,8 +1321,8 @@ const calendarSlotPropGetter = useCallback((date) => {
               One candidate — {panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''} simultaneously
             </DialogDescription>
           </DialogHeader>
-        <DialogBody>
-          <div className="space-y-2">
+
+          <div className="space-y-6 py-4">
             {/* Panel interviewers */}
             <Card className="border-sky-200 bg-sky-50 dark:bg-sky-950/20">
               <CardContent className="p-4">
@@ -1419,7 +1415,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}
           </div>
-        </DialogBody>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
             <Button
