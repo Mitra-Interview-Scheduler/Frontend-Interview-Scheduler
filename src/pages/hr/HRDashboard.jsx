@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
+  DialogHeader, DialogTitle,DialogBody
 } from '@/components/ui/dialog';
 import {
   Calendar, Users, ClipboardList, TrendingUp, Clock, CheckCircle2,
@@ -540,13 +540,13 @@ const HRDashboard = () => {
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                                <button
+                                {/* <button
                                   onClick={() => dismissItem(item.id)}
                                   title="Hide from this list"
                                   className="p-1.5 rounded-lg text-muted-foreground hover:text-gray-600 hover:bg-gray-100 transition-all"
                                 >
                                   <X className="w-3.5 h-3.5" />
-                                </button>
+                                </button> */}
                               </div>
                             </div>
                           </motion.div>
@@ -716,7 +716,7 @@ const HRDashboard = () => {
 
       {/* Cancel dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={closeCancelDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Cancel Interview
@@ -725,7 +725,7 @@ const HRDashboard = () => {
               This will cancel the interview and immediately restore the slot(s) to available.
             </DialogDescription>
           </DialogHeader>
-
+          <DialogBody>
           {cancelTarget && (
             <div className={`rounded-xl border-2 p-4 ${
               cancelTarget.type === 'panel' ? 'border-emerald-200 bg-emerald-50' : 'border-red-100 bg-red-50'
@@ -753,7 +753,7 @@ const HRDashboard = () => {
               )}
             </div>
           )}
-
+          </DialogBody>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={closeCancelDialog} disabled={cancelling}>
               Keep Interview

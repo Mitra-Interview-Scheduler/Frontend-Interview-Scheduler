@@ -1025,7 +1025,7 @@ const calendarSlotPropGetter = useCallback((date) => {
         </Card>
 
         {/* Panel mode banner */}
-        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : ''}>
+        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : '' }>
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-4">
