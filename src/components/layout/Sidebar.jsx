@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
@@ -42,7 +42,6 @@ const Sidebar = ({ isOpen }) => {
   // Get links grouped by role
   const getRoleGroupedLinks = () => {
     const userRoles = user?.roles || (user?.role ? [user.role] : []);
-    userRoles.sort(); 
     const roleLinks = [];
 
     const roleConfig = {
@@ -75,7 +74,7 @@ const Sidebar = ({ isOpen }) => {
   const getRoleColor = (role) => {
     switch (role) {
       case 'ADMIN':
-        return 'text-blue-300';
+        return 'text-primary';
       case 'HR':
         return 'text-secondary';
       case 'INTERVIEWER':
@@ -85,29 +84,17 @@ const Sidebar = ({ isOpen }) => {
     }
   };
 
-  useEffect(() => {
-  if (roleGroupedLinks.length > 0) {
-    const initialState = {};
-    roleGroupedLinks.forEach((group, index) => {
-      initialState[group.role] = index === 0; // only first = true
-    });
-    setExpandedRoles(initialState);
-  }
-}, [user]);
-
-
   return (
     <aside 
       className={cn(
-        "fixed left-0 top-16 bottom-0 w-64 bg-sidebar text-sidebar-foreground overflow-y-auto z-30",
-        "transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-x-0" : "-translate-x-full"
+        "fixed left-0 top-16 bottom-0 bg-sidebar text-sidebar-foreground transition-transform duration-300 z-30 overflow-y-auto",
+        isOpen ? "translate-x-0 w-64" : "-translate-x-full w-0"
       )}
     >
       <nav className="p-4 space-y-2 flex flex-col h-full">
         <div className="space-y-2 flex-1 overflow-y-auto">
           {roleGroupedLinks.map((roleGroup) => {
-            const isExpanded = expandedRoles[roleGroup.role]; // Default to expanded
+            const isExpanded = expandedRoles[roleGroup.role] !== true; // Default to expanded
 
             return (
               <div key={roleGroup.role} className="space-y-1">
@@ -116,7 +103,7 @@ const Sidebar = ({ isOpen }) => {
                   onClick={() => toggleRole(roleGroup.role)}
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors",
-                    "hover:bg-sidebar-accent/30 hover:scale-105"
+                    "hover:bg-sidebar-accent/30 hover:scale-100"
                   )}
                 >
                   <span className={cn("font-semibold text-xs uppercase tracking-wider", getRoleColor(roleGroup.role))}>
