@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
       lastName: nextUser.lastName,
     };
 
-    localStorage.setItem('user', JSON.stringify(filteredUser));
+    localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
     return nextUser;
   };

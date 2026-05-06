@@ -110,3 +110,65 @@ export const formatDateTime = (date, dateFormat = 'yyyy-MM-dd', timeFormat = '24
     return '';
   }
 };
+
+/**
+ * Formats date with weekday (e.g., "Monday, May 15, 2024" or based on dateFormat)
+ * @param {Date|string} date - Date to format
+ * @param {string} dateFormat - Date format without weekday
+ * @returns {string} Formatted date with weekday
+ */
+export const formatDateWithWeekday = (date, dateFormat = 'MMMM dd, yyyy') => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    return format(dateObj, `EEEE, ${dateFormat}`);
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Formats date and time range (e.g., "May 15, 2024 · 2:30 PM – 3:30 PM")
+ * @param {Date|string} startDate - Start date
+ * @param {Date|string} endDate - End date
+ * @param {string} dateFormat - Date format
+ * @param {string} timeFormat - '12h' or '24h'
+ * @returns {string} Formatted range
+ */
+export const formatDateTimeRange = (startDate, endDate, dateFormat = 'MMM d, yyyy', timeFormat = '24h') => {
+  if (!startDate || !endDate) return '';
+  
+  try {
+    const start = startDate instanceof Date ? startDate : new Date(startDate);
+    const end = endDate instanceof Date ? endDate : new Date(endDate);
+    const timeStr = timeFormat === '12h' ? 'h:mm a' : 'HH:mm';
+    const formattedDate = format(start, dateFormat);
+    const formattedStart = format(start, timeStr);
+    const formattedEnd = format(end, timeStr);
+    return `${formattedDate} · ${formattedStart} – ${formattedEnd}`;
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Formats just the date range (e.g., "May 15 – May 20" or "May 15 – 20")
+ * @param {Date|string} startDate - Start date
+ * @param {Date|string} endDate - End date
+ * @param {string} dateFormat - Date format (without month/year if same)
+ * @returns {string} Formatted date range
+ */
+export const formatDateRange = (startDate, endDate, dateFormat = 'MMM dd') => {
+  if (!startDate || !endDate) return '';
+  
+  try {
+    const start = startDate instanceof Date ? startDate : new Date(startDate);
+    const end = endDate instanceof Date ? endDate : new Date(endDate);
+    const startFormatted = format(start, dateFormat);
+    const endFormatted = format(end, dateFormat);
+    return `${startFormatted} – ${endFormatted}`;
+  } catch {
+    return '';
+  }
+};
