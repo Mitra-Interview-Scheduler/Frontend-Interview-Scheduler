@@ -36,8 +36,10 @@ function CandidateEditDialog({
   onOpenChange, 
   onSaveSuccess,
   readOnly = false,
-  onEdit
+  onEdit,
+  mode = 'edit'
 }) {
+  const isCreate = mode === 'create';
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -51,7 +53,22 @@ function CandidateEditDialog({
   const fileInputRef = useRef(null);
   // Initialize form when dialog opens
   useEffect(() => {
-    if (!open || !candidate) return;
+    if (!open) return;
+
+    if (isCreate) {
+      setForm(EMPTY_FORM);
+      setTiers([]);
+      setDesigs([]);
+      setError('');
+      setSaving(false);
+      setDocuments([]);
+      setDocumentFile(null);
+      setDocumentType('CV');
+      setIsUploadDragging(false);
+      return;
+    }
+
+    if (!candidate) return;
     
     const newForm = {
       name:              candidate.name || '',
@@ -87,7 +104,7 @@ function CandidateEditDialog({
         loadDesignsForTier(candidate.tierId);
       }
     }
-  }, [open, candidate]);
+  }, [open, candidate, isCreate]);
 
   const loadTiersForDept = async (deptId) => {
     if (!deptId) { setTiers([]); return; }
@@ -234,15 +251,24 @@ function CandidateEditDialog({
     setError('');
 
     try {
-      await candidateAPI.updateCandidate(candidate.id, payload);
-      handleUploadDocument();
-      toast({ title: 'Success', description: 'Candidate updated successfully' });
-       // If a new document is selected, upload it after saving candidate details
+      if (isCreate) {
+        const createdCandidate = await candidateAPI.createCandidate(payload);
+        if (documentFile) {
+          await candidateAPI.uploadCandidateDocument(createdCandidate.id, documentFile, documentType || 'CV');
+        }
+        toast({ title: 'Success', description: 'Candidate added successfully' });
+      } else {
+        await candidateAPI.updateCandidate(candidate.id, payload);
+        if (documentFile) {
+          await candidateAPI.uploadCandidateDocument(candidate.id, documentFile, documentType || 'OTHER');
+        }
+        toast({ title: 'Success', description: 'Candidate updated successfully' });
+      }
       onOpenChange(false);
       onSaveSuccess?.();
 
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to update candidate');
+      setError(err.response?.data?.message || err.message || `Failed to ${isCreate ? 'add' : 'update'} candidate`);
     } finally {
       setSaving(false);
     }
@@ -263,7 +289,7 @@ function CandidateEditDialog({
     <Dialog open={open} onOpenChange={handleClose}> 
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{readOnly ? candidate?.name : 'Edit Candidate'}</DialogTitle>
+          <DialogTitle>{isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}</DialogTitle>
         </DialogHeader>
 
         <DialogBody>
@@ -342,22 +368,23 @@ function CandidateEditDialog({
             />
           </div>
 
-          {/* Status */}
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select 
-              value={form.status} 
-              onValueChange={(v) => setForm({ ...form, status: v })} 
-              disabled={saving || readOnly}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CANDIDATE_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isCreate && (
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(v) => setForm({ ...form, status: v })}
+                disabled={saving || readOnly}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CANDIDATE_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Department */}
           <div className="space-y-2">
@@ -452,7 +479,11 @@ function CandidateEditDialog({
           <div className="border rounded-md p-3">
             {documents.length === 0 && !documentsLoading ? (
               <p className="text-xs text-muted-foreground">
-                {readOnly ? 'No documents stored for this candidate.' : ''}
+                {isCreate
+                  ? 'Attach a CV or other document before saving the candidate.'
+                  : readOnly
+                    ? 'No documents stored for this candidate.'
+                    : ''}
               </p>
             ) : (
               <div className="space-y-1">
@@ -580,15 +611,21 @@ function CandidateEditDialog({
                   </SelectContent>
                 </Select>
 
-                <Button
-                  type="button"
-                  onClick={handleUploadDocument}
-                  disabled={saving || !documentFile}
-                  className="gap-2 hover:ring ring-primary cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5 " />
-                  Upload
-                </Button>
+                {isCreate ? (
+                  <p className="text-xs text-muted-foreground">
+                    {documentFile ? 'This document will be uploaded when you add the candidate.' : 'Choose a document to upload with the candidate.'}
+                  </p>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleUploadDocument}
+                    disabled={saving || !documentFile}
+                    className="gap-2 hover:ring ring-primary cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 " />
+                    Upload
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -644,7 +681,7 @@ function CandidateEditDialog({
                     Saving…
                   </>
                 ) : (
-                  'Update'
+                  isCreate ? 'Add Candidate' : 'Update'
                 )}
               </Button>
             </>
