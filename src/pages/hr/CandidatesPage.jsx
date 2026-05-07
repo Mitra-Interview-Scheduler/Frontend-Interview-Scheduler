@@ -24,6 +24,8 @@ import {
   Plus, Search, Mail, Phone, Edit, Loader2, MapPin, Hash, Link,
   TrendingUp, Award, Users,
   CalendarClockIcon,
+  FileText,
+  Upload,
 } from 'lucide-react';
 import { motion }   from 'framer-motion';
 import { toast }    from '@/hooks/use-toast';
@@ -45,6 +47,7 @@ const EMPTY_FORM = {
   departmentId: '', tierId: '', targetDesignationId: '',
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', jobReferenceCode: '', location: '',
+  cvFile: null,
   notes: '',
 };
 const CANDIDATES_PER_PAGE = 10;
@@ -81,6 +84,7 @@ const CandidatesPage = () => {
   const [addForm,      setAddForm]      = useState(EMPTY_FORM);
   const [addTiers,     setAddTiers]     = useState([]);
   const [addDesigs,    setAddDesigs]    = useState([]);
+  const [isAddCvDragging, setIsAddCvDragging] = useState(false);
 
   // ── Edit dialog state ───────────────────────────────────────────────────────
   const [isEditOpen,   setIsEditOpen]   = useState(false);
@@ -181,6 +185,17 @@ const CandidatesPage = () => {
     await loadDesignsForTier(val, setAddDesigs);
   };
 
+  const selectAddCvFile = (file) => {
+    if (!file) return;
+    setAddForm((f) => ({ ...f, cvFile: file }));
+  };
+
+  const handleAddCvDrop = (event) => {
+    event.preventDefault();
+    setIsAddCvDragging(false);
+    selectAddCvFile(event.dataTransfer.files?.[0]);
+  };
+
   const handleAddSubmit = async () => {
     if (!addForm.name.trim() || !addForm.email.trim()) {
       toast({ title: 'Validation Error', description: 'Name and email are required', variant: 'destructive' });
@@ -193,7 +208,6 @@ const CandidatesPage = () => {
       departmentId:      addForm.departmentId              ? parseInt(addForm.departmentId) : null,
       targetDesignationId: addForm.targetDesignationId     ? parseInt(addForm.targetDesignationId) : null,
       yearsOfExperience: addForm.yearsOfExperience         ? parseInt(addForm.yearsOfExperience) : null,
-      resumeUrl:         addForm.resumeUrl?.trim()         || null,
       jdUrl:             addForm.jdUrl?.trim()             || null,
       jobReferenceCode:  addForm.jobReferenceCode?.trim()  || null,
       location:          addForm.location?.trim()          || null,
@@ -201,7 +215,10 @@ const CandidatesPage = () => {
     };
     setIsMutating(true);
     try {
-      await candidateAPI.createCandidate(payload);
+      const createdCandidate = await candidateAPI.createCandidate(payload);
+      if (addForm.cvFile) {
+        await candidateAPI.uploadCandidateDocument(createdCandidate.id, addForm.cvFile, 'CV');
+      }
       await applyFilters();
       setIsAddOpen(false);
       toast({ title: 'Success', description: 'Candidate added successfully' });
@@ -358,12 +375,33 @@ const CandidatesPage = () => {
         </Select>
       </div>
 
-      {/* Resume URL */}
+      {/* CV upload
       <div className="space-y-2 md:col-span-2">
-        <Label className="flex items-center gap-1"><Link className="w-3.5 h-3.5" /> Resume URL</Label>
-        <Input value={form.resumeUrl} onChange={(e) => setForm({ ...form, resumeUrl: e.target.value })}
-          placeholder="https://drive.google.com/..." disabled={isMutating} />
-      </div>
+        <Label className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> CV / Resume File</Label>
+        <div
+          className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-md border border-dashed px-4 py-5 text-center transition-colors ${
+            isAddCvDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 bg-muted/20'
+          } ${isMutating ? 'opacity-60' : ''}`}
+          onDragEnter={(e) => { e.preventDefault(); if (!isMutating) setIsAddCvDragging(true); }}
+          onDragOver={(e) => { e.preventDefault(); if (!isMutating) setIsAddCvDragging(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setIsAddCvDragging(false); }}
+          onDrop={isMutating ? undefined : handleAddCvDrop}
+        >
+          <Upload className="h-5 w-5 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {form.cvFile ? form.cvFile.name : 'Drop CV here'}
+            </p>
+            <p className="text-xs text-muted-foreground">PDF, DOC, or DOCX up to 10 MB</p>
+          </div>
+        </div>
+        <Input
+          type="file"
+          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={(e) => selectAddCvFile(e.target.files?.[0])}
+          disabled={isMutating}
+        />
+      </div> */}
 
       {/* JD URL */}
       <div className="space-y-2 md:col-span-2">
