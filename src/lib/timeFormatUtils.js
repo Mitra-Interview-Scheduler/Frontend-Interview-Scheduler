@@ -172,3 +172,4 @@ export const formatDateRange = (startDate, endDate, dateFormat = 'MMM dd') => {
     return '';
   }
 };
+

@@ -55,7 +55,48 @@ export const candidateAPI = {
   // Delete (deactivate) candidate
   deleteCandidate: async (id) => {
     await api.delete(`/candidates/${id}`);
-  }
+  },
+
+  getCandidateDocuments: async (candidateId) => {
+    const response = await api.get(`/candidates/${candidateId}/documents`);
+    return response.data;
+  },
+
+  uploadCandidateDocument: async (candidateId, file, documentType = 'CV') => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post(
+      `/candidates/${candidateId}/documents?documentType=${encodeURIComponent(documentType)}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  },
+
+  replaceCandidateDocument: async (candidateId, documentId, file, documentType = 'CV') => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.put(
+      `/candidates/${candidateId}/documents/${documentId}?documentType=${encodeURIComponent(documentType)}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  },
+
+  downloadCandidateDocument: async (candidateId, documentId) => {
+    const response = await api.get(
+      `/candidates/${candidateId}/documents/${documentId}/download`,
+      { responseType: 'blob' }
+    );
+    return response;
+  },
+
+  deleteCandidateDocument: async (candidateId, documentId) => {
+    await api.delete(`/candidates/${candidateId}/documents/${documentId}`);
+  },
 };
 
 export default candidateAPI;
