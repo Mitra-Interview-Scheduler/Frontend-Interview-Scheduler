@@ -33,6 +33,10 @@ import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
+import UpcomingCard from './components/UpcomingCard';
+import AddSlotDialog from './components/AddSlotDialog';
+import EditSlotDialog from './components/EditSlotDialog';
+import DeleteSlotDialog from './components/DeleteSlotDialog';
 
 // ── Calendar localizer ────────────────────────────────────────────────────────
 const localizer = dateFnsLocalizer({
@@ -96,29 +100,18 @@ const AvailabilityPage = () => {
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
-  const [startTime, setStartTime]         = useState('');
-  const [endTime, setEndTime]             = useState('');
-  const [description, setDescription]     = useState('');
-  const [addError, setAddError]           = useState(null);
+  const [startTime, setStartTime]         = useState('09:00');
+  const [endTime, setEndTime]             = useState('10:00');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editStart, setEditStart]         = useState('');
-  const [editEnd, setEditEnd]             = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editSaving, setEditSaving]       = useState(false);
-  const [editError, setEditError]         = useState(null);
 
   // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting]           = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [availablePage, setAvailablePage] = useState(1);
-  const [bookedPage, setBookedPage] = useState(1);
-// ... existing state
-  // ── Data loading ──────────────────────────────────────────────────────────
+  // ── Data loading 
   const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
