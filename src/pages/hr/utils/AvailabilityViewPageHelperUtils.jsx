@@ -2,7 +2,6 @@ import {format, parse, startOfWeek, getDay, addMinutes, startOfDay,} from 'date-
 import { dateFnsLocalizer } from 'react-big-calendar';
 import { INTERVIEWER_PALETTES, BOOKED_OVERLAY, PANEL_PALETTE } from './AvailabilityViewPageUiUtils';
 import enUS from 'date-fns/locale/en-US';
-import {localizer} from '@/lib/ReactBigCalenderUtils';
 
 
 
@@ -99,6 +98,10 @@ export const checkPanelPrivilege = (panelSlots, candidate) => {
     })
     .filter(Boolean);
 };
+
+export const localizer = dateFnsLocalizer({
+  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
+});
 
 
 

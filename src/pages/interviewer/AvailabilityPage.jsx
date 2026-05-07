@@ -37,7 +37,12 @@ import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
-import { localizer } from '@/lib/ReactBigCalenderUtils';
+
+
+// ── Calendar localizer ────────────────────────────────────────────────────────
+const localizer = dateFnsLocalizer({
+  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
+});
 
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
