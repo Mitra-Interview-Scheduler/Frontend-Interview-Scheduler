@@ -174,7 +174,7 @@ const UpcomingCard = ({
                   );
                 })
               )}
-              {availableUpcomingEvents.length > 0 && (
+              {availableUpcomingEvents.length > (UPCOMING_SLOTS_PER_PAGE - 1) && (
                 <div className="flex items-center justify-between pt-2 border-t mt-2">
                   <span className="text-[11px] text-muted-foreground">
                     Page {availablePage} of {availableTotalPages}
@@ -245,7 +245,7 @@ const UpcomingCard = ({
                   );
                 })
               )}
-              {bookedUpcomingEvents.length > 0 && (
+              {bookedUpcomingEvents.length > (UPCOMING_SLOTS_PER_PAGE-1) && (
                 <div className="flex items-center justify-between pt-2 border-t mt-2">
                   <span className="text-[11px] text-muted-foreground">
                     Page {bookedPage} of {bookedTotalPages}
@@ -280,7 +280,4 @@ const UpcomingCard = ({
   );
 };
 
-export default UpcomingCard;
-  );
-}
 export default UpcomingCard;

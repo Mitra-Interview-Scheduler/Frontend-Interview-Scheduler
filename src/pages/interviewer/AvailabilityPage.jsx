@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User,
-  Pencil, Save, X, CheckCircle2,
+  Pencil, Save, X, CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff,
 } from 'lucide-react';
 import Layout   from '@/components/layout/Layout';
 import TimePicker from '@/components/TimePicker';
@@ -37,11 +37,7 @@ import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
-
-// ── Calendar localizer ────────────────────────────────────────────────────────
-const localizer = dateFnsLocalizer({
-  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
-});
+import { localizer } from '@/lib/ReactBigCalenderUtils';
 
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -91,26 +87,82 @@ const getSlotStartError = (start) => {
   return null;
 };
 
+const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingSlots, onToggleUpcomingSlots }) => {
+  const viewList = Array.isArray(views) ? views : Object.keys(views || {});
+
+  return (
+    <div className="rbc-toolbar flex flex-col gap-3 px-2 py-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('PREV')} className="h-9 w-9 p-0">
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')} className="h-9 px-3 text-sm font-medium">
+          Today
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onNavigate('NEXT')} className="h-9 w-9 p-0">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <span className="rbc-toolbar-label text-base font-semibold text-foreground md:text-lg">{label}</span>
+
+      <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+        {viewList.map((availableView) => (
+          <Button
+            key={availableView}
+            variant={view === availableView ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => onView(availableView)}
+            className="h-9 px-3 capitalize"
+          >
+            {availableView}
+          </Button>
+        ))}
+        <Button
+          variant={showUpcomingSlots ? 'default' : 'outline'}
+          size="sm"
+          onClick={onToggleUpcomingSlots}
+          className="h-9 gap-2 px-3"
+        >
+         
+          {showUpcomingSlots ? 'Hide Upcoming' : 'Show Upcoming'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 const AvailabilityPage = () => {
   const calendarFormats = useCalendarFormats();
   const [events, setEvents]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
+  const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
   const [startTime, setStartTime]         = useState('09:00');
   const [endTime, setEndTime]             = useState('10:00');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [description, setDescription]     = useState('');
+  const [addError, setAddError]           = useState(null);
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editStart, setEditStart]         = useState('');
+  const [editEnd, setEditEnd]             = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editSaving, setEditSaving]       = useState(false);
+  const [editError, setEditError]         = useState(null);
 
   // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting]           = useState(false);
+  const [availablePage, setAvailablePage] = useState(1);
+  const [bookedPage, setBookedPage] = useState(1);
   // ── Data loading 
   const loadAvailability = useCallback(async () => {
     try {
@@ -375,6 +427,51 @@ const handleSelectSlot = ({ start, end }) => {
     setDeleteDialogOpen(true);
   };
 
+  const handleAddSuccess = useCallback(async (newSlot) => {
+    setEvents((prev) => [
+      ...prev,
+      {
+        id: newSlot.id,
+        title: newSlot.description || 'Available',
+        start: new Date(newSlot.startDateTime),
+        end: new Date(newSlot.endDateTime),
+        status: newSlot.status.toLowerCase(),
+        description: newSlot.description,
+      },
+    ]);
+    setSelectedDate(null);
+    setStartTime('09:00');
+    setEndTime('10:00');
+    setDescription('');
+    setAddError(null);
+    await loadStats();
+  }, [loadStats]);
+
+  const handleEditSuccess = useCallback(async (updated) => {
+    setEvents((prev) => prev.map((event) => (
+      event.id === updated.id
+        ? {
+            ...event,
+            title: updated.description || 'Available',
+            start: new Date(updated.startDateTime),
+            end: new Date(updated.endDateTime),
+            description: updated.description,
+          }
+        : event
+    )));
+    setEditDialogOpen(false);
+    setEditTarget(null);
+    await loadStats();
+  }, [loadStats]);
+
+  const handleDeleteSuccess = useCallback(async () => {
+    if (!deleteTarget) return;
+    setEvents((prev) => prev.filter((event) => event.id !== deleteTarget.id));
+    setDeleteDialogOpen(false);
+    setDeleteTarget(null);
+    await loadStats();
+  }, [deleteTarget, loadStats]);
+
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -538,6 +635,15 @@ const handleSelectSlot = ({ start, end }) => {
                         scrollToTime={new Date(1970, 0, 1, 8, 0)}
                         popup
                         showMultiDayTimes
+                        components={{
+                          toolbar: (toolbarProps) => (
+                            <CalendarToolbar
+                              {...toolbarProps}
+                              showUpcomingSlots={showUpcomingSlots}
+                              onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
+                            />
+                          ),
+                        }}
                         tooltipAccessor={(event) => {
                           if (event.status === 'booked')
                             return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
@@ -552,408 +658,65 @@ const handleSelectSlot = ({ start, end }) => {
             </Card>
           </motion.div>
 
-          {/* Sidebar */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ delay: 0.5 }}
-            className="flex-2 min-w-[420px] flex flex-col"
-          >
-
-               
-            <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
-              <CardHeader className="pb-3 bg-slate-50/50">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
-                </CardTitle>
-                
-                {/* INTEGRATED AVAILABILITY OVERVIEW */}
-                <div className="grid grid-cols-3 gap-1 mt-4 pt-4 border-t border-slate-200">
-                  <div className="text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Available</p>
-                    <p className="text-lg font-bold text-indigo-600">{stats.availableSlots}</p>
-                  </div>
-                  <div className="text-center border-x border-slate-200">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Booked</p>
-                    <p className="text-lg font-bold text-emerald-600">{stats.bookedSlots}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
-                    <p className="text-lg font-bold text-amber-600">
-                      {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="flex-grow flex flex-col overflow-hidden p-0">
-                <Tabs defaultValue="available" className="flex flex-col h-full">
-                  <TabsList className="w-full rounded-none border-b bg-slate-50 p-0">
-                    <TabsTrigger 
-                      value="available" 
-                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-white"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        <span className="text-sm font-semibold">Available</span>
-                        <Badge className="text-xs" variant="outline">{availableUpcomingEvents.length}</Badge>
-                      </div>
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="booked" 
-                      className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-white"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-sm font-semibold">Booked</span>
-                        <Badge className="text-xs" variant="outline">{bookedUpcomingEvents.length}</Badge>
-                      </div>
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Available Slots Tab */}
-                  <TabsContent value="available" className="flex-grow overflow-hidden p-3">
-                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {availableUpcomingEvents.length === 0 ? (
-                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
-                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
-                          <p className="text-xs text-muted-foreground font-medium">No available slots</p>
-                        </div>
-                      ) : (
-                        availablePageItems.map((event, index) => {
-                            const colors = STATUS_COLORS[event.status];
-                            return (
-                              <motion.div key={event.id}
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.04 }}
-                                className="group relative flex flex-col p-2.5 rounded-xl border-2 border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all cursor-pointer"
-                                onClick={() => handleEventClick(event)}>
-                                
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
-                                  
-                                </div>
-
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-                                  <Clock className="w-3 h-3" />
-                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                                </div>
-
-                                {event.description && (
-                                  <p className="text-[10px] text-slate-600 mt-1 truncate">{event.description}</p>
-                                )}
-
-                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-indigo-100" onClick={(e) => { e.stopPropagation(); handleEventClick(event); }}>
-                                    <Pencil className="w-4 h-4 text-indigo-600" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-red-100" onClick={(e) => openDeleteDialog(event, e)}>
-                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                  </Button>
-                                </div>
-                              </motion.div>
-                            );
-                          })
-                      )}
-                      {availableUpcomingEvents.length > 0 && (
-                        <div className="flex items-center justify-between pt-2 border-t mt-2">
-                          <span className="text-[11px] text-muted-foreground">
-                            Page {availablePage} of {availableTotalPages}
-                          </span>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              disabled={availablePage === 1}
-                              onClick={() => setAvailablePage((p) => Math.max(1, p - 1))}
-                            >
-                              Prev
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              disabled={availablePage === availableTotalPages}
-                              onClick={() => setAvailablePage((p) => Math.min(availableTotalPages, p + 1))}
-                            >
-                              Next
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  {/* Booked Slots Tab */}
-                  <TabsContent value="booked" className="flex-grow overflow-hidden p-3">
-                    <div className="flex-grow overflow-y-auto pr-1 space-y-2 custom-scrollbar h-full">
-                      {bookedUpcomingEvents.length === 0 ? (
-                        <div className="text-center py-10 flex flex-col items-center justify-center h-full">
-                          <CalendarIcon className="w-8 h-8 mb-2 text-slate-300" />
-                          <p className="text-xs text-muted-foreground font-medium">No booked slots</p>
-                        </div>
-                      ) : (
-                        bookedPageItems.map((event, index) => {
-                            const colors = STATUS_COLORS[event.status];
-                            return (
-                              <motion.div key={event.id}
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.04 }}
-                                className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all">
-                                
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
-                                  <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
-                                    Booked
-                                  </Badge>
-                                </div>
-
-                                <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-                                  <Clock className="w-3 h-3" />
-                                  {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
-                                </div>
-
-                                {event.candidateName && (
-                                  <div className="mt-1.5 flex items-center gap-1 bg-emerald-100 p-1.5 rounded border border-emerald-200">
-                                    <User className="w-3 h-3 text-emerald-700" />
-                                    <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
-                                  </div>
-                                )}
-                              </motion.div>
-                            );
-                          })
-                      )}
-                      {bookedUpcomingEvents.length > 0 && (
-                        <div className="flex items-center justify-between pt-2 border-t mt-2">
-                          <span className="text-[11px] text-muted-foreground">
-                            Page {bookedPage} of {bookedTotalPages}
-                          </span>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              disabled={bookedPage === 1}
-                              onClick={() => setBookedPage((p) => Math.max(1, p - 1))}
-                            >
-                              Prev
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              disabled={bookedPage === bookedTotalPages}
-                              onClick={() => setBookedPage((p) => Math.min(bookedTotalPages, p + 1))}
-                            >
-                              Next
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-
-
-
-
-            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-            <DialogContent >
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-indigo-700">
-                  <Plus className="w-5 h-5" /> Add Availability Slot
-                </DialogTitle>
-                <DialogDescription>
-                  Set your available time range for interviews.
-                </DialogDescription>
-              </DialogHeader>
-
-              <DialogBody >
-                {selectedDate && (
-                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                    <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
-                      <CalendarIcon className="w-4 h-4" />
-                      {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
-                    </p>
-                  </div>
-                )}
-
-                {addError && (
-                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-red-700">{addError}</p>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label className="font-semibold">Description (Optional)</Label>
-                  <Input
-                    placeholder="e.g., Technical Interview"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 ">
-                  <TimePicker
-                    value={startTime}
-                    onChange={setStartTime}
-                    label="Start Time"
-                  />
-                  <TimePicker
-                    value={endTime}
-                    onChange={setEndTime}
-                    label="End Time"
-                  />
-                </div>
-              </DialogBody>
-
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-                <Button 
-                  onClick={async () => {
-                    await handleAddSlot();
-                    setAddDialogOpen(false); // Close on success
-                  }} 
-                  disabled={!!addError || !selectedDate}
-                  className="bg-indigo-600 hover:bg-indigo-700"
-                >
-                  Create Slot
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          </motion.div>
-          
+          {showUpcomingSlots && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
+              className="min-w-0"
+            >
+              <UpcomingCard
+                events={events}
+                stats={stats}
+                onEventClick={handleEventClick}
+                onDeleteClick={openDeleteDialog}
+              />
+            </motion.div>
+          )}
         </div>
+
       </div>
 
-      {/* ══ EDIT SLOT DIALOG ═══════════════════════════════════════════════ */}
-      <Dialog open={editDialogOpen} onOpenChange={(o) => { if (!editSaving) setEditDialogOpen(o); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-indigo-700">
-              <Pencil className="w-5 h-5" /> Edit Availability Slot
-            </DialogTitle>
-            <DialogDescription>
-              Update the time range or description. Booked slots cannot be edited.
-            </DialogDescription>
-          </DialogHeader>
+      <AddSlotDialog
+        isOpen={addDialogOpen}
+        onOpenChange={(open) => {
+          setAddDialogOpen(open);
+          if (!open) setSelectedDate(null);
+        }}
+        selectedDate={selectedDate}
+        defaultStartTime={startTime}
+        defaultEndTime={endTime}
+        onSuccess={handleAddSuccess}
+        getSlotStartError={getSlotStartError}
+      />
 
-          {editTarget && (
-            <DialogBody className="space-y-4 py-2">
-              <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
-                <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
-                <p className="font-semibold text-sm">{format(editTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
-                <p className="text-xs text-indigo-600 mt-0.5">
-                  Currently: {format(editTarget.start, 'HH:mm')} – {format(editTarget.end, 'HH:mm')}
-                </p>
-              </div>
+      <EditSlotDialog
+        isOpen={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditTarget(null);
+        }}
+        slot={editTarget}
+        onSuccess={handleEditSuccess}
+        onDelete={() => {
+          setEditDialogOpen(false);
+          if (editTarget) {
+            setDeleteTarget(editTarget);
+            setDeleteDialogOpen(true);
+          }
+        }}
+        getSlotStartError={getSlotStartError}
+      />
 
-              {editError && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-red-700">{editError}</p>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label className="font-semibold">Description (Optional)</Label>
-                <Input
-                  placeholder="e.g., Technical Interview, Code Review"
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="border-2 focus:border-indigo-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <TimePicker
-                  value={editStart}
-                  onChange={setEditStart}
-                  label="Start Time"
-                />
-                <TimePicker
-                  value={editEnd}
-                  onChange={setEditEnd}
-                  label="End Time"
-                />
-              </div>
-
-              {editStart && editEnd && editEnd > editStart && !editError && (
-                <div className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                  <p className="text-sm text-green-800">
-                    <strong>New window:</strong>{' '}
-                    {format(parseTimeOnDate(editStart, editTarget.start), 'h:mm a')} –{' '}
-                    {format(parseTimeOnDate(editEnd,   editTarget.start), 'h:mm a')} on{' '}
-                    {format(editTarget.start, 'MMM dd')}
-                  </p>
-                </div>
-              )}
-            </DialogBody>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSaving}>Cancel</Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => {
-                setEditDialogOpen(false);
-                openDeleteDialog(editTarget);
-              }} 
-              disabled={editSaving}
-              className="gap-2"
-            >
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-            <Button onClick={handleEditSave} disabled={editSaving || !!editError || editEnd <= editStart}
-              className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-              {editSaving
-                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
-                : <><Save className="w-4 h-4" /> Save Changes</>
-              }
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ══ DELETE CONFIRM DIALOG ═════════════════════════════════════════ */}
-      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { if (!deleting) setDeleteDialogOpen(o); }}>
-        <DialogContent >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-700">
-              <Trash2 className="w-5 h-5" /> Delete Slot
-            </DialogTitle>
-            <DialogDescription>
-              This will permanently remove the availability slot. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogBody >
-          {deleteTarget && (
-            <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
-              <p className="font-semibold text-sm">{format(deleteTarget.start, 'EEEE, MMMM dd, yyyy')}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {format(deleteTarget.start, 'HH:mm')} – {format(deleteTarget.end, 'HH:mm')}
-              </p>
-            </div>
-          )}
-          </DialogBody>
-          <DialogFooter >
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Keep Slot</Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting} className="gap-2">
-              {deleting
-                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Deleting…</>
-                : <><Trash2 className="w-4 h-4" /> Delete Slot</>
-              }
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSlotDialog
+        isOpen={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteTarget(null);
+        }}
+        slot={deleteTarget}
+        onSuccess={handleDeleteSuccess}
+      />
     </Layout>
   );
 };

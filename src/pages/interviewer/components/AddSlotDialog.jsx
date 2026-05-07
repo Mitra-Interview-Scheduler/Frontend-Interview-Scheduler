@@ -48,6 +48,7 @@ const AddSlotDialog = ({
   const handleCreate = async () => {
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
+    const now = new Date();
     
     const start = new Date(selectedDate);
     start.setHours(sh, sm, 0, 0);
@@ -65,6 +66,7 @@ const AddSlotDialog = ({
       const newSlot = await availabilityAPI.createAvailabilitySlot({
         startDateTime: start,
         endDateTime: end,
+        currentTime: now,
         description: description || null,
       });
 
