@@ -174,6 +174,11 @@ const AvailabilityPage = () => {
       setStats(data);
     } catch (error) {
       console.error('Failed to load stats:', error);
+       toast({
+        title: 'Error loading stats',
+        description: error.response?.data?.message || 'Failed to load availability statistics',
+        variant: 'destructive',
+      });
     }
   }, []);
 
@@ -347,7 +352,7 @@ const handleSelectSlot = ({ start, end }) => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
-      <div className="space-y-6 pb-8">
+      <div className="space-y-6 pb-1">
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}

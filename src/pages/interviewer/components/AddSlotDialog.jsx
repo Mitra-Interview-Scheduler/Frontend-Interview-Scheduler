@@ -8,6 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import TimePicker from '@/components/TimePicker';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
 
@@ -122,27 +123,20 @@ const AddSlotDialog = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="font-semibold text-sm">Start Time</Label>
-              <Input 
-                type="time" 
-                value={startTime} 
-                onChange={(e) => setStartTime(e.target.value)} 
-                className="border-2"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="font-semibold text-sm">End Time</Label>
-              <Input 
-                type="time" 
-                value={endTime} 
-                onChange={(e) => setEndTime(e.target.value)} 
-                className="border-2"
-              />
-            </div>
-          </div>
-        </div>
+          <div className="grid grid-cols-2 gap-3">
+                  <TimePicker
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                     label="Start Time"
+                  />
+                  <TimePicker
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    label="End Time"
+                  />
+                </div>
+              </div>
+        
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

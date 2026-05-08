@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const UPCOMING_SLOTS_PER_PAGE = 5;
+const UPCOMING_SLOTS_PER_PAGE = 10;
 
 const STATUS_COLORS = {
   available: {
@@ -73,7 +73,7 @@ const UpcomingCard = ({
         </CardTitle>
 
         {/* INTEGRATED AVAILABILITY OVERVIEW */}
-        <div className="grid grid-cols-3 gap-1 mt-4 pt-4 border-t border-slate-200">
+        <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-200">
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Available</p>
             <p className="text-lg font-bold text-indigo-600">{stats.availableSlots}</p>
@@ -88,10 +88,10 @@ const UpcomingCard = ({
               {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
             </p>
           </div>
-        </div>
+        </div> 
       </CardHeader>
 
-      <CardContent className="flex-grow flex flex-col overflow-hidden p-0">
+      <CardContent className="flex-grow flex flex-col overflow-hidden p-2 max-h-[60vh]">
         <Tabs defaultValue="available" className="flex flex-col h-full">
           <TabsList className="w-full rounded-none border-b bg-slate-50 p-0">
             <TabsTrigger
