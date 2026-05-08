@@ -126,7 +126,6 @@ const UpcomingCard = ({
                 </div>
               ) : (
                 availablePageItems.map((event, index) => {
-                  const colors = STATUS_COLORS[event.status];
                   return (
                     <motion.div
                       key={event.id}
