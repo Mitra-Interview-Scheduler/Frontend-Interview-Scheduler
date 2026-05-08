@@ -127,8 +127,8 @@ const AvailabilityPage = () => {
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
-  const [startTime, setStartTime]         = useState('09:00');
-  const [endTime, setEndTime]             = useState('10:00');
+  const [startTime, setStartTime]         = useState('');
+  const [endTime, setEndTime]             = useState('');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   // Edit-slot state
@@ -155,6 +155,7 @@ const AvailabilityPage = () => {
           description:         slot.description,
           candidateName:       slot.candidateName,
           interviewScheduleId: slot.interviewScheduleId,
+          durationHours :      slot.durationHours,
         }))
       );
     } catch (error) {
@@ -200,11 +201,11 @@ const handleSelectSlot = ({ start, end }) => {
   let startDate = new Date(start);
   let endDate = new Date(end);
 
-  // Month view/Midnight fix
-  if (startDate.getHours() === 0 && startDate.getMinutes() === 0) {
-    startDate.setHours(9, 0, 0, 0);
-    endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-  }
+  // // Month view/Midnight fix
+  // if (startDate.getHours() === 0 && startDate.getMinutes() === 0 && view === 'month') {
+  //   startDate.setHours(0, 0, 0, 0);
+  //   endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  // }
 
   // Same-day buffer
   if (isSameDay(startDate, now)) {
@@ -259,8 +260,8 @@ const handleSelectSlot = ({ start, end }) => {
       },
     ]);
     setSelectedDate(null);
-    setStartTime('09:00');
-    setEndTime('10:00');
+    setStartTime('');
+    setEndTime('');
     await loadStats();
   }, [loadStats]);
 
@@ -457,7 +458,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={addDialogOpen}
         onOpenChange={(open) => {
           setAddDialogOpen(open);
-          if (!open) setSelectedDate(null);
+          // if (!open) setSelectedDate(null);
         }}
         selectedDate={selectedDate}
         defaultStartTime={startTime}
@@ -470,7 +471,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={editDialogOpen}
         onOpenChange={(open) => {
           setEditDialogOpen(open);
-          if (!open) setEditTarget(null);
+          // if (!open) setEditTarget(null);
         }}
         slot={editTarget}
         onSuccess={handleEditSuccess}
@@ -488,7 +489,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={deleteDialogOpen}
         onOpenChange={(open) => {
           setDeleteDialogOpen(open);
-          if (!open) setDeleteTarget(null);
+          // if (!open) setDeleteTarget(null);
         }}
         slot={deleteTarget}
         onSuccess={handleDeleteSuccess}

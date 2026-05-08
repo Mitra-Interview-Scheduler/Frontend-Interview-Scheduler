@@ -12,7 +12,6 @@ import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
 import TimePicker from '@/components/TimePicker';
 
-
 const parseTimeOnDate = (timeStr, referenceDate) => {
   const [h, m] = timeStr.split(':').map(Number);
   const d = new Date(referenceDate);
@@ -163,19 +162,18 @@ const EditSlotDialog = ({
               />
             </div>
 
-               <div className="grid grid-cols-2 gap-3">
-                  <TimePicker
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    label="Start Time"
-                  />
-                  <TimePicker
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    label="End Time"
-                  />
-                </div>
-                          
+           <div className="grid grid-cols-2 gap-3">
+              <TimePicker
+                value={startTime}
+                onChange={setStartTime}
+                label="Start Time"
+              />
+              <TimePicker
+                value={endTime}
+                onChange={setEndTime}
+                label="End Time"
+              />
+            </div>
 
             {startTime && endTime && endTime > startTime && !error && (
               <div className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2">

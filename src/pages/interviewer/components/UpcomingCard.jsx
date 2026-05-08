@@ -65,12 +65,20 @@ const UpcomingCard = ({
     bookedPage * UPCOMING_SLOTS_PER_PAGE
   );
 
+
+  console.log('Upcoming Events:', upcomingEvents);
+  
+  const totalUpcomingHours = upcomingEvents.reduce(
+    (sum, e) => sum + (e.durationHours || 0), 0
+  );
+
   return (
     <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
       <CardHeader className="pb-3 bg-slate-50/50">
         <CardTitle className="text-lg flex items-center gap-2">
           <Clock className="w-5 h-5 text-indigo-500" /> Upcoming Slots
         </CardTitle>
+        
 
         {/* INTEGRATED AVAILABILITY OVERVIEW */}
         <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-200">
@@ -84,9 +92,9 @@ const UpcomingCard = ({
           </div>
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
-            <p className="text-lg font-bold text-amber-600">
-              {Math.round((stats.availableSlots + stats.bookedSlots) * 1.5)}h
-            </p>
+             <p className="text-lg font-bold text-amber-600">
+              {totalUpcomingHours}h
+            </p> 
           </div>
         </div> 
       </CardHeader>
