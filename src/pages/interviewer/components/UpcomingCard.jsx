@@ -66,7 +66,6 @@ const UpcomingCard = ({
   );
 
 
-  console.log('Upcoming Events:', upcomingEvents);
   
   const totalUpcomingHours = upcomingEvents.reduce(
     (sum, e) => sum + (e.durationHours || 0), 0
