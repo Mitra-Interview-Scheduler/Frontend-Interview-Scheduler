@@ -2,33 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import {
   format, parse, startOfWeek, getDay,
-  addHours, isSameDay, startOfDay, isAfter, isBefore,
+  addHours, isSameDay, startOfDay, isBefore,
 } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './AvailabilityCalendar.css';
 
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card, CardContent,
 } from '@/components/ui/card';
 import { Button }   from '@/components/ui/button';
-import { Label }    from '@/components/ui/label';
-import { Input }    from '@/components/ui/input';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Badge }    from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogBody,
-} from '@/components/ui/dialog';
-import {
-  Plus, Clock, Trash2, Calendar as CalendarIcon, AlertCircle, User,
-  Pencil, Save, X, CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import Layout   from '@/components/layout/Layout';
-import TimePicker from '@/components/TimePicker';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
@@ -59,15 +46,8 @@ const STATUS_COLORS = {
     border:'#92400e', solid:'#f59e0b', label:'Blocked',
   },
 };
-const UPCOMING_SLOTS_PER_PAGE = 5;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const parseTimeOnDate = (timeStr, referenceDate) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  const d = new Date(referenceDate);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
 
 /** Returns true when the date is strictly before today (midnight normalised). */
 const isPastDay = (date) => {
@@ -147,27 +127,17 @@ const AvailabilityPage = () => {
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
-  const [startTime, setStartTime]         = useState('09:00');
-  const [endTime, setEndTime]             = useState('10:00');
+  const [startTime, setStartTime]         = useState('');
+  const [endTime, setEndTime]             = useState('');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [description, setDescription]     = useState('');
-  const [addError, setAddError]           = useState(null);
 
   // Edit-slot state
   const [editTarget, setEditTarget]       = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editStart, setEditStart]         = useState('');
-  const [editEnd, setEditEnd]             = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editSaving, setEditSaving]       = useState(false);
-  const [editError, setEditError]         = useState(null);
 
   // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting]           = useState(false);
-  const [availablePage, setAvailablePage] = useState(1);
-  const [bookedPage, setBookedPage] = useState(1);
   // ── Data loading 
   const loadAvailability = useCallback(async () => {
     try {
@@ -185,6 +155,7 @@ const AvailabilityPage = () => {
           description:         slot.description,
           candidateName:       slot.candidateName,
           interviewScheduleId: slot.interviewScheduleId,
+          durationHours :      slot.durationHours,
         }))
       );
     } catch (error) {
@@ -204,6 +175,11 @@ const AvailabilityPage = () => {
       setStats(data);
     } catch (error) {
       console.error('Failed to load stats:', error);
+       toast({
+        title: 'Error loading stats',
+        description: error.response?.data?.message || 'Failed to load availability statistics',
+        variant: 'destructive',
+      });
     }
   }, []);
 
@@ -212,22 +188,6 @@ const AvailabilityPage = () => {
     loadStats();
   }, [loadAvailability, loadStats]);
 
-  // Re-validate the add-form whenever selected date or start time changes
-  useEffect(() => {
-    if (!selectedDate) { setAddError(null); return; }
-    const [sh, sm] = startTime.split(':').map(Number);
-    const start = new Date(
-      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm
-    );
-    setAddError(getSlotStartError(start));
-  }, [selectedDate, startTime]);
-
-  // Re-validate edit form
-  useEffect(() => {
-    if (!editTarget) { setEditError(null); return; }
-    const newStart = parseTimeOnDate(editStart, editTarget.start);
-    setEditError(getSlotStartError(newStart));
-  }, [editTarget, editStart]);
 
 
   
@@ -241,11 +201,11 @@ const handleSelectSlot = ({ start, end }) => {
   let startDate = new Date(start);
   let endDate = new Date(end);
 
-  // Month view/Midnight fix
-  if (startDate.getHours() === 0 && startDate.getMinutes() === 0) {
-    startDate.setHours(9, 0, 0, 0);
-    endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-  }
+  // // Month view/Midnight fix
+  // if (startDate.getHours() === 0 && startDate.getMinutes() === 0 && view === 'month') {
+  //   startDate.setHours(0, 0, 0, 0);
+  //   endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  // }
 
   // Same-day buffer
   if (isSameDay(startDate, now)) {
@@ -277,152 +237,7 @@ const handleSelectSlot = ({ start, end }) => {
     }
 
     setEditTarget(event);
-    setEditStart(format(event.start, 'HH:mm'));
-    setEditEnd(format(event.end, 'HH:mm'));
-    setEditDescription(
-      event.description &&
-      !event.description.startsWith('Interview:') &&
-      !event.description.startsWith('Panel Interview:')
-        ? event.description : ''
-    );
     setEditDialogOpen(true);
-  };
-
-  // ── Add slot ──────────────────────────────────────────────────────────────
-  const handleAddSlot = async () => {
-    if (!selectedDate) {
-      toast({ title: 'No date selected', description: 'Click a date on the calendar first', variant: 'destructive' });
-      return;
-    }
-
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-
-    const now = new Date();
-    const [ch, cm] = [now.getHours(), now.getMinutes()];
-    const currentDate = new Date(
-      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
-    );
-
-    const start = new Date(
-      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), sh, sm, 0, 0
-    );
-    const end = new Date(
-      selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), eh, em, 0, 0
-    );
-
-  
-
-    // Client-side validation (mirrors backend)
-    const startErr = getSlotStartError(start);
-    if (startErr) {
-      toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
-      return;
-    }
-    if (end <= start) {
-      toast({ title: 'End time must be after start time', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      const newSlot = await availabilityAPI.createAvailabilitySlot({
-        startDateTime: start,
-        endDateTime:   end,
-        currentTime: currentDate,
-        description:   description || null,
-      });
-      setEvents((prev) => [
-        ...prev,
-        {
-          id:          newSlot.id,
-          title:       newSlot.description || 'Available',
-          start:       new Date(newSlot.startDateTime),
-          end:         new Date(newSlot.endDateTime),
-          status:      newSlot.status.toLowerCase(),
-          description: newSlot.description,
-        },
-      ]);
-      setSelectedDate(null);
-      setStartTime('09:00');
-      setEndTime('10:00');
-      setDescription('');
-      setAddError(null);
-      await loadStats();
-      toast({
-        title: '✓ Time slot added',
-        description: `${format(start, 'MMM dd, yyyy')} · ${format(start, 'HH:mm')} – ${format(end, 'HH:mm')}`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Failed to add slot',
-        description: error.response?.data?.message || 'This time slot may conflict with existing availability',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // ── Edit slot (save) ──────────────────────────────────────────────────────
-  const handleEditSave = async () => {
-    if (!editTarget) return;
-    const refDate  = editTarget.start;
-    const newStart = parseTimeOnDate(editStart, refDate);
-    const newEnd   = parseTimeOnDate(editEnd,   refDate);
-
-    
-    const now = new Date();
-    const [ch, cm] = [now.getHours(), now.getMinutes()];
-    const currentDate = new Date(
-      now.getFullYear(),now.getMonth(), now.getDate(),ch,cm,0, 0
-    );
-
-    const startErr = getSlotStartError(newStart);
-    if (startErr) {
-      toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
-      return;
-    }
-    if (newEnd <= newStart) {
-      toast({ title: 'End time must be after start time', variant: 'destructive' });
-      return;
-    }
-
-    setEditSaving(true);
-    try {
-      const updated = await availabilityAPI.updateAvailabilitySlot(editTarget.id, {
-        startDateTime: newStart,
-        endDateTime:   newEnd,
-        currentTime:   currentDate,
-        description:   editDescription || null,
-      });
-
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === editTarget.id
-            ? {
-                ...e,
-                title:       updated.description || 'Available',
-                start:       new Date(updated.startDateTime),
-                end:         new Date(updated.endDateTime),
-                description: updated.description,
-              }
-            : e
-        )
-      );
-
-      setEditDialogOpen(false);
-      setEditTarget(null);
-      toast({
-        title: '✓ Slot updated',
-        description: `${format(new Date(updated.startDateTime), 'MMM dd, yyyy')} · ${format(new Date(updated.startDateTime), 'HH:mm')} – ${format(new Date(updated.endDateTime), 'HH:mm')}`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Failed to update slot',
-        description: error.response?.data?.message || 'Could not update slot',
-        variant: 'destructive',
-      });
-    } finally {
-      setEditSaving(false);
-    }
   };
 
   // ── Delete slot ───────────────────────────────────────────────────────────
@@ -445,10 +260,8 @@ const handleSelectSlot = ({ start, end }) => {
       },
     ]);
     setSelectedDate(null);
-    setStartTime('09:00');
-    setEndTime('10:00');
-    setDescription('');
-    setAddError(null);
+    setStartTime('');
+    setEndTime('');
     await loadStats();
   }, [loadStats]);
 
@@ -477,26 +290,6 @@ const handleSelectSlot = ({ start, end }) => {
     await loadStats();
   }, [deleteTarget, loadStats]);
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await availabilityAPI.deleteAvailabilitySlot(deleteTarget.id);
-      setEvents((prev) => prev.filter((e) => e.id !== deleteTarget.id));
-      await loadStats();
-      setDeleteDialogOpen(false);
-      setDeleteTarget(null);
-      toast({ title: '✓ Time slot deleted' });
-    } catch (error) {
-      toast({
-        title: 'Failed to delete slot',
-        description: error.response?.data?.message || 'Cannot delete booked slots',
-        variant: 'destructive',
-      });
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
@@ -556,32 +349,11 @@ const handleSelectSlot = ({ start, end }) => {
     return {};
   };
 
-  // ── Derived list ──────────────────────────────────────────────────────────
-  const upcomingEvents = events
-    .filter((e) => isAfter(new Date(e.start), new Date()))
-    .sort((a, b) => new Date(a.start) - new Date(b.start));
-  const availableUpcomingEvents = upcomingEvents.filter((e) => e.status === 'available');
-  const bookedUpcomingEvents = upcomingEvents.filter((e) => e.status === 'booked');
-  const availableTotalPages = Math.max(1, Math.ceil(availableUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
-  const bookedTotalPages = Math.max(1, Math.ceil(bookedUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
-  const availablePageItems = availableUpcomingEvents.slice(
-    (availablePage - 1) * UPCOMING_SLOTS_PER_PAGE,
-    availablePage * UPCOMING_SLOTS_PER_PAGE
-  );
-  const bookedPageItems = bookedUpcomingEvents.slice(
-    (bookedPage - 1) * UPCOMING_SLOTS_PER_PAGE,
-    bookedPage * UPCOMING_SLOTS_PER_PAGE
-  );
-
-  useEffect(() => {
-    if (availablePage > availableTotalPages) setAvailablePage(availableTotalPages);
-    if (bookedPage > bookedTotalPages) setBookedPage(bookedTotalPages);
-  }, [availablePage, bookedPage, availableTotalPages, bookedTotalPages]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
-      <div className="space-y-6 pb-8">
+      <div className="space-y-6 pb-1">
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
@@ -686,7 +458,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={addDialogOpen}
         onOpenChange={(open) => {
           setAddDialogOpen(open);
-          if (!open) setSelectedDate(null);
+          // if (!open) setSelectedDate(null);
         }}
         selectedDate={selectedDate}
         defaultStartTime={startTime}
@@ -699,7 +471,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={editDialogOpen}
         onOpenChange={(open) => {
           setEditDialogOpen(open);
-          if (!open) setEditTarget(null);
+          // if (!open) setEditTarget(null);
         }}
         slot={editTarget}
         onSuccess={handleEditSuccess}
@@ -717,7 +489,7 @@ const handleSelectSlot = ({ start, end }) => {
         isOpen={deleteDialogOpen}
         onOpenChange={(open) => {
           setDeleteDialogOpen(open);
-          if (!open) setDeleteTarget(null);
+          // if (!open) setDeleteTarget(null);
         }}
         slot={deleteTarget}
         onSuccess={handleDeleteSuccess}
