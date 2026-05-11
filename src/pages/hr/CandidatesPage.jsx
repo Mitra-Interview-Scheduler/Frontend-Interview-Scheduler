@@ -386,6 +386,12 @@ const CandidatesPage = () => {
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}
           onEdit={handleViewToEdit}
+          onSchedule={() => {
+            setIsEditOpen(false);
+            if (selectedCandidate) {
+              handleOpenInterviewSchedulePage(selectedCandidate);
+            }
+          }}
         />
 
 <CandidateInterviewSchedulePage

@@ -9,7 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Download, FileText, Hash, Link, Loader2, MapPin, Trash2, TrendingUp, Award, Upload } from 'lucide-react';
+import { Download, FileText, Hash, Link, Loader2, MapPin, Trash2, TrendingUp, Award, Upload, CalendarClock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -37,6 +37,7 @@ function CandidateEditDialog({
   onSaveSuccess,
   readOnly = false,
   onEdit,
+  onSchedule,
   mode = 'edit'
 }) {
   const isCreate = mode === 'create';
@@ -275,14 +276,15 @@ function CandidateEditDialog({
   };
 
   const handleClose = () => {
-    setForm(EMPTY_FORM);
+    onOpenChange(false);
     setError('');
     setSaving(false);
     setDocuments([]);
     setDocumentFile(null);
     setDocumentType('CV');
     setIsUploadDragging(false);
-    onOpenChange(false);
+    setForm(EMPTY_FORM);
+
   };
 
   return (
@@ -662,8 +664,12 @@ function CandidateEditDialog({
         <DialogFooter>
           {readOnly ? (
             <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {/* <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Close
+              </Button> */}
+              <Button variant="outline" onClick={onSchedule} className="gap-2">
+                <CalendarClock className="w-4 h-4" />
+                Schedule Interview
               </Button>
               <Button onClick={onEdit} className="gap-2">
                 Edit Candidate
