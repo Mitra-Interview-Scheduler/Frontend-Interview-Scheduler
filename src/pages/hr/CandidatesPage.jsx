@@ -12,6 +12,7 @@ import { Button }   from '@/components/ui/button';
 import { Input }    from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge }    from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -174,6 +175,11 @@ const CandidatesPage = () => {
 
   const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
 
+  const getInitial = (name) => {
+    if (!name || typeof name !== 'string') return 'C';
+    return name.trim().charAt(0).toUpperCase() || 'C';
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
@@ -238,32 +244,39 @@ const CandidatesPage = () => {
                     transition={{ delay: index * 0.03 }}>
                     <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                       <CardContent className="p-3">
-                        <div className="flex items-center gap-4">
+                        <div className="grid grid-cols-12 gap-3 md:gap-4 items-start md:items-center w-full">
+                          <div className="col-span-12 md:col-span-4 flex items-center gap-3 min-w-0">
+                            <Avatar className="h-9 w-9 border border-border shrink-0">
+                              <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                                {getInitial(candidate.name)}
+                              </AvatarFallback>
+                            </Avatar>
 
-                          {/* Name + status */}
-                          <div className="w-48 shrink-0">
-                            <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
-                            <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs mt-1`}>
-                              {candidate.status.replace(/_/g, ' ')}
-                            </Badge>
-                          </div>
-
-                          {/* Contact */}
-                          <div className="flex-1 min-w-0 flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <Mail className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.email}</span>
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
+                              <p className="text-xs text-muted-foreground truncate">{candidate.departmentName || candidate.targetDesignationName || candidate.email}</p>
                             </div>
-                            {candidate.phone && (
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                                <span>{candidate.phone}</span>
-                              </div>
-                            )}
+                            <div className="ml-auto md:ml-1 shrink-0 ">
+                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}>{candidate.status.replace(/_/g, ' ')}</Badge>
+                            </div>
                           </div>
 
-                          {/* Designation / tier / location / ref code */}
-                          <div className="hidden lg:flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="col-span-12 md:col-span-3 text-sm text-muted-foreground">
+                            <div className="flex flex-col md:flex-row md:items-center md:gap-6">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{candidate.email}</span>
+                              </div>
+                              {candidate.phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="w-4 h-4 text-muted-foreground" />
+                                  <span className="truncate">{candidate.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="col-span-12 lg:col-span-3 hidden lg:flex items-center gap-4 text-sm text-muted-foreground">
                             {candidate.targetDesignationName && (
                               <div className="whitespace-nowrap">
                                 <span className="font-medium text-foreground">{candidate.targetDesignationName}</span>
@@ -282,21 +295,16 @@ const CandidatesPage = () => {
                                 <span className="text-xs">{candidate.jobReferenceCode}</span>
                               </div>
                             )}
-                            {candidate.departmentName && (
-                              <span className="whitespace-nowrap text-xs">{candidate.departmentName}</span>
-                            )}
                             {candidate.yearsOfExperience && (
                               <span className="whitespace-nowrap text-xs">{candidate.yearsOfExperience}y exp</span>
                             )}
                           </div>
 
-                          {/* Applied date */}
-                          <div className="hidden xl:block text-xs text-muted-foreground whitespace-nowrap w-24 text-right">
-                            {new Date(candidate.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          <div className="col-span-6 md:col-span-1 text-xs text-muted-foreground text-left md:text-right pt-1 md:pt-0">
+                            {candidate.appliedAt ? new Date(candidate.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                           </div>
 
-                          {/* Action buttons */}
-                          <div className="flex gap-1.5 shrink-0">
+                          <div className="col-span-6 md:col-span-1 flex justify-end md:justify-end gap-1.5">
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenEdit(candidate); }} disabled={loading} title="Edit">
                               <Edit className="w-3.5 h-3.5" />
