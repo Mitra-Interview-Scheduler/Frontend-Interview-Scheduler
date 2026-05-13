@@ -24,6 +24,7 @@ import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
+import InterviewStartDialog from './components/InterviewStartDialog';
 
 
 // ── Calendar localizer ────────────────────────────────────────────────────────
@@ -138,13 +139,21 @@ const AvailabilityPage = () => {
   // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Interview start dialog state
+  const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
+  const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   // ── Data loading 
   const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
       const data = await availabilityAPI.getMyAvailability();
+              console.log('Loaded availability:', data)
+
       setEvents(
+        
         data.map((slot) => ({
+          
           id:                  slot.id,
           title: slot.status === 'BOOKED'
             ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
@@ -227,12 +236,10 @@ const handleSelectSlot = ({ start, end }) => {
 /** Clicking an existing event. */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
-      toast({
-        title: '🔒 Interview Scheduled',
-        description: event.candidateName
-          ? `Candidate: ${event.candidateName} · ${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`
-          : `${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`,
-      });
+      // Open interview start dialog for booked events
+      setSelectedInterviewScheduleId(event.interviewScheduleId);
+      console.log('Opening interview start dialog for schedule ID:', event.interviewScheduleId);
+      setIsInterviewStartDialogOpen(true);
       return;
     }
 
@@ -493,6 +500,15 @@ const handleSelectSlot = ({ start, end }) => {
         }}
         slot={deleteTarget}
         onSuccess={handleDeleteSuccess}
+      />
+
+      <InterviewStartDialog
+        open={isInterviewStartDialogOpen}
+        interviewScheduleId={selectedInterviewScheduleId}
+        onOpenChange={(open) => {
+          setIsInterviewStartDialogOpen(open);
+          if (!open) setSelectedInterviewScheduleId(null);
+        }}
       />
     </Layout>
   );

@@ -35,6 +35,22 @@ export const availabilityAPI = {
     return response.data;
   },
 
+  /** Get full interview details for a booked slot by interviewScheduleId */
+  getInterviewDetails: async (interviewScheduleId) => {
+    try {
+      const response = await api.get(`interviewer/interviews/bookedInterviews/${interviewScheduleId}`);
+      console.log('Fetched interview details:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching interview details for ID ${interviewScheduleId}:`, {
+        status: error.response?.status,
+        message: error.response?.statusText,
+        data: error.response?.data,
+      });
+      throw error; // Re-throw so caller knows the request failed
+    }
+  },
+
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a single availability slot */

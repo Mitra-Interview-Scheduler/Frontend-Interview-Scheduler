@@ -22,6 +22,7 @@ import AvailabilityViewPage from "./pages/hr/AvailabilityViewPage";
 import UrgentRequestsPage from "./pages/hr/UrgentRequestsPage";
 import InterviewerDashboard from "./pages/interviewer/InterviewerDashboard";
 import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
+import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
 import ProfilePage from "./pages/interviewer/ProfilePage";
@@ -172,6 +173,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
                   <AvailabilityPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/interviewer/feedback/:interviewScheduleId"
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <InterviewFeedbackPage />
                 </PrivateRoute>
               }
             />
