@@ -12,6 +12,7 @@
       "category": "Technical",
       "type": "rating",
       "required": true,
+      "commentsEnabled": true,
       "placeholder": "Rate 1-5",
       "helpText": "Assess the candidate's technical knowledge and problem-solving abilities",
       "options": [
@@ -28,6 +29,7 @@
       "category": "Soft Skills",
       "type": "rating",
       "required": true,
+      "commentsEnabled": true,
       "placeholder": "Rate 1-5",
       "helpText": "Evaluate the candidate's ability to articulate ideas clearly",
       "options": [
@@ -44,6 +46,7 @@
       "category": "Technical",
       "type": "rating",
       "required": true,
+      "commentsEnabled": true,
       "placeholder": "Rate 1-5",
       "helpText": "Assess how the candidate approaches and solves complex problems",
       "options": [
@@ -60,6 +63,7 @@
       "category": "Cultural",
       "type": "rating",
       "required": true,
+      "commentsEnabled": true,
       "placeholder": "Rate 1-5",
       "helpText": "Evaluate the candidate's alignment with company values and team dynamics",
       "options": [

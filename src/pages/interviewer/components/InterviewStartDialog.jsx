@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, AlertCircle, CheckCircle, FileText, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -29,11 +30,23 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
       // Fetch interview details
       const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
-      setInterviewDetails(interviewData);
+      console.log('Full interview data response:', interviewData);
+      console.log('Interview data type:', typeof interviewData);
+      console.log('Is array?', Array.isArray(interviewData));
+
+      // Handle array response (if backend returns array)
+      const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
+      console.log('Extracted interview object:', interview);
+      console.log('Candidate ID field:', interview?.candidateId);
+      console.log('Has startDateTime?', !!interview?.startDateTime);
+      console.log('startDateTime value:', interview?.startDateTime);
+      console.log('Interview keys:', Object.keys(interview || {}));
+
+      setInterviewDetails(interview);
 
       // Fetch candidate details
-      if (interviewData?.candidateId) {
-        const candidateData = await candidateAPI.getCandidateById(interviewData.candidateId);
+      if (interview?.candidateId) {
+        const candidateData = await candidateAPI.getCandidateById(interview.candidateId);
         setCandidate(candidateData);
       }
     } catch (err) {
@@ -56,118 +69,155 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Start Interview</DialogTitle>
+          <DialogTitle className="text-2xl">Interview Session</DialogTitle>
           <DialogDescription>
-            Review candidate details before starting the interview
+            Review candidate information before starting the interview
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
-          <div className="flex justify-center items-center py-12">
+          <div className="flex justify-center items-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : error ? (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            {error}
+          <div className="space-y-4">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+              <p className="font-semibold text-base mb-1">Failed to Load Interview Details</p>
+              <p className="text-sm">{error}</p>
+            </div>
           </div>
         ) : (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            {/* Candidate Card */}
-            {candidate && (
-              <Card className="border-t-4 border-t-primary">
-                <CardContent className="pt-6 space-y-4">
-                  {/* Candidate Header */}
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12 border-2 border-primary/20">
-                      <AvatarFallback className="bg-primary/15 text-primary font-bold">
-                        {getInitial(candidate.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-base truncate">{candidate.name}</h3>
-                      <p className="text-xs text-muted-foreground truncate">{candidate.email}</p>
-                    </div>
-                  </div>
-
-                  {/* Interview Schedule Info */}
-                  {interviewDetails && (
-                    <div className="border-t pt-3 space-y-2">
-                      {interviewDetails.startDateTime && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <span>{format(new Date(interviewDetails.startDateTime), 'MMM dd, yyyy')}</span>
-                        </div>
-                      )}
-                      {interviewDetails.startDateTime && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <span>
-                            {format(new Date(interviewDetails.startDateTime), 'HH:mm')} –{' '}
-                            {format(new Date(interviewDetails.endDateTime), 'HH:mm')}
-                          </span>
-                        </div>
-                      )}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            {/* Schedule Section - Top Priority */}
+            {interviewDetails && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-blue-900 mb-3">Interview Schedule</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {interviewDetails.preferredStartDateTime && (
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 p-2 rounded-lg">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-blue-600 font-medium">Date</p>
+                        <p className="font-semibold text-sm">{format(new Date(interviewDetails.preferredStartDateTime), 'MMM dd, yyyy')}</p>
+                      </div>
                     </div>
                   )}
-
-                  {/* Candidate Details */}
-                  <div className="border-t pt-3 space-y-2 text-sm">
-                    {candidate.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className="truncate">{candidate.email}</span>
+                  {interviewDetails.preferredStartDateTime && (
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 p-2 rounded-lg">
+                        <Clock className="w-5 h-5 text-blue-600" />
                       </div>
-                    )}
+                      <div>
+                        <p className="text-xs text-blue-600 font-medium">Time</p>
+                        <p className="font-semibold text-sm">
+                          {format(new Date(interviewDetails.preferredStartDateTime), 'HH:mm')} – {format(new Date(interviewDetails.preferredEndDateTime), 'HH:mm')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Candidate Profile Section */}
+            {candidate && (
+              <div className="space-y-4">
+                {/* Candidate Header */}
+                <div className="flex items-start gap-4 pb-4 border-b">
+                  <Avatar className="h-16 w-16 border-2 border-primary">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
+                      {getInitial(candidate.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-bold text-gray-900">{candidate.name}</h3>
+                    <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
                     {candidate.phone && (
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Phone className="w-4 h-4" />
                         <span>{candidate.phone}</span>
                       </div>
                     )}
-                    {candidate.departmentName && (
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-indigo-500 shrink-0" />
-                        <span className="font-medium">{candidate.departmentName}</span>
-                      </div>
-                    )}
-                    {candidate.tierName && (
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-indigo-500 shrink-0" />
-                        <span className="font-medium">{candidate.tierName}</span>
-                      </div>
-                    )}
-                    {candidate.targetDesignationName && (
-                      <div className="flex items-center gap-2">
-                        <Award className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span className="font-medium">{candidate.targetDesignationName}</span>
-                      </div>
-                    )}
-                    {candidate.location && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span>{candidate.location}</span>
-                      </div>
-                    )}
-                    {candidate.yearsOfExperience && (
-                      <div className="flex items-center gap-2">
-                        <Hash className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span>{candidate.yearsOfExperience} years experience</span>
-                      </div>
-                    )}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+
+                {/* Professional Details Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {candidate.targetDesignationName && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-start gap-2">
+                        <Award className="w-4 h-4 text-amber-600 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-amber-700">Target Position</p>
+                          <p className="text-sm font-medium text-gray-900 mt-1">{candidate.targetDesignationName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.departmentName && (
+                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
+                      <div className="flex items-start gap-2">
+                        <Briefcase className="w-4 h-4 text-indigo-600 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-indigo-700">Department</p>
+                          <p className="text-sm font-medium text-gray-900 mt-1">{candidate.departmentName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.tierName && (
+                    <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                      <div className="flex items-start gap-2">
+                        <TrendingUp className="w-4 h-4 text-purple-600 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-purple-700">Experience Level</p>
+                          <p className="text-sm font-medium text-gray-900 mt-1">{candidate.tierName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.yearsOfExperience && (
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                      <div className="flex items-start gap-2">
+                        <Hash className="w-4 h-4 text-green-600 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-green-700">Experience</p>
+                          <p className="text-sm font-medium text-gray-900 mt-1">{candidate.yearsOfExperience} years</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.location && (
+                    <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-4 h-4 text-orange-600 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-orange-700">Location</p>
+                          <p className="text-sm font-medium text-gray-900 mt-1">{candidate.location}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </motion.div>
         )}
 
-        <DialogFooter className="flex gap-3">
+        <DialogFooter className="flex gap-3 pt-6 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
           <Button onClick={handleStartInterview} disabled={loading || !candidate} className="gap-2">
+            <User className="w-4 h-4" />
             Start Interview
           </Button>
         </DialogFooter>
