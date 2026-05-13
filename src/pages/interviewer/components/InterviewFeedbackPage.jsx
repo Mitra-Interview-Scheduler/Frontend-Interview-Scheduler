@@ -340,7 +340,7 @@ function InterviewFeedbackPage() {
   };
 
   return (
-    <Layout>
+    <Layout noPadding>
       <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
         
         {/* Fixed Header */}
@@ -673,16 +673,24 @@ function InterviewFeedbackPage() {
                 })()
               ) : (
                 <div className="text-center">
-                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-400 text-lg">Unable to display preview</p>
+                  <FileText className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                  <p className="text-slate-400 text-lg">Unable to display preview</p>
                 </div>
               )}
             </div>
 
             {/* Bottom Info Panel */}
-            <div className="bg-white border-t border-blue-200 flex flex-col shrink-0 max-h-48">
+            <div className="bg-slate-700 border-t border-slate-600 flex flex-col shrink-0 max-h-48">
+              {/* Info Header */}
+              {/* <div className="px-6 py-4 border-b border-slate-600">
+                <h3 className="font-bold text-white text-base mb-0 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-400" />
+                  Document Info
+                </h3>
+              </div> */}
+
               {/* Info Content */}
-              <div className="flex-1 overflow-y-auto px-8 py-4">
+                          <div className="flex-1 overflow-y-auto px-8 py-4">
                 <div className="flex gap-8 flex-wrap items-center">
                   {/* File Name */}
                   <div>
@@ -690,8 +698,9 @@ function InterviewFeedbackPage() {
                     <p className="text-sm text-gray-900 font-medium">{selectedDocument?.fileName}</p>
                   </div>
 
+
                   {/* Document Type */}
-                  <div>
+                <div>
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Type</p>
                     <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
                       {selectedDocument?.documentType}
@@ -719,7 +728,7 @@ function InterviewFeedbackPage() {
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-2 ml-auto">
+                  <div className="flex gap-3 ml-3 mr-3">
                     <Button
                       onClick={() => handleDownloadDocument(selectedDocument)}
                       className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 text-sm h-9"
@@ -727,14 +736,13 @@ function InterviewFeedbackPage() {
                       <Download className="w-4 h-4" />
                       Download
                     </Button>
-                    <Button
+                    {/* <Button
                       onClick={closePreview}
-                      className="border-2 border-blue-600 text-blue-600 hover:bg-blue-50 gap-2 text-sm h-9 font-medium"
-                      variant="outline"
+                      className="bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white gap-2 text-sm h-9"
                     >
                       <X className="w-4 h-4" />
                       Close
-                    </Button>
+                    </Button> */}
                   </div>
                 </div>
               </div>

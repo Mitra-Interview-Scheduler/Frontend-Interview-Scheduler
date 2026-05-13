@@ -41,14 +41,14 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col ">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col overflow-hidden ">
 
 
       <TabsList className="grid w-full grid-cols-2 bg-gradient-to-r from-blue-50 to-indigo-50 p-1 rounded-lg border border-blue-200 flex-shrink-0">
         <TabsTrigger value="screening" className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
           Screening
         </TabsTrigger>
-        <TabsTrigger value="summary" className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+        <TabsTrigger value="summary" className="data-[state=active]:bg-white data-[state=active]:text-blue-600">
           Interview Summary
         </TabsTrigger>
       </TabsList>

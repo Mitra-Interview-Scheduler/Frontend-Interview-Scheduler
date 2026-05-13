@@ -8,7 +8,7 @@ const Layout = ({ children, noPadding = false }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="min-h-screen bg-background relative"> {/* Add relative here */}
+    <div className="max-h-screen bg-background relative overflow-hidden "> {/* Add relative here */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <Sidebar isOpen={sidebarOpen} />
       
