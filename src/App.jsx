@@ -17,6 +17,7 @@ import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import HRDashboard from "./pages/hr/HRDashboard";
 import CandidatesPage from "./pages/hr/CandidatesPage";
+import CandidateDetailsPage from "./pages/hr/CandidateDetailsPage";
 import SchedulePage from "./pages/hr/SchedulePage";
 import AvailabilityViewPage from "./pages/hr/AvailabilityViewPage";
 import UrgentRequestsPage from "./pages/hr/UrgentRequestsPage";
@@ -107,6 +108,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['HR']}>
                   <CandidatesPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/hr/candidates/:candidateId/details"
+              element={
+                <PrivateRoute allowedRoles={['HR']}>
+                  <CandidateDetailsPage />
                 </PrivateRoute>
               }
             />

@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button }   from '@/components/ui/button';
 import { Input }    from '@/components/ui/input';
@@ -18,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import {
   Plus, Search, Mail, Phone, Edit, Loader2, MapPin, Hash, Users,
-  CalendarClockIcon,
+  CalendarClockIcon, Eye,
 } from 'lucide-react';
 import { motion }   from 'framer-motion';
 import { toast }    from '@/hooks/use-toast';
@@ -51,6 +52,7 @@ const STATUS_COLORS = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const CandidatesPage = () => {
+  const navigate = useNavigate();
   const [candidates,   setCandidates]   = useState([]);
   const [departments,  setDepartments]  = useState([]);
   const [searchTerm,    setSearchTerm]   = useState('');
@@ -137,11 +139,23 @@ const CandidatesPage = () => {
 
 
   // ── Edit dialog handlers ──────────────────────────────────────────────────
-  const handleOpenView = (candidate) => {
-    setSelectedCandidate(candidate);
-    setIsReadOnly(true);
-    setIsEditOpen(true);
+  const handleOpenView = async (candidate) => {
+    try {
+      const details = await candidateAPI.getCandidateById(candidate.id);
+      setSelectedCandidate(details);
+      setIsReadOnly(true);
+      setIsEditOpen(true);
+    } catch (err) {
+      console.error('Failed to load candidate details:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to load candidate details',
+        variant: 'destructive',
+      });
+    }
   };
+
+
 
   const handleOpenEdit = (candidate) => {
     setSelectedCandidate(candidate);
@@ -305,6 +319,11 @@ const CandidatesPage = () => {
                           </div>
 
                           <div className="col-span-6 md:col-span-1 flex justify-end md:justify-end gap-1.5">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+                              onClick={(e) => { e.stopPropagation(); handleOpenView(candidate); }} disabled={loading} title="View Details">
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenEdit(candidate); }} disabled={loading} title="Edit">
                               <Edit className="w-3.5 h-3.5" />

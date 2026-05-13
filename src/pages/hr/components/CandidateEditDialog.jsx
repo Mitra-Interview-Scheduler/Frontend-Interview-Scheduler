@@ -1,4 +1,5 @@
 import React, { useEffect, useState ,useRef} from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +42,7 @@ function CandidateEditDialog({
   mode = 'edit'
 }) {
   const isCreate = mode === 'create';
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -670,6 +672,16 @@ function CandidateEditDialog({
               <Button variant="outline" onClick={onSchedule} className="gap-2">
                 <CalendarClock className="w-4 h-4" />
                 Schedule Interview
+              </Button>
+              <Button 
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/hr/candidates/${candidate.id}/details`);
+                }} 
+                variant="outline"
+                className="gap-2"
+              >
+                Detailed View
               </Button>
               <Button onClick={onEdit} className="gap-2">
                 Edit Candidate

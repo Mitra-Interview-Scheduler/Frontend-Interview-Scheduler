@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, AlertCircle, CheckCircle, FileText, Zap } from 'lucide-react';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -42,6 +42,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
       console.log('startDateTime value:', interview?.startDateTime);
       console.log('Interview keys:', Object.keys(interview || {}));
 
+      
       setInterviewDetails(interview);
 
       // Fetch candidate details
