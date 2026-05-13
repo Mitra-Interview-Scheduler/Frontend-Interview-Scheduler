@@ -105,7 +105,7 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
 
 // ─── Register dialog ──────────────────────────────────────────────────────────
 
-const EMPTY = { firstName: '', lastName: '', email: '', password: '', role: '' };
+const EMPTY = { firstName: '', lastName: '', email: '', password: '', role: '',auth_provider: 'LOCAL' };
 
 function RegisterDialog({ open, onOpenChange, onSuccess }) {
   const [form, setForm]         = useState(EMPTY);

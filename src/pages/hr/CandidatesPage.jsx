@@ -383,6 +383,7 @@ const CandidatesPage = () => {
           departments={departments}
           onOpenChange={setIsAddOpen}
           onSaveSuccess={applyFilters}
+          onSchedule={setIsInterviewSchedulePageOpen}
           mode="create"
         />
 
@@ -394,13 +395,14 @@ const CandidatesPage = () => {
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}
           onEdit={handleViewToEdit}
+          onSchedule={() => setIsInterviewSchedulePageOpen(true)}
         />
 
-<CandidateInterviewSchedulePage
-  open={isInterviewSchedulePageOpen}
-  candidate={selectedCandidate}
-  onOpenChange={setIsInterviewSchedulePageOpen} // This ensures the Effect inside can trigger
-/>
+        <CandidateInterviewSchedulePage
+          open={isInterviewSchedulePageOpen}
+          candidate={selectedCandidate}
+          onOpenChange={setIsInterviewSchedulePageOpen} // This ensures the Effect inside can trigger
+        />
       </div>
     </Layout>
   );
