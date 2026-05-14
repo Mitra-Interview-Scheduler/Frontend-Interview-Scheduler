@@ -673,6 +673,11 @@ function CandidateEditDialog({
                 <CalendarClock className="w-4 h-4" />
                 Schedule Interview
               </Button>
+              
+              <Button onClick={onEdit} className="gap-2">
+                Edit Candidate
+              </Button>
+
               <Button 
                 onClick={() => {
                   onOpenChange(false);
@@ -682,9 +687,6 @@ function CandidateEditDialog({
                 className="gap-2"
               >
                 Detailed View
-              </Button>
-              <Button onClick={onEdit} className="gap-2">
-                Edit Candidate
               </Button>
             </>
           ) : (

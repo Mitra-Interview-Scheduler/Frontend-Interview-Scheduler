@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Award, Hash, Calendar } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import StepProgressIndicator from '@/components/StepProgressIndicator';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
+import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';
 import { candidateAPI } from '@/services/candidateAPI';
 
 const STATUS_COLORS = {
@@ -25,13 +25,9 @@ const STATUS_COLORS = {
   ON_HOLD: 'bg-orange-100 text-orange-800',
 };
 
-const getInitials = (name) => {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+const getInitial = (name) => {
+  if (!name || typeof name !== 'string') return 'C';
+  return name.trim().charAt(0).toUpperCase() || 'C';
 };
 
 function CandidateDetailsPage() {
@@ -40,6 +36,11 @@ function CandidateDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [candidate, setCandidate] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!candidateId) return;
@@ -53,6 +54,7 @@ function CandidateDetailsPage() {
       const data = await candidateAPI.getCandidateById(candidateId);
       console.log('Candidate details:', data);
       setCandidate(data);
+      await loadCandidateDocuments(candidateId);
     } catch (err) {
       console.error('Failed to load candidate details:', err);
       setError(err.response?.data?.message || err.message || 'Failed to load candidate details');
@@ -64,6 +66,65 @@ function CandidateDetailsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadCandidateDocuments = async (id) => {
+    if (!id) return;
+    setDocumentsLoading(true);
+    try {
+      const data = await candidateAPI.getCandidateDocuments(id);
+      setDocuments(data || []);
+    } catch (err) {
+      console.error('Failed to load documents:', err);
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (document) => {
+    if (!candidate?.id || !document?.id) return;
+    try {
+      const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.fileName;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to download document');
+    }
+  };
+
+  const handlePreviewDocument = async (document) => {
+    if (!candidate?.id || !document?.id) return;
+    setSelectedDocument(document);
+    setPreviewLoading(true);
+    try {
+      const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
+      setPreviewUrl(url);
+    } catch (err) {
+      toast({
+        title: 'Preview Error',
+        description: err.message || 'Failed to load document preview',
+        variant: 'destructive',
+      });
+      setSelectedDocument(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) {
+      window.URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedDocument(null);
+    setPreviewUrl(null);
   };
 
   if (loading) {
@@ -130,101 +191,154 @@ function CandidateDetailsPage() {
         </div>
 
         {/* Main Content Area - Scrollable */}
-        <div className="flex-1 flex overflow-hidden gap-6 px-4 py-2">
+        <div className="flex-1 min-h-0 flex overflow-hidden gap-6 px-4 py-2">
           {/* Left Sidebar - Candidate Basic Info */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-80 flex flex-col gap-1 flex-shrink-0"
+            className="w-80 bg-white rounded-lg border border-gray-200 flex-shrink-0 shadow-sm flex flex-col min-h-0 max-h-[70vh] overflow-hidden"
           >
-            {/* Candidate Card */}
-            <Card className="border-0 shadow-md bg-white flex-shrink-0">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center">
-                  <Avatar className="h-20 w-20 border-4 border-blue-200 mb-4">
-                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-bold">
-                      {getInitials(candidate.name)}
+            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-2 custom-scrollbar scrollbar-none">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar className="h-16 w-16 border-4 border-white shadow-md">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xl font-bold">
+                      {getInitial(candidate.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <h2 className="text-xl font-bold text-gray-900">{candidate.name}</h2>
-                  <p className="text-sm text-gray-600 mt-1">{candidate.targetDesignationName || 'N/A'}</p>
-                  {candidate.tierName && (
-                    <Badge className="mt-2 bg-indigo-100 text-indigo-700 border border-indigo-300">
-                      {candidate.tierName}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Contact Information Card */}
-            <Card className="border-0 shadow-md bg-white flex-shrink-0">
-              <CardContent className="pt-6">
-                <h3 className="font-semibold text-gray-900 mb-4 text-sm">Contact Information</h3>
-                <div className="space-y-3">
-                  {/* Email */}
-                  <div className="flex items-start gap-2">
-                    <Mail className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-600 font-medium">Email</p>
-                      <p className="text-xs text-gray-900 break-all">{candidate.email}</p>
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-lg text-gray-900 truncate">{candidate.name}</h3>
+                    <p className="text-xs text-gray-600 truncate">{candidate.email}</p>
                   </div>
+                </div>
 
-                  {/* Phone */}
+                <div className="space-y-3 border-t border-blue-200 pt-4">
+                  {candidate.email && (
+                    <div className="flex items-start gap-2">
+                      <Mail className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-gray-600">Email</p>
+                        <p className="text-sm text-gray-900 break-all">{candidate.email}</p>
+                      </div>
+                    </div>
+                  )}
+
                   {candidate.phone && (
                     <div className="flex items-start gap-2">
-                      <Phone className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-600 font-medium">Phone</p>
-                        <p className="text-xs text-gray-900">{candidate.phone}</p>
+                      <Phone className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Phone</p>
+                        <p className="text-sm text-gray-900">{candidate.phone}</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Location */}
+                  {candidate.departmentName && (
+                    <div className="flex items-start gap-2">
+                      <Network className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Department</p>
+                        <p className="text-sm text-gray-900">{candidate.departmentName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.targetDesignationName && (
+                    <div className="flex items-start gap-2">
+                      <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Target Designation</p>
+                        <p className="text-sm text-gray-900">{candidate.targetDesignationName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.tierName && (
+                    <div className="flex items-start gap-2">
+                      <Layers3 className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Tier</p>
+                        <p className="text-sm text-gray-900">{candidate.tierName}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {candidate.yearsOfExperience && (
+                    <div className="flex items-start gap-2">
+                      <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Experience</p>
+                        <p className="text-sm text-gray-900">{candidate.yearsOfExperience} years</p>
+                      </div>
+                    </div>
+                  )}
+
                   {candidate.location && (
                     <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-600 font-medium">Location</p>
-                        <p className="text-xs text-gray-900">{candidate.location}</p>
+                      <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Location</p>
+                        <p className="text-sm text-gray-900">{candidate.location}</p>
                       </div>
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Additional Info Card */}
-            <Card className="border-0 shadow-md bg-white flex-shrink-0">
-              <CardContent className="pt-6">
-                <h3 className="font-semibold text-gray-900 mb-3 text-sm">Additional Info</h3>
-                <div className="space-y-2">
-                  {candidate.yearsOfExperience && (
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs text-gray-600">
-                        <span className="font-medium">{candidate.yearsOfExperience}</span> years
-                      </span>
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-2 border border-blue-200">
+                <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> Documents
+                </h3>
+
+                {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
+                {!documentsLoading && documents.length === 0 && (
+                  <p className="text-xs text-gray-500 text-center py-4 italic">No documents</p>
+                )}
+
+                <div className="space-y-2 p-1">
+                  {documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewDocument(document)}
+                        className="min-w-0 flex-1 text-left hover:text-blue-600 transition-colors"
+                      >
+                        <p className="text-xs font-medium text-gray-900 truncate">{document.fileName}</p>
+                        <Badge variant="outline" className="text-xs mt-1">
+                          {document.documentType}
+                        </Badge>
+                      </button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => handlePreviewDocument(document)}
+                          title="Preview"
+                        >
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => handleDownloadDocument(document)}
+                          title="Download"
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                  )}
-                  {candidate.departmentName && (
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs text-gray-600 font-medium">{candidate.departmentName}</span>
-                    </div>
-                  )}
-                  {candidate.jobReferenceCode && (
-                    <div className="flex items-center gap-2">
-                      <Hash className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs text-gray-600 font-medium">{candidate.jobReferenceCode}</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </motion.div>
 
           {/* Right Content - Tabs Scrollable */}
@@ -237,6 +351,15 @@ function CandidateDetailsPage() {
             <CandidateDetailsTabs candidate={candidate} readOnly={true} />
           </motion.div>
         </div>
+
+        <InterviewDocumentPreviewDialog
+          open={!!selectedDocument}
+          document={selectedDocument}
+          previewUrl={previewUrl}
+          previewLoading={previewLoading}
+          onClose={closePreview}
+          onDownload={handleDownloadDocument}
+        />
       </div>
     </Layout>
   );
