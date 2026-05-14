@@ -62,7 +62,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
   const handleStartInterview = () => {
     onOpenChange(false);
-    navigate(`/interviewer/feedback/${interviewScheduleId}`);
+    // navigate(`/interviewer/feedback/${interviewScheduleId}`);
   };
 
   return (

@@ -25,7 +25,7 @@ import { motion }   from 'framer-motion';
 import { toast }    from '@/hooks/use-toast';
 import { candidateAPI }   from '@/services/candidateAPI';
 import { departmentAPI }  from '@/services/departmentAPI';
-import CandidateEditDialog from './components/CandidateEditDialog';
+import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
@@ -173,6 +173,7 @@ const CandidatesPage = () => {
    // ── InterviewSchedulePage dialog handlers ──────────────────────────────────────────────────
   const handleOpenInterviewSchedulePage = (candidate) => {
     setSelectedCandidate(candidate);
+    setEditOpen(false);
     setIsInterviewSchedulePageOpen(true);
   };
 
@@ -395,7 +396,7 @@ const CandidatesPage = () => {
         </Card>
 
         {/* ══ ADD DIALOG ═══════════════════════════════════════════════════ */}
-        <CandidateEditDialog
+        <CandidateDialogPage
           open={isAddOpen}
           candidate={null}
           departments={departments}
@@ -405,7 +406,7 @@ const CandidatesPage = () => {
           mode="create"
         />
 
-        <CandidateEditDialog
+        <CandidateDialogPage
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
@@ -413,7 +414,7 @@ const CandidatesPage = () => {
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}
           onEdit={handleViewToEdit}
-          onSchedule={() => setIsInterviewSchedulePageOpen(true)}
+          onSchedule={() =>{setIsEditOpen(false);  setIsInterviewSchedulePageOpen(true); }}
         />
 
         <CandidateInterviewSchedulePage

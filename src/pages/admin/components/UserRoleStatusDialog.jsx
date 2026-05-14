@@ -108,6 +108,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
       onSave(updatedUser);
       setEditing(false);
+      onOpenChange(false);
       toast({
         title: 'User updated',
         description: 'Roles and status saved successfully.',

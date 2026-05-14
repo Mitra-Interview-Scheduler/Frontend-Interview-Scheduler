@@ -31,7 +31,7 @@ const EMPTY_FORM = {
   notes: '', status: 'APPLIED',
 };
 
-function CandidateEditDialog({ 
+function CandidateDialogPage({ 
   open, 
   candidate, 
   departments = [],
@@ -724,4 +724,4 @@ function CandidateEditDialog({
   );
 }
 
-export default CandidateEditDialog;
+export default CandidateDialogPage;

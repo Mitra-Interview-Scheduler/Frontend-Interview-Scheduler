@@ -494,6 +494,7 @@ const AvailabilityViewPage = () => {
     }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
+    
   };
 
 
