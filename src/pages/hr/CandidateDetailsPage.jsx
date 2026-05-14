@@ -130,7 +130,7 @@ function CandidateDetailsPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="h-screen flex justify-center items-center">
+        <div className="h-[calc(100vh-4rem)] flex justify-center items-center">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground text-lg">Loading candidate details...</p>
@@ -143,7 +143,7 @@ function CandidateDetailsPage() {
   if (error || !candidate) {
     return (
       <Layout>
-        <div className="h-screen flex justify-center items-center">
+        <div className="h-[calc(100vh-4rem)] flex justify-center items-center">
           <div className="text-center">
             <p className="text-red-500 text-lg mb-4">{error || 'Candidate not found'}</p>
             <Button onClick={() => navigate(-1)} className="gap-2">
@@ -157,8 +157,8 @@ function CandidateDetailsPage() {
   }
 
   return (
-    <Layout hasPadding={false}>
-      <div className="flex flex-col h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <Layout hasPadding={false} className="overflow-hidden">
+      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -346,7 +346,7 @@ function CandidateDetailsPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="flex-1 flex flex-col overflow-hidden py-4 pr-4 max-h-[65vh]"
+            className="flex-1 flex flex-col overflow-hidden py-4 pr-4 max-h-[70vh]"
           >
             <CandidateDetailsTabs candidate={candidate} readOnly={true} />
           </motion.div>
