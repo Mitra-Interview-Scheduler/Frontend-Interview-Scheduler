@@ -340,14 +340,14 @@ function InterviewFeedbackPage() {
   };
 
   return (
-    <Layout noPadding>
+    <Layout hasPadding={false} >
       <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
         
         {/* Fixed Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }} 
           animate={{ opacity: 1, y: 0 }} 
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200 px-8 py-6 shadow-sm flex-shrink-0"
+          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 px-6 py-6 shadow-sm flex-shrink-0"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -384,10 +384,10 @@ function InterviewFeedbackPage() {
             <motion.div 
               initial={{ opacity: 0, x: -20 }} 
               animate={{ opacity: 1, x: 0 }} 
-              className="w-80 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm overflow-hidden flex flex-col"
+              className="w-80 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm flex flex-col h-[80vh] overflow-hidden"
             >
-              <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                {/* Candidate Card */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                  {/* Candidate Card */}
                 {candidate && (
                   <div className="space-y-4">
                     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">

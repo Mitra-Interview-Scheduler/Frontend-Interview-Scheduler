@@ -4,22 +4,23 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { cn } from '@/lib/utils';
 
-const Layout = ({ children, noPadding = false }) => {
+const Layout = ({ children ,hasPadding = true, className }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="max-h-screen bg-background relative overflow-hidden "> {/* Add relative here */}
+    <div className="max-h-screen bg-background relative overflow-hidden"> {/* Add relative here */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <Sidebar isOpen={sidebarOpen} />
       
       <main 
         className={cn(
           "pt-16 transition-all duration-300 relative z-0",
-          sidebarOpen ? "pl-64" : "pl-0",
-          !noPadding && "p-6"
+          sidebarOpen ? "pl-64" : "pl-0"
         )}
       >
-        {noPadding ? children : <div className="p-6">{children}</div>}
+        <div className={cn("p-6", hasPadding ? "p-6" : "p-0", className)}>
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -27,7 +28,7 @@ const Layout = ({ children, noPadding = false }) => {
 
 Layout.propTypes = {
   children: PropTypes.node.isRequired,
-  noPadding: PropTypes.bool,
+  hasPadding: PropTypes.bool,
 };
 
 export default Layout;

@@ -96,7 +96,7 @@ function CandidateDetailsPage() {
   }
 
   return (
-    <Layout noPadding>
+    <Layout hasPadding={false}>
       <div className="flex flex-col h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         {/* Header */}
         <motion.div
