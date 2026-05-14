@@ -91,7 +91,30 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           </div>
         ) : (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            {/* Schedule Section - Top Priority */}
+      
+            {/* Candidate Profile Section */}
+            {candidate && (
+              <div className="space-y-4 p-4 ">
+                {/* Candidate Header */}
+                <div className="flex items-start gap-4 pb-4 border-b">
+                  <Avatar className="h-16 w-16 border-2 border-primary">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
+                      {getInitial(candidate.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-bold text-gray-900">{candidate.name}</h3>
+                    <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
+                    {candidate.phone && (
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Phone className="w-4 h-4" />
+                        <span>{candidate.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                 {/* Schedule Section - Top Priority */}
             {interviewDetails && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-blue-900 mb-3">Interview Schedule</h3>
@@ -124,36 +147,14 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               </div>
             )}
 
-            {/* Candidate Profile Section */}
-            {candidate && (
-              <div className="space-y-4">
-                {/* Candidate Header */}
-                <div className="flex items-start gap-4 pb-4 border-b">
-                  <Avatar className="h-16 w-16 border-2 border-primary">
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
-                      {getInitial(candidate.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-gray-900">{candidate.name}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
-                    {candidate.phone && (
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-                        <Phone className="w-4 h-4" />
-                        <span>{candidate.phone}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {/* Professional Details Grid */}
                 <div className="grid grid-cols-2 gap-4">
                   {candidate.targetDesignationName && (
-                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
-                        <Award className="w-4 h-4 text-amber-600 mt-1 shrink-0" />
+                        <Award className="w-4 h-4  text-blue-600 mt-1 shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-amber-700">Target Position</p>
+                          <p className="text-xs font-semibold text-blue-600">Target Position</p>
                           <p className="text-sm font-medium text-gray-900 mt-1">{candidate.targetDesignationName}</p>
                         </div>
                       </div>
@@ -161,11 +162,11 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   )}
 
                   {candidate.departmentName && (
-                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
-                        <Briefcase className="w-4 h-4 text-indigo-600 mt-1 shrink-0" />
+                        <Briefcase className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-indigo-700">Department</p>
+                          <p className="text-xs font-semibold text-blue-600">Department</p>
                           <p className="text-sm font-medium text-gray-900 mt-1">{candidate.departmentName}</p>
                         </div>
                       </div>
@@ -173,11 +174,11 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   )}
 
                   {candidate.tierName && (
-                    <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
-                        <TrendingUp className="w-4 h-4 text-purple-600 mt-1 shrink-0" />
+                        <TrendingUp className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-purple-700">Experience Level</p>
+                          <p className="text-xs font-semibold text-blue-600">Experience Level</p>
                           <p className="text-sm font-medium text-gray-900 mt-1">{candidate.tierName}</p>
                         </div>
                       </div>
@@ -185,11 +186,11 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   )}
 
                   {candidate.yearsOfExperience && (
-                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
-                        <Hash className="w-4 h-4 text-green-600 mt-1 shrink-0" />
+                        <Hash className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-green-700">Experience</p>
+                          <p className="text-xs font-semibold text-blue-600">Experience</p>
                           <p className="text-sm font-medium text-gray-900 mt-1">{candidate.yearsOfExperience} years</p>
                         </div>
                       </div>
@@ -197,11 +198,11 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   )}
 
                   {candidate.location && (
-                    <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
-                        <MapPin className="w-4 h-4 text-orange-600 mt-1 shrink-0" />
+                        <MapPin className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
                         <div>
-                          <p className="text-xs font-semibold text-orange-700">Location</p>
+                          <p className="text-xs font-semibold text-blue-600">Location</p>
                           <p className="text-sm font-medium text-gray-900 mt-1">{candidate.location}</p>
                         </div>
                       </div>

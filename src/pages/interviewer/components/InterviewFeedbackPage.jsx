@@ -8,14 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, X } from 'lucide-react';
+import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
+import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
 
 function InterviewFeedbackPage() {
   const navigate = useNavigate();
@@ -341,17 +341,17 @@ function InterviewFeedbackPage() {
 
   return (
     <Layout hasPadding={false} >
-      <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="max-h-[93vh] flex flex-col ">
         
         {/* Fixed Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }} 
           animate={{ opacity: 1, y: 0 }} 
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 px-6 py-6 shadow-sm flex-shrink-0"
+          className=" px-6 pb-2 pt-6 shadow-sm flex-shrink-0"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button
+              {/* <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate(-1)}
@@ -359,10 +359,10 @@ function InterviewFeedbackPage() {
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back
-              </Button>
+              </Button> */}
               <div>
-                <h1 className="text-3xl font-bold tracking-tight text-blue-900">Interview Feedback</h1>
-                <p className="text-blue-600 text-sm mt-1">Evaluate candidate's interview performance</p>
+                <h1 className="text-4xl font-bold text-foreground mb-2">Interview Feedback</h1>
+                <p className="text-muted-foreground text-sm mt-1">Evaluate candidate's interview performance</p>
               </div>
             </div>
             {loading && <Loader2 className="w-6 h-6 animate-spin text-blue-600" />}
@@ -378,19 +378,18 @@ function InterviewFeedbackPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex overflow-hidden">
-            
+          <div className="flex-1 flex overflow-hidden gap-4 rounded-lg p-1 border  border-gray-200 ">
             {/* Left Sidebar - Fixed */}
             <motion.div 
               initial={{ opacity: 0, x: -20 }} 
               animate={{ opacity: 1, x: 0 }} 
-              className="w-80 bg-white border-r border-gray-200 flex-shrink-0 shadow-sm flex flex-col h-[80vh] overflow-hidden"
+              className="w-80 bg-white border-r rounded-lg px-1 border border-gray-200 flex-shrink-0 shadow-sm flex flex-col max-h-[80vh] overflow-hidden"
             >
-                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                <div className="flex-1 space-y-2 overflow-y-auto p-2  custom-scrollbar scrollbar-none">
                   {/* Candidate Card */}
                 {candidate && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                  <div className="space-y-2">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4  border border-blue-200">
                       <div className="flex items-center gap-3 mb-4">
                         <Avatar className="h-16 w-16 border-4 border-white shadow-md">
                           <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xl font-bold">
@@ -421,67 +420,83 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-                      </div>
-                    </div>
 
-                    {/* Info Grid */}
-                    <div className="grid grid-cols-1 gap-2">
-                      {candidate.departmentName && (
-                        <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
-                          <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-1">Department</p>
-                          <p className="text-sm font-semibold text-gray-900">{candidate.departmentName}</p>
-                        </div>
-                      )}
-                      {candidate.targetDesignationName && (
-                        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                          <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-1">Position</p>
-                          <p className="text-sm font-semibold text-gray-900">{candidate.targetDesignationName}</p>
-                        </div>
-                      )}
-                      {candidate.tierName && (
-                        <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                          <p className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1">Level</p>
-                          <p className="text-sm font-semibold text-gray-900">{candidate.tierName}</p>
-                        </div>
-                      )}
-                      {candidate.yearsOfExperience && (
-                        <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                          <p className="text-xs font-bold text-green-700 uppercase tracking-wide mb-1">Experience</p>
-                          <p className="text-sm font-semibold text-gray-900">{candidate.yearsOfExperience} years</p>
-                        </div>
-                      )}
-                      {candidate.location && (
-                        <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
-                          <p className="text-xs font-bold text-orange-700 uppercase tracking-wide mb-1">Location</p>
-                          <p className="text-sm font-semibold text-gray-900">{candidate.location}</p>
-                        </div>
-                      )}
+                        {candidate.departmentName && (
+                          <div className="flex items-start gap-2">
+                            <Network className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-600">Department</p>
+                              <p className="text-sm text-gray-900">{candidate.departmentName}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {candidate.targetDesignationName && (
+                          <div className="flex items-start gap-2">
+                            <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-600">Target Designation</p>
+                              <p className="text-sm text-gray-900">{candidate.targetDesignationName}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {candidate.tierName && (
+                          <div className="flex items-start gap-2">
+                            <Layers3 className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-600">Tier</p>
+                              <p className="text-sm text-gray-900">{candidate.tierName}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {candidate.yearsOfExperience && (
+                          <div className="flex items-start gap-2">
+                            <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-600">Experience</p>
+                              <p className="text-sm text-gray-900">{candidate.yearsOfExperience} years</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {candidate.location && (
+                          <div className="flex items-start gap-2">
+                            <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-600">Location</p>
+                              <p className="text-sm text-gray-900">{candidate.location}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* Documents Section */}
-                <div className="border-t pt-4">
-                  <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2">
+                <div className="border-t pt-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-2  border border-blue-200">
+                  <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2 ">
                     <FileText className="w-4 h-4" /> Documents
                   </h3>
                   {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
                   {!documentsLoading && documents.length === 0 && (
                     <p className="text-xs text-gray-500 text-center py-4 italic">No documents</p>
                   )}
-                  <div className="space-y-2">
+                  <div className="space-y-2 p-1">
                     {documents.map((document) => (
                       <motion.div
                         key={document.id}
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors"
+                        className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors "
                       >
                         <button
                           type="button"
                           onClick={() => handlePreviewDocument(document)}
                           disabled={submitting}
-                          className="min-w-0 flex-1 text-left hover:text-blue-600 transition-colors"
+                          className="min-w-0 flex-1 text-left hover:text-blue-600 transition-colors "
                         >
                           <p className="text-xs font-medium text-gray-900 truncate">{document.fileName}</p>
                           <Badge variant="outline" className="text-xs mt-1">
@@ -520,16 +535,16 @@ function InterviewFeedbackPage() {
             </motion.div>
 
             {/* Right Content Area - Scrollable */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm">
               
               {/* Scrollable Questions */}
               <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
-                className="flex-1 overflow-y-auto"
+                className="flex-1 overflow-y-auto  max-h-full rounded-lg border border-gray-200 shadow-sm"
               >
-                <div className="p-8 space-y-6">
-                  <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+                <div className="p-2 space-y-2">
+                  <div className=" p-2 shadow-sm">
                     <h2 className="text-xl font-bold text-gray-900 mb-1">Feedback Questions</h2>
                     <p className="text-sm text-gray-600">Please provide your assessment for each question</p>
                   </div>
@@ -542,7 +557,7 @@ function InterviewFeedbackPage() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                        className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                       >
                         <div className="flex items-start gap-3 mb-4">
                           <div className="bg-blue-100 rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
@@ -581,12 +596,12 @@ function InterviewFeedbackPage() {
                   </AnimatePresence>
 
                   {/* Spacing for footer */}
-                  <div className="h-6" />
+                  
                 </div>
               </motion.div>
 
               {/* Fixed Footer - Action Buttons */}
-              <div className="border-t bg-white px-8 py-4 flex gap-3 flex-shrink-0 shadow-lg">
+              <div className=" bg-white px-8 py-2 flex gap-3 flex-shrink-0 shadow-lg">
                 <Button 
                   variant="outline" 
                   onClick={() => navigate(-1)} 
@@ -619,137 +634,14 @@ function InterviewFeedbackPage() {
         )}
       </div>
 
-      {/* Document Preview Dialog */}
-      <Dialog open={!!selectedDocument} onOpenChange={closePreview}>
-        <DialogContent className="max-w-full h-[90vh] flex flex-col p-0 bg-gradient-to-br from-slate-50 to-slate-100 border-0">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200 px-8 py-4 flex items-center justify-between shrink-0 shadow-sm">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-bold text-blue-900 truncate">{selectedDocument?.fileName}</h2>
-              <p className="text-blue-600 text-sm mt-1">{selectedDocument?.documentType} • Preview</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-10 w-10 p-0 shrink-0 ml-4 hover:bg-blue-100 text-blue-600"
-              onClick={closePreview}
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col overflow-hidden gap-0">
-            {/* Preview Area */}
-            <div className="flex-1 flex items-center justify-center bg-white p-8 border-b border-gray-200">
-              {previewLoading ? (
-                <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
-                  <p className="text-gray-600">Loading document preview...</p>
-                </div>
-              ) : previewUrl ? (
-                (() => {
-                  const docType = selectedDocument?.documentType?.toLowerCase() || '';
-                  const fileName = selectedDocument?.fileName?.toLowerCase() || '';
-                  const isPdf = docType.includes('pdf') || fileName.endsWith('.pdf');
-                  
-                  return isPdf ? (
-                    <iframe
-                      src={previewUrl}
-                      className="w-full h-full border-0 rounded-lg"
-                      title="Document Preview"
-                    />
-                  ) : (
-                    <img
-                      src={previewUrl}
-                      alt="Document Preview"
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-md"
-                      onError={(e) => {
-                        console.error('Image load error:', e);
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                  );
-                })()
-              ) : (
-                <div className="text-center">
-                  <FileText className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                  <p className="text-slate-400 text-lg">Unable to display preview</p>
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Info Panel */}
-            <div className="bg-slate-700 border-t border-slate-600 flex flex-col shrink-0 max-h-48">
-              {/* Info Header */}
-              {/* <div className="px-6 py-4 border-b border-slate-600">
-                <h3 className="font-bold text-white text-base mb-0 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-400" />
-                  Document Info
-                </h3>
-              </div> */}
-
-              {/* Info Content */}
-                          <div className="flex-1 overflow-y-auto px-8 py-4">
-                <div className="flex gap-8 flex-wrap items-center">
-                  {/* File Name */}
-                  <div>
-                    <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">File Name</p>
-                    <p className="text-sm text-gray-900 font-medium">{selectedDocument?.fileName}</p>
-                  </div>
-
-
-                  {/* Document Type */}
-                <div>
-                    <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Type</p>
-                    <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
-                      {selectedDocument?.documentType}
-                    </Badge>
-                  </div>
-
-                  {/* File Size */}
-                  {selectedDocument?.fileSize && (
-                    <div>
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Size</p>
-                      <p className="text-sm text-gray-700 font-medium">
-                        {(selectedDocument.fileSize / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Upload Date */}
-                  {selectedDocument?.createdAt && (
-                    <div>
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Uploaded</p>
-                      <p className="text-sm text-gray-700 font-medium">
-                        {new Date(selectedDocument.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex gap-3 ml-3 mr-3">
-                    <Button
-                      onClick={() => handleDownloadDocument(selectedDocument)}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 text-sm h-9"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </Button>
-                    {/* <Button
-                      onClick={closePreview}
-                      className="bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white gap-2 text-sm h-9"
-                    >
-                      <X className="w-4 h-4" />
-                      Close
-                    </Button> */}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <InterviewDocumentPreviewDialog
+        open={!!selectedDocument}
+        document={selectedDocument}
+        previewUrl={previewUrl}
+        previewLoading={previewLoading}
+        onClose={closePreview}
+        onDownload={handleDownloadDocument}
+      />
     </Layout>
   );
 }
