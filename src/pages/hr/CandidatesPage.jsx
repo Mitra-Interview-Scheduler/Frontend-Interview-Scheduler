@@ -252,7 +252,8 @@ const CandidatesPage = () => {
               <div className="space-y-2">
                 {candidates.map((candidate, index) => (
                   <motion.div key={candidate.id}
-                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03 }}>
                     <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                       <CardContent className="p-3">

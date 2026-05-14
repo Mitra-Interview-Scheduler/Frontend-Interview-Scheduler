@@ -25,6 +25,7 @@ import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
 import { calendarLocalizer } from '@/lib/calendarUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
 
 
 // ── Status colours ────────────────────────────────────────────────────────────
@@ -394,7 +395,7 @@ const handleSelectSlot = ({ start, end }) => {
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
                       <Calendar
-                        localizer={calendarLocalizer}
+                        localizer={localizer}
                         events={events}
                         startAccessor="start"
                         endAccessor="end"
@@ -428,7 +429,10 @@ const handleSelectSlot = ({ start, end }) => {
                             return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                           return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                         }}
-                        formats={calendarFormats}
+                        formats={{
+                      timeGutterFormat: calendarFormats.timeGutterFormat,
+                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
+                    }}
                       />
                     </motion.div>
                   )}
