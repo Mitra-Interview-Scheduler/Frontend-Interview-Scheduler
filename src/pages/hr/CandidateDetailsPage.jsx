@@ -11,6 +11,8 @@ import StepProgressIndicator from '@/components/StepProgressIndicator';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
 import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';
 import { candidateAPI } from '@/services/candidateAPI';
+import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
+import { getInitial } from '@/lib/personUtils';
 
 const STATUS_COLORS = {
   APPLIED: 'bg-blue-100 text-blue-800',
@@ -23,11 +25,6 @@ const STATUS_COLORS = {
   REJECTED: 'bg-red-100 text-red-800',
   WITHDRAWN: 'bg-gray-100 text-gray-800',
   ON_HOLD: 'bg-orange-100 text-orange-800',
-};
-
-const getInitial = (name) => {
-  if (!name || typeof name !== 'string') return 'C';
-  return name.trim().charAt(0).toUpperCase() || 'C';
 };
 
 function CandidateDetailsPage() {
@@ -86,14 +83,7 @@ function CandidateDetailsPage() {
     if (!candidate?.id || !document?.id) return;
     try {
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
-      const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document.fileName;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlobResponse(response, document);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to download document');
     }
@@ -105,8 +95,7 @@ function CandidateDetailsPage() {
     setPreviewLoading(true);
     try {
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
-      setPreviewUrl(url);
+      setPreviewUrl(createDocumentObjectUrl(response, document));
     } catch (err) {
       toast({
         title: 'Preview Error',
@@ -120,9 +109,7 @@ function CandidateDetailsPage() {
   };
 
   const closePreview = () => {
-    if (previewUrl) {
-      window.URL.revokeObjectURL(previewUrl);
-    }
+    revokeObjectUrl(previewUrl);
     setSelectedDocument(null);
     setPreviewUrl(null);
   };

@@ -3,35 +3,31 @@ import { useTimeFormat } from '@/context/TimeFormatContext';
 import { format } from 'date-fns';
 
 export const useCalendarFormats = () => {
-  const { timeFormat } = useTimeFormat();
+  const { timeFormat, dateFormat } = useTimeFormat();
 
   return useMemo(() => {
     const timeFormatStr = timeFormat === '12h' ? 'h:mm a' : 'HH:mm';
 
+    const formatTimeRange = ({ start, end }) => {
+      const startStr = format(start, timeFormatStr);
+      const endStr = format(end, timeFormatStr);
+      return `${startStr} - ${endStr}`;
+    };
+
     return {
       timeGutterFormat: timeFormatStr,
-      eventTimeRangeFormat: ({ start, end }) => {
-        const startStr = format(start, timeFormatStr);
-        const endStr = format(end, timeFormatStr);
-        return `${startStr} – ${endStr}`;
-      },
-      dateFormat: 'MMM dd',
-      dayFormat: 'EEE MMM dd',
+      eventTimeRangeFormat: formatTimeRange,
+      dateFormat,
+      dayFormat: `EEE ${dateFormat}`,
       weekdayFormat: 'EEE',
       monthHeaderFormat: 'MMMM yyyy',
-      dayHeaderFormat: 'EEEE MMM dd',
-      agendaHeaderFormat: ({ start, end }) => {
-        return `${format(start, 'MMM dd')} – ${format(end, 'MMM dd')}`;
-      },
-      agendaDateFormat: 'EEE MMM dd',
+      dayHeaderFormat: `EEEE ${dateFormat}`,
+      agendaHeaderFormat: ({ start, end }) => `${format(start, dateFormat)} - ${format(end, dateFormat)}`,
+      agendaDateFormat: `EEE ${dateFormat}`,
       agendaTimeFormat: timeFormatStr,
-      agendaTimeRangeFormat: ({ start, end }) => {
-        const startStr = format(start, timeFormatStr);
-        const endStr = format(end, timeFormatStr);
-        return `${startStr} – ${endStr}`;
-      },
+      agendaTimeRangeFormat: formatTimeRange,
       todayRangeLabel: (label) => label,
       todayLabel: 'Today',
     };
-  }, [timeFormat]);
+  }, [timeFormat, dateFormat]);
 };

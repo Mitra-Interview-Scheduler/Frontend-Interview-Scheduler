@@ -1,18 +1,16 @@
 import api from './api';
+import { withQuery } from './queryParams';
 
 export const candidateAPI = {
   // Get all candidates with optional filters
   getAllCandidates: async (filters = {}, pagination = null) => {
-    const params = new URLSearchParams();
-    if (filters.departmentId) params.append('departmentId', filters.departmentId);
-    if (filters.status) params.append('status', filters.status);
-    if (filters.search) params.append('search', filters.search);
-    if (pagination?.page !== undefined) params.append('page', pagination.page);
-    if (pagination?.size !== undefined) params.append('size', pagination.size);
-    
-    const queryString = params.toString();
-    const url = queryString ? `/candidates?${queryString}` : '/candidates';
-    const response = await api.get(url);
+    const response = await api.get(withQuery('/candidates', {
+      departmentId: filters.departmentId,
+      status: filters.status,
+      search: filters.search,
+      page: pagination?.page,
+      size: pagination?.size,
+    }));
     return response.data;
   },
 

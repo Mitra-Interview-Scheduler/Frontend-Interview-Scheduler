@@ -7,12 +7,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
+import { getInitial } from '@/lib/personUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const navigate = useNavigate();
+  const { formatDate, formatTimeRange } = useFormattedDateTime();
   const [loading, setLoading] = useState(true);
   const [candidate, setCandidate] = useState(null);
   const [interviewDetails, setInterviewDetails] = useState(null);
@@ -61,11 +63,6 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const handleStartInterview = () => {
     onOpenChange(false);
     navigate(`/interviewer/feedback/${interviewScheduleId}`);
-  };
-
-  const getInitial = (name) => {
-    if (!name || typeof name !== 'string') return 'C';
-    return name.trim().charAt(0).toUpperCase() || 'C';
   };
 
   return (
@@ -126,7 +123,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       </div>
                       <div>
                         <p className="text-xs text-blue-600 font-medium">Date</p>
-                        <p className="font-semibold text-sm">{format(new Date(interviewDetails.preferredStartDateTime), 'MMM dd, yyyy')}</p>
+                        <p className="font-semibold text-sm">{formatDate(interviewDetails.preferredStartDateTime)}</p>
                       </div>
                     </div>
                   )}
@@ -138,7 +135,10 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       <div>
                         <p className="text-xs text-blue-600 font-medium">Time</p>
                         <p className="font-semibold text-sm">
-                          {format(new Date(interviewDetails.preferredStartDateTime), 'HH:mm')} – {format(new Date(interviewDetails.preferredEndDateTime), 'HH:mm')}
+                          {formatTimeRange(
+                            new Date(interviewDetails.preferredStartDateTime),
+                            new Date(interviewDetails.preferredEndDateTime)
+                          )}
                         </p>
                       </div>
                     </div>

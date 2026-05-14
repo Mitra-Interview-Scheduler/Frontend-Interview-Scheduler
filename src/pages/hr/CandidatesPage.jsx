@@ -27,6 +27,8 @@ import { candidateAPI }   from '@/services/candidateAPI';
 import { departmentAPI }  from '@/services/departmentAPI';
 import CandidateEditDialog from './components/CandidateEditDialog';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
+import { getInitial } from '@/lib/personUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CANDIDATE_STATUSES = [
@@ -53,6 +55,7 @@ const STATUS_COLORS = {
 // ── Component ─────────────────────────────────────────────────────────────────
 const CandidatesPage = () => {
   const navigate = useNavigate();
+  const { formatDate } = useFormattedDateTime();
   const [candidates,   setCandidates]   = useState([]);
   const [departments,  setDepartments]  = useState([]);
   const [searchTerm,    setSearchTerm]   = useState('');
@@ -189,11 +192,6 @@ const CandidatesPage = () => {
 
   const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
 
-  const getInitial = (name) => {
-    if (!name || typeof name !== 'string') return 'C';
-    return name.trim().charAt(0).toUpperCase() || 'C';
-  };
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
@@ -315,7 +313,7 @@ const CandidatesPage = () => {
                           </div>
 
                           <div className="col-span-6 md:col-span-1 text-xs text-muted-foreground text-left md:text-right pt-1 md:pt-0">
-                            {candidate.appliedAt ? new Date(candidate.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                            {candidate.appliedAt ? formatDate(candidate.appliedAt) : '-'}
                           </div>
 
                           <div className="col-span-6 md:col-span-1 flex justify-end md:justify-end gap-1.5">

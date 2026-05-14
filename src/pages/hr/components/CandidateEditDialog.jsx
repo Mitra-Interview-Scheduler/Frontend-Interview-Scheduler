@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
+import { downloadBlobResponse } from '@/lib/documentUtils';
 
 const CANDIDATE_STATUSES = [
   'APPLIED','SCREENING','SCHEDULED','INTERVIEWED',
@@ -191,14 +192,7 @@ function CandidateEditDialog({
     if (!candidate?.id || !document?.id) return;
     try {
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
-      const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document.fileName;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlobResponse(response, document);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to download document');
     }

@@ -16,6 +16,8 @@ import { feedbackAPI } from '@/services/feedbackAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
+import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
+import { getInitial } from '@/lib/personUtils';
 
 function InterviewFeedbackPage() {
   const navigate = useNavigate();
@@ -161,14 +163,7 @@ function InterviewFeedbackPage() {
     if (!candidate?.id || !document?.id) return;
     try {
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
-      const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document.fileName;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlobResponse(response, document);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to download document');
     }
@@ -182,7 +177,7 @@ function InterviewFeedbackPage() {
       console.log('Fetching preview for document:', document.fileName);
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
       console.log('Document response:', response, 'Content Type:', document.contentType);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
+      const url = createDocumentObjectUrl(response, document);
       console.log('Preview URL created:', url);
       setPreviewUrl(url);
     } catch (err) {
@@ -199,16 +194,9 @@ function InterviewFeedbackPage() {
   };
 
   const closePreview = () => {
-    if (previewUrl) {
-      window.URL.revokeObjectURL(previewUrl);
-    }
+    revokeObjectUrl(previewUrl);
     setSelectedDocument(null);
     setPreviewUrl(null);
-  };
-
-  const getInitial = (name) => {
-    if (!name || typeof name !== 'string') return 'C';
-    return name.trim().charAt(0).toUpperCase() || 'C';
   };
 
   const renderFormField = (question) => {

@@ -6,22 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, addDays, setHours, setMinutes } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
+import { Calendar } from 'react-big-calendar';
+import { format, addDays, setHours, setMinutes } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarIcon, Users, Search, CheckCircle, Filter, X, User, Briefcase, Clock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  locales: { 'en-US': enUS },
-});
+import { calendarLocalizer } from '@/lib/calendarUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const getRelativeDate = (dayOffset, hour, minute) => {
   const base = new Date();
@@ -94,6 +87,7 @@ const mockCandidates = [
 ];
 
 const SchedulePage = () => {
+  const { formatDateWithWeekday, formatDateTime, formatTimeRange } = useFormattedDateTime();
   const [selectedCandidate, setSelectedCandidate] = useState('');
   const [selectedTechnology, setSelectedTechnology] = useState('');
   const [selectedDesignation, setSelectedDesignation] = useState('');
@@ -189,7 +183,7 @@ const SchedulePage = () => {
     
     toast({
       title: "Interview Scheduled",
-      description: `Interview scheduled for ${candidate.name} with ${selectedSlot.resource.interviewer} on ${format(selectedSlot.start, 'PPP')} at ${format(selectedSlot.start, 'p')}`,
+      description: `Interview scheduled for ${candidate.name} with ${selectedSlot.resource.interviewer} on ${formatDateTime(selectedSlot.start)}`,
     });
     
     setIsScheduleDialogOpen(false);
@@ -420,7 +414,7 @@ const SchedulePage = () => {
                 ) : (
                   <div className="h-[650px] p-4">
                     <Calendar
-                      localizer={localizer}
+                      localizer={calendarLocalizer}
                       events={calendarEvents}
                       startAccessor="start"
                       endAccessor="end"
@@ -473,10 +467,10 @@ const SchedulePage = () => {
                   <div className="mt-4 pt-4 border-t border-border/50 flex items-center gap-2 text-sm">
                     <Clock className="w-4 h-4 text-primary" />
                     <span className="font-medium">
-                      {format(selectedSlot.start, 'EEEE, MMMM d, yyyy')}
+                      {formatDateWithWeekday(selectedSlot.start)}
                     </span>
                     <span className="text-muted-foreground">•</span>
-                    <span>{format(selectedSlot.start, 'h:mm a')} - {format(selectedSlot.end, 'h:mm a')}</span>
+                    <span>{formatTimeRange(selectedSlot.start, selectedSlot.end)}</span>
                   </div>
                 </div>
 

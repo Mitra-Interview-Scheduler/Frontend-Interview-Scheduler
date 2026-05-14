@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Download, Loader2, FileText, X } from 'lucide-react';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 function InterviewDocumentPreviewDialog({
   open,
@@ -12,6 +13,7 @@ function InterviewDocumentPreviewDialog({
   onClose,
   onDownload,
 }) {
+  const { formatDate } = useFormattedDateTime();
   if (!document) return null;
 
   return (
@@ -99,7 +101,7 @@ function InterviewDocumentPreviewDialog({
                   <div>
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Uploaded</p>
                     <p className="text-sm text-gray-700 font-medium">
-                      {new Date(document.createdAt).toLocaleDateString()}
+                      {formatDate(document.createdAt)}
                     </p>
                   </div>
                 )}

@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import { Calendar } from 'react-big-calendar';
 import {
-  format, parse, startOfWeek, getDay,
+  format,
   addHours, isSameDay, startOfDay, isBefore,
 } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import './AvailabilityCalendar.css';
+import '@/styles/AvailabilityCalendar.css';
 
 import {
   Card, CardContent,
@@ -25,12 +24,8 @@ import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
+import { calendarLocalizer } from '@/lib/calendarUtils';
 
-
-// ── Calendar localizer ────────────────────────────────────────────────────────
-const localizer = dateFnsLocalizer({
-  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
-});
 
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -399,7 +394,7 @@ const handleSelectSlot = ({ start, end }) => {
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
                       <Calendar
-                        localizer={localizer}
+                        localizer={calendarLocalizer}
                         events={events}
                         startAccessor="start"
                         endAccessor="end"

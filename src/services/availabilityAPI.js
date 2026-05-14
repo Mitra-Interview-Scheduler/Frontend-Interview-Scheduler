@@ -1,14 +1,8 @@
 // src/services/availabilityAPI.js
 import api from './api';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
-const formatLocalDateTime = (date) => {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-         `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-
 export const availabilityAPI = {
   // ── Read ──────────────────────────────────────────────────────────────────
 

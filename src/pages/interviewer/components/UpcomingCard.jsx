@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { format, isAfter } from 'date-fns';
+import { isAfter } from 'date-fns';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const UPCOMING_SLOTS_PER_PAGE = 10;
 
@@ -42,6 +43,7 @@ const UpcomingCard = ({
   onEventClick,
   onDeleteClick,
 }) => {
+  const { formatDate, formatTimeRange } = useFormattedDateTime();
   const [availablePage, setAvailablePage] = useState(1);
   const [bookedPage, setBookedPage] = useState(1);
 
@@ -143,12 +145,12 @@ const UpcomingCard = ({
                       onClick={() => onEventClick(event)}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                        <span className="text-xs font-bold text-slate-700">{formatDate(event.start)}</span>
                       </div>
 
                       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                        {formatTimeRange(event.start, event.end)}
                       </div>
 
                       {event.description && (
@@ -230,7 +232,7 @@ const UpcomingCard = ({
                       className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all"
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                        <span className="text-xs font-bold text-slate-700">{formatDate(event.start)}</span>
                         <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
                           Booked
                         </Badge>
@@ -238,7 +240,7 @@ const UpcomingCard = ({
 
                       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                        {formatTimeRange(event.start, event.end)}
                       </div>
 
                       {event.candidateName && (

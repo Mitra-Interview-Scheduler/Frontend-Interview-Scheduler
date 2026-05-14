@@ -15,10 +15,11 @@ import {
   Trash2, X, User, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
+import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ const buildScheduleItems = (requests, panels) => {
 
 const HRDashboard = () => {
   const navigate = useNavigate();
+  const { formatDateTime, formatTime } = useFormattedDateTime();
 
   const [candidates, setCandidates]           = useState([]);
   const [requests, setRequests]               = useState([]);
@@ -229,9 +231,9 @@ const HRDashboard = () => {
   const formatInterviewTime = (dateStr) => {
     try {
       const d = parseISO(dateStr);
-      if (isToday(d))    return `Today, ${format(d, 'h:mm a')}`;
-      if (isTomorrow(d)) return `Tomorrow, ${format(d, 'h:mm a')}`;
-      return format(d, 'MMM d, h:mm a');
+      if (isToday(d)) return `Today, ${formatTime(d)}`;
+      if (isTomorrow(d)) return `Tomorrow, ${formatTime(d)}`;
+      return formatDateTime(d);
     } catch { return dateStr || '—'; }
   };
 
@@ -343,7 +345,7 @@ const HRDashboard = () => {
             </p>
             {lastRefreshed && (
               <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {format(lastRefreshed, 'h:mm:ss a')}
+                Last updated: {formatTime(lastRefreshed)}
               </p>
             )}
           </div>
@@ -473,7 +475,7 @@ const HRDashboard = () => {
                                     <p className="font-semibold text-sm truncate">{item.candidateName}</p>
                                     <p className="text-xs text-primary font-medium mt-0.5">
                                       {formatInterviewTime(item.startDateTime)}
-                                      {item.endDateTime && ` – ${format(parseISO(item.endDateTime), 'h:mm a')}`}
+                                      {item.endDateTime && ` - ${formatTime(parseISO(item.endDateTime))}`}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0">
@@ -736,7 +738,7 @@ const HRDashboard = () => {
               <p className="text-sm font-medium">{cancelTarget.candidateName}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {formatInterviewTime(cancelTarget.startDateTime)}
-                {cancelTarget.endDateTime && ` – ${format(parseISO(cancelTarget.endDateTime), 'h:mm a')}`}
+                {cancelTarget.endDateTime && ` - ${formatTime(parseISO(cancelTarget.endDateTime))}`}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {cancelTarget.type === 'panel'
