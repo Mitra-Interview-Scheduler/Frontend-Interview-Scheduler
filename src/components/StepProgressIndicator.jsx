@@ -85,7 +85,7 @@ const StepProgressIndicator = ({ currentStatus, maxSteps }) => {
                   }}
                   onClick={() => hasMultiple && setShowDropdown(!showDropdown)}
                 >
-                  {isCompleted ? '✓' : stepNumber}
+                  {isCompleted ? '✓' :  <div className="h-4 w-4 rounded-full border border-dashed border-gray-400" />} 
                 </div>
 
                 {/* Dropdown Menu for Multiple Statuses */}
