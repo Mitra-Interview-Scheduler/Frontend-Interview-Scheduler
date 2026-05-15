@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Clock, Trash2, Calendar as CalendarIcon, User, Pencil,
-  CheckCircle2,
+  CheckCircle2,Calendar
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
@@ -144,18 +144,25 @@ const UpcomingCard = ({
                       className="group relative flex flex-col p-2.5 rounded-xl border-2 border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all cursor-pointer"
                       onClick={() => onEventClick(event)}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-700">{formatDate(event.start)}</span>
-                      </div>
+                     
+
+
+                      {event.description ? (
+                        <span className="text-xs font-bold text-slate-700">{event.description}</span>
+                      ) : <span className="text-xs font-bold text-slate-700">Available</span>}
 
                       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                         <Clock className="w-3 h-3" />
                         {formatTimeRange(event.start, event.end)}
                       </div>
+                      <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                        <CalendarIcon className="w-3 h-3" />
+                        {formatDate(event.start)}
+                      </div>
 
-                      {event.description && (
-                        <p className="text-[10px] text-slate-600 mt-1 truncate">{event.description}</p>
-                      )}
+                       
+
+
 
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-100 transition-opacity">
                         <Button

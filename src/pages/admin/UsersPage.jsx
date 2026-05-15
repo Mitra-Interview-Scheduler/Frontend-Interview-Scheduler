@@ -108,7 +108,7 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
 
 // ─── Register dialog ──────────────────────────────────────────────────────────
 
-const EMPTY = { firstName: '', lastName: '', email: '', password: '', role: '',auth_provider: 'LOCAL' };
+const EMPTY = { firstName: '', lastName: '', email: '', password: '', roles: [],auth_provider: 'LOCAL' };
 
 function RegisterDialog({ open, onOpenChange, onSuccess }) {
   const [form, setForm]         = useState(EMPTY);
@@ -214,6 +214,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
                 type="password"
                 placeholder="Min. 6 characters"
                 value={form.password}
+                autoComplete="new-password"
                 onChange={(e) => set('password')(e.target.value)}
                 className="pl-8 h-9 text-sm"
               />
@@ -225,7 +226,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Role <span className="text-red-400 normal-case">*</span>
             </Label>
-            <Select value={form.role} onValueChange={set('role')}>
+            <Select value={form.role} onValueChange={set('roles')}>
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select a role…" />
               </SelectTrigger>
@@ -357,7 +358,7 @@ export default function UsersPage() {
   const initiateDelete = (user) => {
     const userRoles = user.roles || (user.role ? [user.role] : []);
     if (userRoles.includes('ADMIN')) { setGuardTarget(user); }
-    else                              { executeDelete(user.id); }
+    else{ executeDelete(user.id); }
   };
 
   const executeDelete = async (id) => {
@@ -367,9 +368,14 @@ export default function UsersPage() {
       await usersAPI.delete(id);
       setUsers((p) => p.filter((u) => u.id !== id));
       toast({ title: 'User deleted' });
+
     } catch (err) {
       toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
-    } finally { setActionId(null); }
+    } finally { setActionId(null);
+          setRoleFilter('ALL');
+          setSearch('');
+
+     }
   };
 
   const openDetails = (user) => {
