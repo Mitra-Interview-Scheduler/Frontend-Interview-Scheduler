@@ -48,7 +48,7 @@ const  TimePicker = ({ value, onChange, label, isEnd = false, minTime = null, ma
   return (
     <div className="space-y-2">
       <label className="font-semibold text-sm">{label}</label>
-      <div className="flex items-center gap-1 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+      <div className="flex items-center justify-evenly gap-1 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
         {/* Hour Input */}
         <input
           type="number"
