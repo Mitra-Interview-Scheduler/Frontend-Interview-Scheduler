@@ -1,5 +1,6 @@
 // src/services/hrAvailabilityAPI.js
 import api from './api';
+import { withQuery } from './queryParams';
 
 export const hrAvailabilityAPI = {
   /**
@@ -35,10 +36,9 @@ export const hrAvailabilityAPI = {
    * Get all interview requests created by the current HR user.
    */
   getHRRequests: async (params = null) => {
-    const query = new URLSearchParams();
-    if (params?.size !== undefined) query.append('size', params.size);
-    const queryString = query.toString();
-    const response = await api.get(queryString ? `/hr/interviews/my-requests?${queryString}` : '/hr/interviews/my-requests');
+    const response = await api.get(withQuery('/hr/interviews/my-requests', {
+      size: params?.size,
+    }));
     return response.data;
   },
 
@@ -63,10 +63,9 @@ export const hrAvailabilityAPI = {
    * Get all panel interviews created by the current HR user.
    */
   getMyPanels: async (params = null) => {
-    const query = new URLSearchParams();
-    if (params?.size !== undefined) query.append('size', params.size);
-    const queryString = query.toString();
-    const response = await api.get(queryString ? `/hr/panels/my-panels?${queryString}` : '/hr/panels/my-panels');
+    const response = await api.get(withQuery('/hr/panels/my-panels', {
+      size: params?.size,
+    }));
     return response.data;
   },
 

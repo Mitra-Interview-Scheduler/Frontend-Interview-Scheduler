@@ -1,9 +1,6 @@
 import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { format } from 'date-fns';
 
-
-// ── Per-interviewer color palette ────────────────────────────────────────────
 export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', solid: '#f59e0b', border: '#78350f', text: '#fff' },
@@ -23,8 +20,6 @@ export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', solid: '#0ea5e9', border: '#0c4a6e', text: '#fff' },
 ];
 
-
-// ── Per-interviewer color palette ────────────────────────────────────────────
 export const PANEL_PALETTE = {
   bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
   solid: '#0ea5e9',
@@ -38,12 +33,6 @@ export const BOOKED_OVERLAY = {
   border: '#064e3b',
 };
 
-
-
-/**
- * ── Custom calendar event component ──
- * Renders the inside of a calendar slot (Icons, Labels, Names)
- */
 export const CalendarEventComponent = ({ event, panelSlots }) => {
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const isBooked = event.resource?.status === 'BOOKED';
@@ -75,7 +64,7 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
         </span>
       )}
       {isBooked && !isInPanel && (
-        <span style={{ fontSize: 10, flexShrink: 0 }}>🔒</span>
+        <span style={{ fontSize: 10, flexShrink: 0 }}>Booked</span>
       )}
       <span style={{
         overflow: 'hidden',
@@ -86,27 +75,19 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
         minWidth: 0,
       }}>
         {isBooked
-          ? event.title.replace(/^🔒\s*/, '')
+          ? event.title.replace(/^Booked\s*/, '')
           : event.resource?.interviewer || event.title}
       </span>
     </div>
   );
 };
 
-/**
- * ── Event style getter ──
- * Determines the colors, borders, and shadows of the slot
- */
 export const getEventStyle = (event, panelSlots) => {
   const isBooked = event.resource?.status === 'BOOKED';
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-  let palette;
-
-  if (isInPanel) {
-    palette = PANEL_PALETTE;
-  } else {
-    palette = event.resource?.palette || INTERVIEWER_PALETTES[0];
-  }
+  const palette = isInPanel
+    ? PANEL_PALETTE
+    : event.resource?.palette || INTERVIEWER_PALETTES[0];
 
   return {
     style: {
@@ -132,28 +113,25 @@ export const getEventStyle = (event, panelSlots) => {
   };
 };
 
-/**
- * ── Tooltip Accessor ──
- * Generates the text shown on hover
- */
-export const getTooltipText = (event, panelSlots) => {
+export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`) => {
   const r = event.resource;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
+  const timeRange = formatTimeRange(event.start, event.end);
 
   if (r?.status === 'BOOKED') {
-    return `🔒 BOOKED — ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick to cancel & restore slot`;
+    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;
   }
 
   if (isInPanel) {
-    return `✅ PANEL SELECTED — ${r.interviewer}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick again to remove from panel`;
+    return `PANEL SELECTED - ${r.interviewer}\n${timeRange}\n\nClick again to remove from panel`;
   }
 
   return [
-    `👤 ${r.interviewer}`,
-    r.designation ? `📋 ${r.designation}` : null,
-    r.department ? `🏢 ${r.department}` : null,
-    r.yearsOfExperience ? `⏱ ${r.yearsOfExperience} yrs` : null,
-    r.skills?.length ? `💻 ${r.skills.join(', ')}` : null,
-    `🕐 ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`,
+    `Interviewer: ${r.interviewer}`,
+    r.designation ? `Designation: ${r.designation}` : null,
+    r.department ? `Department: ${r.department}` : null,
+    r.yearsOfExperience ? `Experience: ${r.yearsOfExperience} yrs` : null,
+    r.skills?.length ? `Skills: ${r.skills.join(', ')}` : null,
+    `Time: ${timeRange}`,
   ].filter(Boolean).join('\n');
 };

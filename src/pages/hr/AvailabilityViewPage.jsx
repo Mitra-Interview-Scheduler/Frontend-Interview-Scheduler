@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
@@ -19,9 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
-import {
-  format, parse, startOfWeek, getDay, addMinutes, startOfDay,
-} from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
@@ -35,10 +34,10 @@ import { technologyAPI } from '@/services/technologyAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
-import { INTERVIEWER_PALETTES, BOOKED_OVERLAY, PANEL_PALETTE ,CalendarEventComponent, getEventStyle, getTooltipText} from './utils/AvailabilityViewPageUiUtils';
-import {localizer, formatLocalDateTime, formatInputDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege,  formatSlots} from './utils/AvailabilityViewPageHelperUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './utils/AvailabilityViewPageHelperUtils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import './AvailabilityCalendar.css';
+import '@/styles/AvailabilityCalendar.css';
 
 
 const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
@@ -49,6 +48,7 @@ const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19
 const AvailabilityViewPage = () => {
   const location = useLocation();
   const calendarFormats = useCalendarFormats();
+  const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -119,8 +119,8 @@ const AvailabilityViewPage = () => {
   [panelSlots]);
 
   const tooltipAccessor = useCallback((event) => 
-    getTooltipText(event, panelSlots), 
-  [panelSlots]);
+    getTooltipText(event, panelSlots, formatTimeRange), 
+  [panelSlots, formatTimeRange]);
 
   // For the calendar components prop
   const calendarComponents = useMemo(() => ({
@@ -494,6 +494,7 @@ const AvailabilityViewPage = () => {
     }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
+    
   };
 
 
@@ -1177,7 +1178,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
               )}
               <p className="text-xs text-muted-foreground">
-                {format(cancelTarget.start, 'PPP')} · {format(cancelTarget.start, 'h:mm a')} – {format(cancelTarget.end, 'h:mm a')}
+                {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
               </p>
             </div>
           )}
@@ -1234,7 +1235,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex items-center gap-3">
                     <Clock className="w-5 h-5 text-primary" />
                     <p className="text-sm">
-                      {format(selectedSlot.start, 'PPP')} · {format(selectedSlot.start, 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')}
+                      {formatDateTimeRange(selectedSlot.start, selectedSlot.end)}
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -1282,12 +1283,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </div>
                   {bookStartTime && bookEndTime && (
                     <div className="mt-3 p-2 rounded bg-amber-100 dark:bg-amber-900/30 text-xs text-amber-800 space-y-1">
-                      <p><strong>Interview:</strong> {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} – {format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')}</p>
+                      <p><strong>Interview:</strong> {formatTimeRange(parseTimeOnDate(bookStartTime, selectedSlot.start), parseTimeOnDate(bookEndTime, selectedSlot.start))}</p>
                       {bookStartTime > format(selectedSlot.start, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(selectedSlot.start, 'h:mm a')} – {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available</p>
                       )}
                       {bookEndTime < format(selectedSlot.end, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available</p>
                       )}
                     </div>
                   )}
@@ -1350,7 +1351,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                               {privErr && <ShieldAlert className="w-3.5 h-3.5 text-red-500" />}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {ps.slot.resource.department} · Slot: {format(ps.slot.start, 'h:mm a')} – {format(ps.slot.end, 'h:mm a')}
+                              {ps.slot.resource.department} · Slot: {formatTimeRange(ps.slot.start, ps.slot.end)}
                               {ps.slot.resource.interviewerTierOrder != null && (
                                 <span className="ml-1 text-indigo-600">(Tier {ps.slot.resource.interviewerTierOrder})</span>
                               )}
@@ -1408,7 +1409,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     {panelBookStart && panelBookEnd && (
                       <p className="mt-2 text-xs text-amber-800">
                         <strong>Interview:</strong>{' '}
-                        {format(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), 'h:mm a')} – {format(parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start), 'h:mm a')}
+                        {formatTimeRange(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start))}
                       </p>
                     )}
                   </>

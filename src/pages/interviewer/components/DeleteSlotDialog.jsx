@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -8,6 +7,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const DeleteSlotDialog = ({
   isOpen,
@@ -15,6 +15,7 @@ const DeleteSlotDialog = ({
   slot,
   onSuccess,
 }) => {
+  const { formatDateWithWeekday, formatTimeRange } = useFormattedDateTime();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -23,7 +24,7 @@ const DeleteSlotDialog = ({
     setIsDeleting(true);
     try {
       await availabilityAPI.deleteAvailabilitySlot(slot.id);
-      toast({ title: '✓ Time slot deleted' });
+      toast({ title: 'Time slot deleted' });
       onSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -38,7 +39,7 @@ const DeleteSlotDialog = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => { if (!isDeleting) onOpenChange(o); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!isDeleting) onOpenChange(open); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-700">
@@ -52,9 +53,9 @@ const DeleteSlotDialog = ({
         <DialogBody>
           {slot && (
             <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
-              <p className="font-semibold text-sm">{format(slot.start, 'EEEE, MMMM dd, yyyy')}</p>
+              <p className="font-semibold text-sm">{formatDateWithWeekday(slot.start)}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {format(slot.start, 'HH:mm')} – {format(slot.end, 'HH:mm')}
+                {formatTimeRange(slot.start, slot.end)}
               </p>
             </div>
           )}
@@ -77,7 +78,7 @@ const DeleteSlotDialog = ({
             {isDeleting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{' '}
-                Deleting…
+                Deleting...
               </>
             ) : (
               <>

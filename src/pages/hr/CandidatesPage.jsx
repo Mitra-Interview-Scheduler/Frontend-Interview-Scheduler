@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button }   from '@/components/ui/button';
 import { Input }    from '@/components/ui/input';
@@ -18,14 +19,16 @@ import {
 } from '@/components/ui/select';
 import {
   Plus, Search, Mail, Phone, Edit, Loader2, MapPin, Hash, Users,
-  CalendarClockIcon,
+  CalendarClockIcon, Eye,
 } from 'lucide-react';
 import { motion }   from 'framer-motion';
 import { toast }    from '@/hooks/use-toast';
 import { candidateAPI }   from '@/services/candidateAPI';
 import { departmentAPI }  from '@/services/departmentAPI';
-import CandidateEditDialog from './components/CandidateEditDialog';
+import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
+import { getInitial } from '@/lib/personUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CANDIDATE_STATUSES = [
@@ -51,6 +54,8 @@ const STATUS_COLORS = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const CandidatesPage = () => {
+  const navigate = useNavigate();
+  const { formatDate } = useFormattedDateTime();
   const [candidates,   setCandidates]   = useState([]);
   const [departments,  setDepartments]  = useState([]);
   const [searchTerm,    setSearchTerm]   = useState('');
@@ -137,11 +142,23 @@ const CandidatesPage = () => {
 
 
   // ── Edit dialog handlers ──────────────────────────────────────────────────
-  const handleOpenView = (candidate) => {
-    setSelectedCandidate(candidate);
-    setIsReadOnly(true);
-    setIsEditOpen(true);
+  const handleOpenView = async (candidate) => {
+    try {
+      const details = await candidateAPI.getCandidateById(candidate.id);
+      setSelectedCandidate(details);
+      setIsReadOnly(true);
+      setIsEditOpen(true);
+    } catch (err) {
+      console.error('Failed to load candidate details:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to load candidate details',
+        variant: 'destructive',
+      });
+    }
   };
+
+
 
   const handleOpenEdit = (candidate) => {
     setSelectedCandidate(candidate);
@@ -156,6 +173,7 @@ const CandidatesPage = () => {
    // ── InterviewSchedulePage dialog handlers ──────────────────────────────────────────────────
   const handleOpenInterviewSchedulePage = (candidate) => {
     setSelectedCandidate(candidate);
+    setEditOpen(false);
     setIsInterviewSchedulePageOpen(true);
   };
 
@@ -174,11 +192,6 @@ const CandidatesPage = () => {
   }
 
   const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
-
-  const getInitial = (name) => {
-    if (!name || typeof name !== 'string') return 'C';
-    return name.trim().charAt(0).toUpperCase() || 'C';
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -240,7 +253,8 @@ const CandidatesPage = () => {
               <div className="space-y-2">
                 {candidates.map((candidate, index) => (
                   <motion.div key={candidate.id}
-                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03 }}>
                     <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                       <CardContent className="p-3">
@@ -301,10 +315,15 @@ const CandidatesPage = () => {
                           </div>
 
                           <div className="col-span-6 md:col-span-1 text-xs text-muted-foreground text-left md:text-right pt-1 md:pt-0">
-                            {candidate.appliedAt ? new Date(candidate.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                            {candidate.appliedAt ? formatDate(candidate.appliedAt) : '-'}
                           </div>
 
                           <div className="col-span-6 md:col-span-1 flex justify-end md:justify-end gap-1.5">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0"
+                              onClick={(e) => { e.stopPropagation(); handleOpenView(candidate); }} disabled={loading} title="View Details">
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenEdit(candidate); }} disabled={loading} title="Edit">
                               <Edit className="w-3.5 h-3.5" />
@@ -377,16 +396,17 @@ const CandidatesPage = () => {
         </Card>
 
         {/* ══ ADD DIALOG ═══════════════════════════════════════════════════ */}
-        <CandidateEditDialog
+        <CandidateDialogPage
           open={isAddOpen}
           candidate={null}
           departments={departments}
           onOpenChange={setIsAddOpen}
           onSaveSuccess={applyFilters}
+          onSchedule={setIsInterviewSchedulePageOpen}
           mode="create"
         />
 
-        <CandidateEditDialog
+        <CandidateDialogPage
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
@@ -394,13 +414,14 @@ const CandidatesPage = () => {
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}
           onEdit={handleViewToEdit}
+          onSchedule={() =>{setIsEditOpen(false);  setIsInterviewSchedulePageOpen(true); }}
         />
 
-<CandidateInterviewSchedulePage
-  open={isInterviewSchedulePageOpen}
-  candidate={selectedCandidate}
-  onOpenChange={setIsInterviewSchedulePageOpen} // This ensures the Effect inside can trigger
-/>
+        <CandidateInterviewSchedulePage
+          open={isInterviewSchedulePageOpen}
+          candidate={selectedCandidate}
+          onOpenChange={setIsInterviewSchedulePageOpen} // This ensures the Effect inside can trigger
+        />
       </div>
     </Layout>
   );

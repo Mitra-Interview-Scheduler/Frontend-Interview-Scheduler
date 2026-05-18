@@ -11,13 +11,8 @@ import { Input } from '@/components/ui/input';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
 import TimePicker from '@/components/TimePicker';
-
-const parseTimeOnDate = (timeStr, referenceDate) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  const d = new Date(referenceDate);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
+import { parseTimeOnDate } from '@/lib/calendarUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const EditSlotDialog = ({
   isOpen,
@@ -27,6 +22,13 @@ const EditSlotDialog = ({
   onDelete,
   getSlotStartError,
 }) => {
+  const {
+    formatDate,
+    formatDateWithWeekday,
+    formatDateTimeRange,
+    formatTime,
+    formatTimeRange,
+  } = useFormattedDateTime();
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [description, setDescription] = useState('');
@@ -106,8 +108,8 @@ const EditSlotDialog = ({
       });
 
       toast({
-        title: '✓ Slot updated',
-        description: `${format(new Date(updated.startDateTime), 'MMM dd, yyyy')} · ${format(new Date(updated.startDateTime), 'HH:mm')} – ${format(new Date(updated.endDateTime), 'HH:mm')}`,
+        title: 'Slot updated',
+        description: formatDateTimeRange(new Date(updated.startDateTime), new Date(updated.endDateTime)),
       });
 
       onSuccess(updated);
@@ -139,9 +141,9 @@ const EditSlotDialog = ({
           <DialogBody className="space-y-4 py-2">
             <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
               <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
-              <p className="font-semibold text-sm">{format(slot.start, 'EEEE, MMMM dd, yyyy')}</p>
+              <p className="font-semibold text-sm">{formatDateWithWeekday(slot.start)}</p>
               <p className="text-xs text-indigo-600 mt-0.5">
-                Currently: {format(slot.start, 'HH:mm')} – {format(slot.end, 'HH:mm')}
+                Currently: {formatTimeRange(slot.start, slot.end)}
               </p>
             </div>
 
@@ -180,9 +182,9 @@ const EditSlotDialog = ({
                 <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
                 <p className="text-sm text-green-800">
                   <strong>New window:</strong>{' '}
-                  {format(parseTimeOnDate(startTime, slot.start), 'h:mm a')} –{' '}
-                  {format(parseTimeOnDate(endTime, slot.start), 'h:mm a')} on{' '}
-                  {format(slot.start, 'MMM dd')}
+                  {formatTime(parseTimeOnDate(startTime, slot.start))} -{' '}
+                  {formatTime(parseTimeOnDate(endTime, slot.start))} on{' '}
+                  {formatDate(slot.start)}
                 </p>
               </div>
             )}

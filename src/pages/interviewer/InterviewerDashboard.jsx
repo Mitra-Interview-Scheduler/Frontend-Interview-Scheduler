@@ -10,7 +10,7 @@ import Layout from '@/components/layout/Layout';
 import { toast } from '@/hooks/use-toast';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { interviewRequestAPI } from '@/services/interviewRequestAPI';
-import { format } from 'date-fns';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const StatCard = ({ icon: Icon, title, value, description, color, loading }) => (
   <motion.div
@@ -47,6 +47,7 @@ const StatCard = ({ icon: Icon, title, value, description, color, loading }) => 
 
 const InterviewerDashboard = () => {
   const navigate = useNavigate();
+  const { formatDate, formatTime } = useFormattedDateTime();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     availableSlots: 0,
@@ -255,8 +256,8 @@ const InterviewerDashboard = () => {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Clock className="w-4 h-4" />
-                        {format(new Date(interview.preferredStartDateTime), 'MMM dd')} at{' '}
-                        {format(new Date(interview.preferredStartDateTime), 'h:mm a')}
+                        {formatDate(interview.preferredStartDateTime)} at{' '}
+                        {formatTime(new Date(interview.preferredStartDateTime))}
                       </div>
                       {interview.requiredTechnologies && interview.requiredTechnologies.length > 0 && (
                         <div className="flex flex-wrap gap-2">

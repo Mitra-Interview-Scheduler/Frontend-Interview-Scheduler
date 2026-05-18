@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { format, isSameDay, isBefore } from 'date-fns';
+import { isSameDay, isBefore } from 'date-fns';
 import { Plus, Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import TimePicker from '@/components/TimePicker';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const AddSlotDialog = ({ 
   isOpen, 
@@ -21,6 +22,7 @@ const AddSlotDialog = ({
   onSuccess,
   getSlotStartError 
 }) => {
+  const { formatDateWithWeekday } = useFormattedDateTime();
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [description, setDescription] = useState('');
@@ -103,7 +105,7 @@ const AddSlotDialog = ({
             <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
               <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4" />
-                {format(selectedDate, 'EEEE, MMMM dd, yyyy')}
+                {formatDateWithWeekday(selectedDate)}
               </p>
             </div>
           )}

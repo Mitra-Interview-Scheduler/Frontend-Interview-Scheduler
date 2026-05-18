@@ -1,14 +1,8 @@
 // src/services/availabilityAPI.js
 import api from './api';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
-const formatLocalDateTime = (date) => {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-         `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-
 export const availabilityAPI = {
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +27,22 @@ export const availabilityAPI = {
   getAvailabilityStats: async () => {
     const response = await api.get('/availability/stats');
     return response.data;
+  },
+
+  /** Get full interview details for a booked slot by interviewScheduleId */
+  getInterviewDetails: async (interviewScheduleId) => {
+    try {
+      const response = await api.get(`interviewer/interviews/bookedInterviews/${interviewScheduleId}`);
+      console.log('Fetched interview details:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching interview details for ID ${interviewScheduleId}:`, {
+        status: error.response?.status,
+        message: error.response?.statusText,
+        data: error.response?.data,
+      });
+      throw error; // Re-throw so caller knows the request failed
+    }
   },
 
   // ── Write ─────────────────────────────────────────────────────────────────

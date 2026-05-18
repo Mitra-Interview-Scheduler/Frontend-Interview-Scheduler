@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import { Calendar } from 'react-big-calendar';
 import {
-  format, parse, startOfWeek, getDay,
+  format,
   addHours, isSameDay, startOfDay, isBefore,
 } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import './AvailabilityCalendar.css';
+import '@/styles/AvailabilityCalendar.css';
 
 import {
   Card, CardContent,
@@ -24,12 +23,10 @@ import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
+import InterviewStartDialog from './components/InterviewStartDialog';
+import { calendarLocalizer } from '@/lib/calendarUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
 
-
-// ── Calendar localizer ────────────────────────────────────────────────────────
-const localizer = dateFnsLocalizer({
-  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
-});
 
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -138,13 +135,21 @@ const AvailabilityPage = () => {
   // Delete confirm state
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Interview start dialog state
+  const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
+  const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   // ── Data loading 
   const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
       const data = await availabilityAPI.getMyAvailability();
+              console.log('Loaded availability:', data)
+
       setEvents(
+        
         data.map((slot) => ({
+          
           id:                  slot.id,
           title: slot.status === 'BOOKED'
             ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
@@ -227,12 +232,10 @@ const handleSelectSlot = ({ start, end }) => {
 /** Clicking an existing event. */
   const handleEventClick = (event) => {
     if (event.status === 'booked') {
-      toast({
-        title: '🔒 Interview Scheduled',
-        description: event.candidateName
-          ? `Candidate: ${event.candidateName} · ${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`
-          : `${format(event.start, 'HH:mm')} – ${format(event.end, 'HH:mm')}`,
-      });
+      // Open interview start dialog for booked events
+      setSelectedInterviewScheduleId(event.interviewScheduleId);
+      console.log('Opening interview start dialog for schedule ID:', event.interviewScheduleId);
+      setIsInterviewStartDialogOpen(true);
       return;
     }
 
@@ -426,7 +429,10 @@ const handleSelectSlot = ({ start, end }) => {
                             return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                           return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                         }}
-                        formats={calendarFormats}
+                        formats={{
+                      timeGutterFormat: calendarFormats.timeGutterFormat,
+                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
+                    }}
                       />
                     </motion.div>
                   )}
@@ -493,6 +499,15 @@ const handleSelectSlot = ({ start, end }) => {
         }}
         slot={deleteTarget}
         onSuccess={handleDeleteSuccess}
+      />
+
+      <InterviewStartDialog
+        open={isInterviewStartDialogOpen}
+        interviewScheduleId={selectedInterviewScheduleId}
+        onOpenChange={(open) => {
+          setIsInterviewStartDialogOpen(open);
+          if (!open) setSelectedInterviewScheduleId(null);
+        }}
       />
     </Layout>
   );

@@ -17,11 +17,13 @@ import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import HRDashboard from "./pages/hr/HRDashboard";
 import CandidatesPage from "./pages/hr/CandidatesPage";
+import CandidateDetailsPage from "./pages/hr/CandidateDetailsPage";
 import SchedulePage from "./pages/hr/SchedulePage";
 import AvailabilityViewPage from "./pages/hr/AvailabilityViewPage";
 import UrgentRequestsPage from "./pages/hr/UrgentRequestsPage";
 import InterviewerDashboard from "./pages/interviewer/InterviewerDashboard";
 import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
+import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
 import ProfilePage from "./pages/interviewer/ProfilePage";
@@ -110,6 +112,14 @@ const App = () => (
               }
             />
             <Route
+              path="/hr/candidates/:candidateId/details"
+              element={
+                <PrivateRoute allowedRoles={['HR']}>
+                  <CandidateDetailsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/hr/schedule"
               element={
                 <PrivateRoute allowedRoles={['HR']}>
@@ -172,6 +182,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
                   <AvailabilityPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/interviewer/feedback/:interviewScheduleId"
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <InterviewFeedbackPage />
                 </PrivateRoute>
               }
             />
