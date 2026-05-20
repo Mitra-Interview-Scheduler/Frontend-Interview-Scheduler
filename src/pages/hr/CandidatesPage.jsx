@@ -215,7 +215,7 @@ const CandidatesPage = () => {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search by name or email…" value={searchTerm}
+                <Input placeholder="Search by name ,email or resource request number…" value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
               </div>
               <Select value={filterDepartment} onValueChange={setFilterDepartment}>
@@ -250,75 +250,90 @@ const CandidatesPage = () => {
                 <p className="text-muted-foreground">No candidates found</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {candidates.map((candidate, index) => (
-                  <motion.div key={candidate.id}
-                    initial={{ opacity: 0, y: 10 }} 
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03 }}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
-                      <CardContent className="p-3">
-                        <div className="grid grid-cols-12 gap-3 md:gap-4 items-start md:items-center w-full">
-                          <div className="col-span-12 md:col-span-4 flex items-center gap-3 min-w-0">
-                            <Avatar className="h-9 w-9 border border-border shrink-0">
-                              <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                {getInitial(candidate.name)}
-                              </AvatarFallback>
-                            </Avatar>
+            <div className="space-y-2">
+              {candidates.map((candidate, index) => (
+                <motion.div 
+                  key={candidate.id}
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
+                    <CardContent className="p-3">
+                      {/* Changed from Grid to Flexbox */}
+                      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+                        
+                        {/* 1. Profile Info - Takes 1 equal part of space */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0 w-full">
+                          <Avatar className="h-9 w-9 border border-border shrink-0">
+                            <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                              {getInitial(candidate.name)}
+                            </AvatarFallback>
+                          </Avatar>
 
-                            <div className="flex flex-col min-w-0 flex-1">
-                              <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
-                              <p className="text-xs text-muted-foreground truncate">{candidate.departmentName || candidate.targetDesignationName || candidate.email}</p>
-                            </div>
-                            <div className="ml-auto md:ml-1 shrink-0 ">
-                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}>{candidate.status.replace(/_/g, ' ')}</Badge>
-                            </div>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
+                            <p className="text-xs text-muted-foreground truncate">{candidate.departmentName || candidate.targetDesignationName || candidate.email}</p>
                           </div>
+                          <div className="ml-auto lg:ml-1 shrink-0">
+                            <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}>
+                              {candidate.status.replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                        </div>
 
-                          <div className="col-span-12 md:col-span-3 text-sm text-muted-foreground">
-                            <div className="flex flex-col md:flex-row md:items-center md:gap-6">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
-                                <span className="truncate">{candidate.email}</span>
-                              </div>
-                              {candidate.phone && (
-                                <div className="flex items-center gap-2">
-                                  <Phone className="w-4 h-4 text-muted-foreground" />
-                                  <span className="truncate">{candidate.phone}</span>
-                                </div>
-                              )}
+                        {/* 2. Contact Info - Takes 1 equal part of space */}
+                        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 flex-1 min-w-0 text-sm text-muted-foreground w-full">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{candidate.email}</span>
+                          </div>
+                          {candidate.phone && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Phone className="w-4 h-4 text-muted-foreground" />
+                              <span className="truncate">{candidate.phone}</span>
                             </div>
-                          </div>
+                          )}
+                          {candidate.resourceRequestNumber && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Hash className="w-4 h-4 text-muted-foreground" />
+                              <span className="truncate">{candidate.resourceRequestNumber}</span>
+                            </div>
+                          )}
+                        </div>
 
-                          <div className="col-span-12 lg:col-span-3 hidden lg:flex items-center gap-4 text-sm text-muted-foreground">
-                            {candidate.targetDesignationName && (
-                              <div className="whitespace-nowrap">
-                                <span className="font-medium text-foreground">{candidate.targetDesignationName}</span>
-                                {candidate.tierName && <span className="ml-1 text-xs">({candidate.tierName})</span>}
-                              </div>
-                            )}
-                            {candidate.location && (
-                              <div className="flex items-center gap-1 whitespace-nowrap">
-                                <MapPin className="w-3 h-3" />
-                                <span className="text-xs">{candidate.location}</span>
-                              </div>
-                            )}
-                            {candidate.jobReferenceCode && (
-                              <div className="flex items-center gap-1 whitespace-nowrap">
-                                <Hash className="w-3 h-3" />
-                                <span className="text-xs">{candidate.jobReferenceCode}</span>
-                              </div>
-                            )}
-                            {candidate.yearsOfExperience && (
-                              <span className="whitespace-nowrap text-xs">{candidate.yearsOfExperience}y exp</span>
-                            )}
-                          </div>
+                        {/* 3. Job Details - Takes 1 equal part of space (Hidden on smaller screens) */}
+                        <div className="hidden xl:flex items-center gap-4 flex-1 min-w-0 text-sm text-muted-foreground">
+                          {candidate.targetDesignationName && (
+                            <div className="whitespace-nowrap truncate">
+                              <span className="font-medium text-foreground">{candidate.targetDesignationName}</span>
+                              {candidate.tierName && <span className="ml-1 text-xs">({candidate.tierName})</span>}
+                            </div>
+                          )}
+                          {candidate.location && (
+                            <div className="flex items-center gap-1 whitespace-nowrap shrink-0">
+                              <MapPin className="w-3 h-3" />
+                              <span className="text-xs">{candidate.location}</span>
+                            </div>
+                          )}
+                          {candidate.jobReferenceCode && (
+                            <div className="flex items-center gap-1 whitespace-nowrap shrink-0">
+                              <Hash className="w-3 h-3" />
+                              <span className="text-xs">{candidate.jobReferenceCode}</span>
+                            </div>
+                          )}
+                          {candidate.yearsOfExperience && (
+                            <span className="whitespace-nowrap text-xs shrink-0">{candidate.yearsOfExperience}y exp</span>
+                          )}
+                        </div>
 
-                          <div className="col-span-6 md:col-span-1 text-xs text-muted-foreground text-left md:text-right pt-1 md:pt-0">
+                        {/* 4 & 5. Date and Actions Grouped - Shrinks to fit content perfectly at the end */}
+                        <div className="flex items-center justify-between lg:justify-end gap-4 w-full lg:w-auto shrink-0 mt-2 lg:mt-0 pt-2 lg:pt-0 border-t lg:border-none">
+                          <div className="text-xs text-muted-foreground whitespace-nowrap">
                             {candidate.appliedAt ? formatDate(candidate.appliedAt) : '-'}
                           </div>
 
-                          <div className="col-span-6 md:col-span-1 flex justify-end md:justify-end gap-1.5">
+                          <div className="flex justify-end gap-1.5">
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenView(candidate); }} disabled={loading} title="View Details">
                               <Eye className="w-3.5 h-3.5" />
@@ -335,33 +350,34 @@ const CandidatesPage = () => {
                             </Button>
                           </div>
                         </div>
+                      </div>
 
-                        {/* Mobile extra row */}
-                        <div className="lg:hidden mt-2 pt-2 border-t flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          {candidate.targetDesignationName && (
-                            <span>
-                              <span className="font-medium text-foreground">Target:</span>{' '}
-                              {candidate.targetDesignationName}{candidate.tierName && ` (${candidate.tierName})`}
-                            </span>
-                          )}
-                          {candidate.location && (
-                            <span><span className="font-medium text-foreground">Location:</span> {candidate.location}</span>
-                          )}
-                          {candidate.jobReferenceCode && (
-                            <span><span className="font-medium text-foreground">Ref:</span> {candidate.jobReferenceCode}</span>
-                          )}
-                          {candidate.departmentName && (
-                            <span><span className="font-medium text-foreground">Dept:</span> {candidate.departmentName}</span>
-                          )}
-                          {candidate.yearsOfExperience && (
-                            <span><span className="font-medium text-foreground">Exp:</span> {candidate.yearsOfExperience} years</span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
+                      {/* Mobile extra row */}
+                      <div className="xl:hidden mt-2 pt-2 border-t flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {candidate.targetDesignationName && (
+                          <span>
+                            <span className="font-medium text-foreground">Target:</span>{' '}
+                            {candidate.targetDesignationName}{candidate.tierName && ` (${candidate.tierName})`}
+                          </span>
+                        )}
+                        {candidate.location && (
+                          <span><span className="font-medium text-foreground">Location:</span> {candidate.location}</span>
+                        )}
+                        {candidate.jobReferenceCode && (
+                          <span><span className="font-medium text-foreground">Ref:</span> {candidate.jobReferenceCode}</span>
+                        )}
+                        {candidate.departmentName && (
+                          <span><span className="font-medium text-foreground">Dept:</span> {candidate.departmentName}</span>
+                        )}
+                        {candidate.yearsOfExperience && (
+                          <span><span className="font-medium text-foreground">Exp:</span> {candidate.yearsOfExperience} years</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
             )}
 
             {!loading && totalCandidatesCount > 0 && totalPages > 1 && (

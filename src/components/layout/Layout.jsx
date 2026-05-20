@@ -5,12 +5,23 @@ import Sidebar from './Sidebar';
 import { cn } from '@/lib/utils';
 
 const Layout = ({ children ,hasPadding = true, className }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      return typeof window !== 'undefined' ? window.innerWidth >= 768 : true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const closeSidebarOnMobile = () => {
+    // Always close sidebar when navigation occurs to ensure single-click behavior
+    setSidebarOpen(false);
+  };
 
   return (
         <div className="max-h-screen bg-background relative "> {/* Add relative here */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-      <Sidebar isOpen={sidebarOpen} />
+      <Sidebar isOpen={sidebarOpen} onNavigate={closeSidebarOnMobile} />
       
       <main 
         className={cn(

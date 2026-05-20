@@ -177,14 +177,14 @@ function CandidateDetailsPage() {
           <StepProgressIndicator currentStatus={candidate.status} />
         </div>
 
-        {/* Main Content Area - Scrollable */}
-        <div className="flex-1 min-h-0 flex overflow-hidden gap-6 px-4 py-2">
+        {/* Main Content Area - Scrollable (responsive: stack on small screens) */}
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-2">
           {/* Left Sidebar - Candidate Basic Info */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-80 bg-white rounded-lg border border-gray-200 flex-shrink-0 shadow-sm flex flex-col min-h-0 max-h-[70vh] overflow-hidden"
+            className="w-full md:w-80 bg-white rounded-lg border border-gray-200 flex-shrink-0 shadow-sm flex flex-col min-h-0 max-h-[40vh] md:max-h-[70vh] overflow-hidden"
           >
             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-2 custom-scrollbar scrollbar-none">
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
@@ -346,7 +346,7 @@ function CandidateDetailsPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="flex-1 flex flex-col overflow-hidden py-4 pr-4 max-h-[70vh]"
+            className="flex-1 flex flex-col overflow-auto py-4 pr-0 md:pr-4 md:pl-4 md:max-h-[70vh]"
           >
             <CandidateDetailsTabs candidate={candidate} readOnly={true} />
           </motion.div>

@@ -34,7 +34,7 @@ const interviewerLinks = [
   { icon: Settings, label: 'Profile', path: '/interviewer/profile' },
 ];
 
-const Sidebar = ({ isOpen }) => {
+const Sidebar = ({ isOpen, onNavigate }) => {
   const { user } = useAuth();
   const location = useLocation();
   const [expandedRoles, setExpandedRoles] = useState({});
@@ -136,6 +136,7 @@ const Sidebar = ({ isOpen }) => {
                           <Link
                             key={link.path}
                             to={link.path}
+                            onClick={() => { if (onNavigate && typeof onNavigate === 'function') onNavigate(); }}
                             className={cn(
                               "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ml-2 text-sm",
                               isActive
@@ -161,6 +162,7 @@ const Sidebar = ({ isOpen }) => {
           <div className="space-y-1">
             <Link
               to="/settings"
+              onClick={() => { try { if (onNavigate && typeof onNavigate === 'function') onNavigate(); } catch (e) {} }}
               className={cn(
                 "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors text-sm",
                 location.pathname === '/settings'
@@ -180,6 +182,7 @@ const Sidebar = ({ isOpen }) => {
 
 Sidebar.propTypes = {
   isOpen: PropTypes.bool.isRequired,
+  onNavigate: PropTypes.func,
 };
 
 export default Sidebar;
