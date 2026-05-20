@@ -270,6 +270,19 @@ function CandidateDetailsPage() {
                       </div>
                     </div>
                   )}
+
+
+                  
+                  {candidate.resourceRequestNumber && (
+                    <div className="flex items-start gap-2">
+                      <Hash className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
+                        <p className="text-sm text-gray-900">{candidate.resourceRequestNumber}</p>
+                      </div>
+                    </div>
+                  )}
+                      
                 </div>
               </div>
 

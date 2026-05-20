@@ -28,7 +28,7 @@ const EMPTY_FORM = {
   departmentId: '', tierId: '', targetDesignationId: '',
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', jobReferenceCode: '', location: '',
-  notes: '', status: 'APPLIED',
+  notes: '', status: 'APPLIED',resourceRequestNumber: '',
 };
 
 function CandidateDialogPage({ 
@@ -88,6 +88,7 @@ function CandidateDialogPage({
       location:          candidate.location || '',
       notes:             candidate.notes || '',
       status:            candidate.status || 'APPLIED',
+      resourceRequestNumber: candidate.resourceRequestNumber || '',
     };
     
     setForm(newForm);
@@ -233,7 +234,7 @@ function CandidateDialogPage({
     const payload = {
       name:              form.name.trim(),
       email:             form.email.trim(),
-      phone:             form.phone?.trim() || null,
+      phone:             form.phone?.trim() ,
       departmentId:      form.departmentId ? parseInt(form.departmentId) : null,
       targetDesignationId: form.targetDesignationId ? parseInt(form.targetDesignationId) : null,
       status:            form.status,
@@ -242,6 +243,7 @@ function CandidateDialogPage({
       jobReferenceCode:  form.jobReferenceCode?.trim() || null,
       location:          form.location?.trim() || null,
       notes:             form.notes?.trim() || null,
+      resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
     };
 
     setSaving(true);
@@ -331,7 +333,7 @@ function CandidateDialogPage({
 
           {/* Phone */}
           <div className="space-y-2">
-            <Label>Phone</Label>
+            <Label>Phone *</Label>
             <Input 
               value={form.phone} 
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -374,6 +376,19 @@ function CandidateDialogPage({
             <Input 
               value={form.jobReferenceCode} 
               onChange={(e) => setForm({ ...form, jobReferenceCode: e.target.value })}
+              placeholder="REQ-2024-001" 
+              disabled={saving || readOnly} 
+            />
+          </div>
+
+          {/* Resource Request Code */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
+              <Hash className="w-3.5 h-3.5" /> Resource Request Number (RR Number)
+            </Label>
+            <Input 
+              value={form.resourceRequestNumber} 
+              onChange={(e) => setForm({ ...form, resourceRequestNumber: e.target.value })}
               placeholder="REQ-2024-001" 
               disabled={saving || readOnly} 
             />
