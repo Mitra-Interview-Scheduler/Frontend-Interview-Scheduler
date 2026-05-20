@@ -54,6 +54,7 @@ export const availabilityAPI = {
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
       currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description || null,
+      recurrenceGroupId: slotData.recurrenceGroupId || null,
     });
     return response.data;
   },
@@ -66,6 +67,7 @@ export const availabilityAPI = {
         endDateTime:   formatLocalDateTime(slot.endDateTime),
         currentTime:   formatLocalDateTime(slot.currentTime),
         description:   slot.description || null,
+        recurrenceGroupId: slot.recurrenceGroupId || null,
       })),
     });
     return response.data;
@@ -75,19 +77,23 @@ export const availabilityAPI = {
    * Update an existing AVAILABLE slot's time range / description.
    * The backend rejects BOOKED slots with a 400.
    */
-  updateAvailabilitySlot: async (slotId, slotData) => {
+  updateAvailabilitySlot: async (slotId, slotData, scope = 'SINGLE') => {
     const response = await api.put(`/availability/${slotId}`, {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
       currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description ?? null,
+    }, {
+      params: { scope },
     });
     return response.data;
   },
 
   /** Soft-delete (deactivate) an AVAILABLE slot */
-  deleteAvailabilitySlot: async (slotId) => {
-    await api.delete(`/availability/${slotId}`);
+  deleteAvailabilitySlot: async (slotId, scope = 'SINGLE') => {
+    await api.delete(`/availability/${slotId}`, {
+      params: { scope },
+    });
   },
 };
 
