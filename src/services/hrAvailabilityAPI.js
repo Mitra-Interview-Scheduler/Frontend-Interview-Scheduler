@@ -35,10 +35,15 @@ export const hrAvailabilityAPI = {
   /**
    * Get all interview requests created by the current HR user.
    */
-  getHRRequests: async (params = null) => {
-    const response = await api.get(withQuery('/hr/interviews/my-requests', {
+  getHRRequests: async (filters = null, params = null) => {
+    // filters: { departmentIds: [...], minTierId }
+    const query = {
       size: params?.size,
-    }));
+      departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null,
+      minTierId: filters?.minTierId ?? null,
+      exactTierId: filters?.exactTierId ?? null,
+    };
+    const response = await api.get(withQuery('/hr/interviews/my-requests', query));
     return response.data;
   },
 
@@ -62,10 +67,14 @@ export const hrAvailabilityAPI = {
   /**
    * Get all panel interviews created by the current HR user.
    */
-  getMyPanels: async (params = null) => {
-    const response = await api.get(withQuery('/hr/panels/my-panels', {
+  getMyPanels: async (filters = null, params = null) => {
+    const query = {
       size: params?.size,
-    }));
+      departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null,
+      minTierId: filters?.minTierId ?? null,
+      exactTierId: filters?.exactTierId ?? null,
+    };
+    const response = await api.get(withQuery('/hr/panels/my-panels', query));
     return response.data;
   },
 

@@ -18,8 +18,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidateAPI } from '@/services/candidateAPI';
+import { departmentAPI } from '@/services/departmentAPI';
+import { tierAPI } from '@/services/tierAPI';
 import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import HRFilters from './HRFilters';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +100,11 @@ const HRDashboard = () => {
   const [requests, setRequests]               = useState([]);
   const [panels, setPanels]                   = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [departments, setDepartments]         = useState([]);
+  const [tiersForDept, setTiersForDept]       = useState([]);
+  const [selectedDept, setSelectedDept]       = useState('');
+  const [selectedTier, setSelectedTier]       = useState('');
+  const [tierFilterMode, setTierFilterMode]   = useState('min');
   const [loading, setLoading]                 = useState(true);
   const [error, setError]                     = useState(null);
   const [lastRefreshed, setLastRefreshed]     = useState(null);
@@ -121,15 +129,24 @@ const HRDashboard = () => {
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const loadDashboardData = useCallback(async () => {
+  const loadTiersForDept = async (deptId) => {
+    try {
+      const data = await tierAPI.getTiersByDepartment(parseInt(deptId));
+      setTiersForDept(data.sort((a, b) => a.tierOrder - b.tierOrder));
+    } catch (e) { console.error(e); }
+  };
+
+  const loadDashboardData = useCallback(async (filters = null) => {
     setLoading(true);
     setError(null);
     try {
+      // Pass filters to all server endpoints that support them. If the server doesn't filter,
+      // the client will still receive full lists (we keep no heavy client-side filtering here).
       const results = await Promise.allSettled([
-        candidateAPI.getAllCandidates(),
-        hrAvailabilityAPI.getHRRequests({ size: 10 }),
-        hrAvailabilityAPI.getMyPanels({ size: 10 }),
-        hrAvailabilityAPI.getAllAvailability(),
+        candidateAPI.getAllCandidates({ departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null }),
+        hrAvailabilityAPI.getHRRequests(filters, { size: 100 }),
+        hrAvailabilityAPI.getMyPanels(filters, { size: 100 }),
+        hrAvailabilityAPI.getAllAvailability(filters),
       ]);
       const [cRes, rRes, pRes, sRes] = results;
       setCandidates(safeArray(cRes.status === 'fulfilled' ? cRes.value : []));
@@ -146,6 +163,31 @@ const HRDashboard = () => {
   }, []);
 
   useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
+  useEffect(() => {
+    // load departments for filter UI
+    (async () => {
+      try {
+        const depts = await departmentAPI.getAllDepartments();
+        setDepartments(depts || []);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDept) loadTiersForDept(selectedDept);
+    else setTiersForDept([]);
+  }, [selectedDept]);
+
+  // reload availability when filters change
+  useEffect(() => {
+    const filters = {
+      departmentIds: selectedDept ? [parseInt(selectedDept)] : null,
+      // choose min or exact depending on mode
+      minTierId: tierFilterMode === 'min' && selectedTier ? parseInt(selectedTier) : null,
+      exactTierId: tierFilterMode === 'exact' && selectedTier ? parseInt(selectedTier) : null,
+    };
+    loadDashboardData(filters);
+  }, [selectedDept, selectedTier]);
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
@@ -343,6 +385,14 @@ const HRDashboard = () => {
             <p className="text-muted-foreground text-lg">
               Manage candidates, schedule interviews, and track your pipeline
             </p>
+            <HRFilters
+              departments={departments}
+              tiersForDept={tiersForDept}
+              selectedDept={selectedDept}
+              setSelectedDept={setSelectedDept}
+              selectedTier={selectedTier}
+              setSelectedTier={setSelectedTier}
+            />
             {lastRefreshed && (
               <p className="text-xs text-muted-foreground mt-1">
                 Last updated: {formatTime(lastRefreshed)}
