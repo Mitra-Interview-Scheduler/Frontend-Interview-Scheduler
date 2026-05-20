@@ -64,6 +64,7 @@ const AvailabilityViewPage = () => {
   // Filters
   const [filterDept, setFilterDept] = useState([]);
   const [filterTech, setFilterTech] = useState([]);
+  const [selectedTechCategory, setSelectedTechCategory] = useState('');
   const [techSearchTerm, setTechSearchTerm] = useState('');
   const [showTechDropdown, setShowTechDropdown] = useState(false);
   const [minExperience, setMinExperience] = useState('');
@@ -612,7 +613,7 @@ const AvailabilityViewPage = () => {
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
   const clearFilters = () => {
-    setFilterDept([]); setFilterTech([]); setTechSearchTerm(''); setMinExperience('');
+    setFilterDept([]); setFilterTech([]); setSelectedTechCategory(''); setTechSearchTerm(''); setMinExperience('');
     setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
     setMinDesignationLevel(''); setSelectedTierInDept('');
     setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
@@ -670,16 +671,17 @@ const calendarSlotPropGetter = useCallback((date) => {
 
   return {};
 }, [calendarLockStart]);
-  const filteredTechnologies = techSearchTerm.trim()
-    ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
-    : technologies;
+  const technologyCategories = useMemo(() => {
+    const categories = Array.from(new Set(technologies.map((tech) => tech.category || 'Other')))
+      .sort((a, b) => a.localeCompare(b));
+    return categories;
+  }, [technologies]);
 
-  const filteredGroupedTechs = filteredTechnologies.reduce((acc, tech) => {
-    const cat = tech.category || 'Other';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(tech);
-    return acc;
-  }, {});
+  const filteredTechnologies = useMemo(() => {
+    return technologies
+      .filter((tech) => !selectedTechCategory || (tech.category || 'Other') === selectedTechCategory)
+      .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
+  }, [technologies, selectedTechCategory, techSearchTerm]);
 
   const filteredCandidates = candidates.filter((c) =>
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
@@ -877,46 +879,71 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
 
               <div className="space-y-2" ref={techDropdownRef}>
-                <Label className="flex items-center gap-2">
-                  <Code className="w-4 h-4" /> Technologies {filterTech.length > 0 && `(${filterTech.length})`}
-                </Label>
-                <div className="relative">
+                <Label>Categories</Label>
+                  <Select
+                    value={selectedTechCategory || 'NONE'}
+                    onValueChange={(value) => {
+                      setSelectedTechCategory(value === 'NONE' ? '' : value);
+                      setShowTechDropdown(false);
+                      setTechSearchTerm('');
+                      // preserve already-selected technologies so user can pick across categories
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">All Categories</SelectItem>
+                      {technologyCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  </div>
+
+                <div className="space-y-1">
+                  <Label >Technologies</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search…" value={techSearchTerm}
+                    <Input
+                      placeholder={'Select technologies…'}
+                      disabled={!selectedTechCategory}
+                      value={techSearchTerm}
                       onChange={(e) => setTechSearchTerm(e.target.value)}
                       onFocus={() => setShowTechDropdown(true)}
-                      className="pl-10 pr-10" />
-                    <button onClick={() => setShowTechDropdown(!showTechDropdown)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      onClick={() => setShowTechDropdown(!showTechDropdown)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
                       <ChevronDown className={`w-4 h-4 transition-transform ${showTechDropdown ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
+
                   <AnimatePresence>
-                    {showTechDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                        {Object.keys(filteredGroupedTechs).length === 0
-                          ? <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
-                          : <div className="py-2">
-                            {Object.entries(filteredGroupedTechs).sort(([a], [b]) => a.localeCompare(b)).map(([cat, techs]) => (
-                              <div key={cat} className="mb-2">
-                                <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">{cat}</div>
-                                {techs.map((tech) => (
-                                  <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
-                                    className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
-                                    <span className="font-medium">{tech.name}</span>
-                                    {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
-                                  </button>
-                                ))}
-                              </div>
+                    {selectedTechCategory && showTechDropdown && (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }} className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                        {filteredTechnologies.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
+                        ) : (
+                          <div className="py-2">
+                            {filteredTechnologies.map((tech) => (
+                              <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
+                                <span className="font-medium">{tech.name}</span>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">{tech.category || 'Other'}</span>
+                                  {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
+                                </span>
+                              </button>
                             ))}
                           </div>
-                        }
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                
+
                 {filterTech.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {filterTech.map((id) => {
@@ -954,7 +981,8 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Award className="w-4 h-4" /> Min. Tier</Label>
+                <Label className="flex items-center gap-2">
+                  <Award className="w-4 h-4" /> Min. Tier</Label>
                 <Select value={selectedTierInDept || 'ANY'}
                   onValueChange={(v) => { if (v === 'ANY') { setSelectedTierInDept(''); setMinDesignationLevel(''); } else setSelectedTierInDept(v); }}
                   disabled={!selectedDeptForDesignation}>
