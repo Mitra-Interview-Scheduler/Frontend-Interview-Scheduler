@@ -48,6 +48,7 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
     }}>
       {isInPanel && (
         <span style={{
+
           display: 'inline-flex',
           alignItems: 'center',
           gap: 2,

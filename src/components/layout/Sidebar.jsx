@@ -31,7 +31,6 @@ const hrLinks = [
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
-  { icon: Settings, label: 'Profile', path: '/interviewer/profile' },
 ];
 
 const Sidebar = ({ isOpen, onNavigate }) => {

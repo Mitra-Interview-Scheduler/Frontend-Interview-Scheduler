@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { 
   DropdownMenu, 
@@ -17,6 +18,7 @@ import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [notifications] = useState(3); // Mock notification count
 
   const getInitials = () => {
@@ -124,7 +126,7 @@ const Navbar = ({ onMenuClick }) => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>
