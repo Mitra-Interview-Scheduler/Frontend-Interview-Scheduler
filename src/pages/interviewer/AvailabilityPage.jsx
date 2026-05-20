@@ -161,6 +161,8 @@ const AvailabilityPage = () => {
           candidateName:       slot.candidateName,
           interviewScheduleId: slot.interviewScheduleId,
           durationHours :      slot.durationHours,
+          recurrenceGroupId:   slot.recurrenceGroupId,
+          isRecurring:         slot.isRecurring,
         }))
       );
     } catch (error) {
@@ -244,54 +246,85 @@ const handleSelectSlot = ({ start, end }) => {
   };
 
   // ── Delete slot ───────────────────────────────────────────────────────────
-  const openDeleteDialog = (event, e) => {
+  const deleteSingleSlotDirect = useCallback(async (event) => {
+    if (!event) return;
+
+    try {
+      await availabilityAPI.deleteAvailabilitySlot(event.id, 'SINGLE');
+      toast({ title: 'Time slot deleted' });
+      await loadAvailability();
+      await loadStats();
+    } catch (error) {
+      toast({
+        title: 'Failed to delete slot',
+        description: error.response?.data?.message || 'Cannot delete booked slots',
+        variant: 'destructive',
+      });
+    }
+  }, [loadAvailability, loadStats]);
+
+  const openDeleteDialog = async (event, e) => {
     if (e) e.stopPropagation();
     setDeleteTarget(event);
     setDeleteDialogOpen(true);
   };
 
-  const handleAddSuccess = useCallback(async (newSlot) => {
+  const handleAddSuccess = useCallback(async (newSlotOrSlots) => {
+    const addedSlots = Array.isArray(newSlotOrSlots) ? newSlotOrSlots : [newSlotOrSlots];
+
     setEvents((prev) => [
       ...prev,
-      {
-        id: newSlot.id,
-        title: newSlot.description || 'Available',
-        start: new Date(newSlot.startDateTime),
-        end: new Date(newSlot.endDateTime),
-        status: newSlot.status.toLowerCase(),
-        description: newSlot.description,
-      },
+      ...addedSlots.map((slot) => ({
+        id: slot.id,
+        title: slot.description || 'Available',
+        start: new Date(slot.startDateTime),
+        end: new Date(slot.endDateTime),
+        status: slot.status.toLowerCase(),
+        description: slot.description,
+        recurrenceGroupId: slot.recurrenceGroupId,
+        isRecurring: slot.isRecurring,
+      })),
     ]);
+
     setSelectedDate(null);
     setStartTime('');
     setEndTime('');
     await loadStats();
   }, [loadStats]);
 
-  const handleEditSuccess = useCallback(async (updated) => {
-    setEvents((prev) => prev.map((event) => (
-      event.id === updated.id
-        ? {
-            ...event,
-            title: updated.description || 'Available',
-            start: new Date(updated.startDateTime),
-            end: new Date(updated.endDateTime),
-            description: updated.description,
-          }
-        : event
-    )));
+  const handleEditSuccess = useCallback(async (updated, scope = 'SINGLE') => {
+    const isRecurringEdit = !!editTarget?.isRecurring && !!editTarget?.recurrenceGroupId;
+
+    if (isRecurringEdit && scope !== 'SINGLE') {
+      await loadAvailability();
+      await loadStats();
+    } else {
+      setEvents((prev) => prev.map((event) => (
+        event.id === updated.id
+          ? {
+              ...event,
+              title: updated.description || 'Available',
+              start: new Date(updated.startDateTime),
+              end: new Date(updated.endDateTime),
+              description: updated.description,
+              recurrenceGroupId: updated.recurrenceGroupId,
+              isRecurring: updated.isRecurring,
+            }
+          : event
+      )));
+      await loadStats();
+    }
+
     setEditDialogOpen(false);
     setEditTarget(null);
-    await loadStats();
-  }, [loadStats]);
+  }, [editTarget, loadAvailability, loadStats]);
 
   const handleDeleteSuccess = useCallback(async () => {
-    if (!deleteTarget) return;
-    setEvents((prev) => prev.filter((event) => event.id !== deleteTarget.id));
     setDeleteDialogOpen(false);
     setDeleteTarget(null);
+    await loadAvailability();
     await loadStats();
-  }, [deleteTarget, loadStats]);
+  }, [loadAvailability, loadStats]);
 
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
@@ -481,12 +514,12 @@ const handleSelectSlot = ({ start, end }) => {
         }}
         slot={editTarget}
         onSuccess={handleEditSuccess}
-        onDelete={() => {
+        onDelete={async () => {
+          if (!editTarget) return;
           setEditDialogOpen(false);
-          if (editTarget) {
-            setDeleteTarget(editTarget);
-            setDeleteDialogOpen(true);
-          }
+          // Always open delete confirmation; dialog will handle scope for recurring slots
+          setDeleteTarget(editTarget);
+          setDeleteDialogOpen(true);
         }}
         getSlotStartError={getSlotStartError}
       />

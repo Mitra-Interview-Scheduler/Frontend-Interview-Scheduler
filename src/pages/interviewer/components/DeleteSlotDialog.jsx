@@ -5,6 +5,13 @@ import {
   DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
@@ -17,14 +24,31 @@ const DeleteSlotDialog = ({
 }) => {
   const { formatDateWithWeekday, formatTimeRange } = useFormattedDateTime();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteScope, setDeleteScope] = useState('SINGLE');
+
+  const isRecurringSlot = !!slot?.isRecurring && !!slot?.recurrenceGroupId;
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setDeleteScope('SINGLE');
+    }
+  }, [isOpen, slot?.id]);
 
   const handleDelete = async () => {
     if (!slot) return;
 
     setIsDeleting(true);
     try {
-      await availabilityAPI.deleteAvailabilitySlot(slot.id);
-      toast({ title: 'Time slot deleted' });
+      await availabilityAPI.deleteAvailabilitySlot(slot.id, deleteScope);
+
+      if (deleteScope === 'ALL') {
+        toast({ title: 'Recurring series deleted' });
+      } else if (deleteScope === 'FUTURE') {
+        toast({ title: 'Future recurring slots deleted' });
+      } else {
+        toast({ title: 'Time slot deleted' });
+      }
+
       onSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -52,11 +76,29 @@ const DeleteSlotDialog = ({
 
         <DialogBody>
           {slot && (
-            <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
-              <p className="font-semibold text-sm">{formatDateWithWeekday(slot.start)}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {formatTimeRange(slot.start, slot.end)}
-              </p>
+            <div className="space-y-3">
+              <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
+                <p className="font-semibold text-sm">{formatDateWithWeekday(slot.start)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatTimeRange(slot.start, slot.end)}
+                </p>
+              </div>
+
+              {isRecurringSlot && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-900">Delete recurring slot scope</p>
+                  <Select value={deleteScope} onValueChange={setDeleteScope} disabled={isDeleting}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select delete scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SINGLE">Only this event</SelectItem>
+                      <SelectItem value="FUTURE">This and future events</SelectItem>
+                      <SelectItem value="ALL">All events in this recurring series</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
         </DialogBody>
