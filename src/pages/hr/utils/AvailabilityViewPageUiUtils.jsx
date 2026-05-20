@@ -28,10 +28,31 @@ export const PANEL_PALETTE = {
 };
 
 export const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg, #A9A9A9,#B2BEB5)',
-  solid: '#10b981',
-  border: '#000',
-  
+  bg: 'linear-gradient(135deg, #e5e7eb, #9ca3af)',
+  border: '#6b7280',
+};
+
+// Explicit, stable mapping of departments to palettes
+export const DEPARTMENT_PALETTES = {
+  Engineering: INTERVIEWER_PALETTES[0],
+  HR: INTERVIEWER_PALETTES[2],
+  Design: INTERVIEWER_PALETTES[3],
+  Product: INTERVIEWER_PALETTES[4],
+  QA: INTERVIEWER_PALETTES[5],
+  DevOps: INTERVIEWER_PALETTES[6],
+  Marketing: INTERVIEWER_PALETTES[7],
+  Sales: INTERVIEWER_PALETTES[8],
+  Finance: INTERVIEWER_PALETTES[9],
+  Legal: INTERVIEWER_PALETTES[14],
+};
+
+export const getDepartmentPalette = (department) => {
+  if (!department) return null;
+  const key = String(department).trim();
+  if (DEPARTMENT_PALETTES[key]) return DEPARTMENT_PALETTES[key];
+  // fallback: hash into available palettes
+  const sum = Array.from(key).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return INTERVIEWER_PALETTES[sum % INTERVIEWER_PALETTES.length];
 };
 
 export const CalendarEventComponent = ({ event, panelSlots }) => {
@@ -71,28 +92,27 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 2,
+          gap: 4,
           flex: 1,
           minWidth: 0,
-          padding: '1px',
+          padding: '4px',
           height: '100%',
           borderRadius: 3,
-          
+          textAlign: 'center',
         }}>
-          <Lock style={{ width: 50, height: 50 , color: 'black'}} />
+          <Lock style={{ width: 30, height: 30, color: 'inherit' }} />
           <span style={{
             fontSize: 11,
             display: '-webkit-box',
-            borderRadius: 1,
-            padding: '1px 1px',
-            fontWeight: 700,
+            WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
             textAlign: 'center',
-            marginTop: 4,
-            lineHeight: '1',
-            maxWidth: '80%',
-            color: 'black'
+            marginTop: 6,
+            lineHeight: '1.1',
+            maxWidth: '100%',
+            fontWeight: 600,
+            color: 'inherit',
           }}>
             {event.title.replace(/^Booked\s*/, '')}
           </span>
@@ -118,17 +138,26 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
 export const getEventStyle = (event, panelSlots) => {
   const isBooked = event.resource?.status === 'BOOKED';
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-  const palette = isInPanel
-    ? PANEL_PALETTE
-    : event.resource?.palette || INTERVIEWER_PALETTES[0];
+  const deptPalette = getDepartmentPalette(event.resource?.department);
+  const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
+
+  // Mix gray booked overlay with department gradient for booked slots
+  const background = isBooked
+    ? `${BOOKED_OVERLAY.bg}, ${basePalette.bg}`
+    : basePalette.bg;
+
+  const textColor = isBooked ? '#000' : (basePalette.text || 'white');
+  const leftBorder = isBooked
+    ? `3px solid ${BOOKED_OVERLAY.border || basePalette.border || basePalette.solid}`
+    : `3px solid ${basePalette.border || basePalette.solid}`;
 
   return {
     style: {
-      background: palette.bg,
+      background,
       borderRadius: '5px',
-      opacity: isBooked ? 0.82 : 0.94,
-      color: 'white',
-      borderLeft: `3px solid ${palette.border || palette.solid}`,
+      opacity: isBooked ? 0.95 : 0.94,
+      color: textColor,
+      borderLeft: leftBorder,
       borderTop: 'none',
       borderRight: 'none',
       borderBottom: 'none',
@@ -137,7 +166,7 @@ export const getEventStyle = (event, panelSlots) => {
       fontWeight: '500',
       boxShadow: isInPanel
         ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-        : `0 1px 4px ${palette.solid}30`,
+        : `0 1px 4px ${basePalette.solid}30`,
       cursor: 'pointer',
       overflow: 'hidden',
       maxWidth: '100%',
