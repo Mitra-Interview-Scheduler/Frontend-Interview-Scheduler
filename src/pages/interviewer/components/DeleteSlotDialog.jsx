@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { format } from 'date-fns';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogBody,
@@ -27,6 +28,7 @@ const DeleteSlotDialog = ({
   const [deleteScope, setDeleteScope] = useState('SINGLE');
 
   const isRecurringSlot = !!slot?.isRecurring && !!slot?.recurrenceGroupId;
+  const recurringDayLabel = slot ? format(slot.start, 'EEEE') : '';
 
   React.useEffect(() => {
     if (isOpen) {
@@ -94,7 +96,7 @@ const DeleteSlotDialog = ({
                     <SelectContent>
                       <SelectItem value="SINGLE">Only this event</SelectItem>
                       <SelectItem value="FUTURE">This and future events</SelectItem>
-                      <SelectItem value="ALL">All events in this recurring series</SelectItem>
+                      <SelectItem value="ALL">All recurring events of {recurringDayLabel}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
