@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download,Hash } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -251,7 +251,7 @@ function CandidateDetailsPage() {
                     </div>
                   )}
 
-                  {candidate.yearsOfExperience && (
+                  {candidate.yearsOfExperience !== 0 && (
                     <div className="flex items-start gap-2">
                       <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
                       <div className="min-w-0">
@@ -261,6 +261,7 @@ function CandidateDetailsPage() {
                     </div>
                   )}
 
+                  
                   {candidate.location && (
                     <div className="flex items-start gap-2">
                       <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -270,7 +271,6 @@ function CandidateDetailsPage() {
                       </div>
                     </div>
                   )}
-
 
                   
                   {candidate.resourceRequestNumber && (
