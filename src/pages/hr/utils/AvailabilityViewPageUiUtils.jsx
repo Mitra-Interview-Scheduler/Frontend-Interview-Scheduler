@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Lock } from 'lucide-react';
 
 export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
@@ -28,9 +28,10 @@ export const PANEL_PALETTE = {
 };
 
 export const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg,#10b981,#059669)',
+  bg: 'linear-gradient(135deg, #A9A9A9,#B2BEB5)',
   solid: '#10b981',
-  border: '#064e3b',
+  border: '#000',
+  
 };
 
 export const CalendarEventComponent = ({ event, panelSlots }) => {
@@ -64,21 +65,52 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
           Panel
         </span>
       )}
-      {isBooked && !isInPanel && (
-        <span style={{ fontSize: 10, flexShrink: 0 }}>Booked</span>
-      )}
-      <span style={{
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        fontSize: 11,
-        flex: 1,
-        minWidth: 0,
-      }}>
-        {isBooked
-          ? event.title.replace(/^Booked\s*/, '')
-          : event.resource?.interviewer || event.title}
-      </span>
+      {isBooked && !isInPanel ? (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+          flex: 1,
+          minWidth: 0,
+          padding: '1px',
+          height: '100%',
+          borderRadius: 3,
+          
+        }}>
+          <Lock style={{ width: 50, height: 50 , color: 'black'}} />
+          <span style={{
+            fontSize: 11,
+            display: '-webkit-box',
+            borderRadius: 1,
+            padding: '1px 1px',
+            fontWeight: 700,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textAlign: 'center',
+            marginTop: 4,
+            lineHeight: '1',
+            maxWidth: '80%',
+            color: 'black'
+          }}>
+            {event.title.replace(/^Booked\s*/, '')}
+          </span>
+        </div>
+      ) : (
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: 11,
+          flex: 1,
+          minWidth: 0,
+          
+        }}>
+          {event.resource?.interviewer || event.title}
+        </span>
+      )
+      }
     </div>
   );
 };
