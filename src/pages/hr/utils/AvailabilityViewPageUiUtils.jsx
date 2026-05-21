@@ -152,6 +152,7 @@ export const getEventStyle = (event, panelSlots) => {
     : `3px solid ${basePalette.border || basePalette.solid}`;
 
   return {
+    className: isBooked ? 'booked-event' : 'available-event',
     style: {
       background,
       borderRadius: '5px',
