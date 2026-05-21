@@ -405,6 +405,7 @@ const handleSelectSlot = ({ start, end }) => {
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
     return {
+      className: event.status === 'booked' ? 'booked-event' : 'available-event',
       style: {
         background:   colors.bg,
         borderRadius: '5px',
