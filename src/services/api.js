@@ -62,6 +62,7 @@ export const usersAPI = {
     if (pagination?.size !== undefined) params.append('size', pagination.size);
     if (filters?.search) params.append('search', filters.search);
     if (filters?.role && filters.role !== 'ALL') params.append('role', filters.role);
+    if (filters?.status && filters.status !== 'ALL') params.append('status', filters.status);
     const queryString = params.toString();
     const response = await api.get(queryString ? `/admin/users?${queryString}` : '/admin/users');
     return response.data; // expects List<UserDto>
