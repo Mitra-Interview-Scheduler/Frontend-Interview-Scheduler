@@ -44,6 +44,7 @@ const EditSlotDialog = ({
   const [editScope, setEditScope] = useState('SINGLE');
 
   const isRecurringSlot = !!slot?.isRecurring && !!slot?.recurrenceGroupId;
+  const recurringDayLabel = slot ? format(slot.start, 'EEEE') : '';
 
   // Initialize form when slot changes
   useEffect(() => {
@@ -185,7 +186,7 @@ const EditSlotDialog = ({
                   <SelectContent>
                     <SelectItem value="SINGLE">Only this event</SelectItem>
                     <SelectItem value="FUTURE">This and future events</SelectItem>
-                    <SelectItem value="ALL">All events in this recurring series</SelectItem>
+                    <SelectItem value="ALL">All recurring events of {recurringDayLabel}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -18,8 +18,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidateAPI } from '@/services/candidateAPI';
+import { departmentAPI } from '@/services/departmentAPI';
+import { tierAPI } from '@/services/tierAPI';
 import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import HRFilters from './HRFilters';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +100,11 @@ const HRDashboard = () => {
   const [requests, setRequests]               = useState([]);
   const [panels, setPanels]                   = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [departments, setDepartments]         = useState([]);
+  const [tiersForDept, setTiersForDept]       = useState([]);
+  const [selectedDept, setSelectedDept]       = useState('');
+  const [selectedTier, setSelectedTier]       = useState('');
+  const [tierFilterMode, setTierFilterMode]   = useState('min');
   const [loading, setLoading]                 = useState(true);
   const [error, setError]                     = useState(null);
   const [lastRefreshed, setLastRefreshed]     = useState(null);
@@ -121,21 +129,108 @@ const HRDashboard = () => {
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const loadDashboardData = useCallback(async () => {
+  const loadTiersForDept = async (deptId) => {
+    try {
+      const data = await tierAPI.getTiersByDepartment(parseInt(deptId));
+      setTiersForDept(data.sort((a, b) => a.tierOrder - b.tierOrder));
+    } catch (e) { console.error(e); }
+  };
+
+  const loadDashboardData = useCallback(async (filters = null) => {
     setLoading(true);
     setError(null);
     try {
+      // Pass filters to all server endpoints that support them. If the server doesn't filter,
+      // the client will still receive full lists (we keep no heavy client-side filtering here).
       const results = await Promise.allSettled([
-        candidateAPI.getAllCandidates(),
-        hrAvailabilityAPI.getHRRequests({ size: 10 }),
-        hrAvailabilityAPI.getMyPanels({ size: 10 }),
-        hrAvailabilityAPI.getAllAvailability(),
+        candidateAPI.getAllCandidates({ departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null }),
+        hrAvailabilityAPI.getHRRequests(filters, { size: 100 }),
+        hrAvailabilityAPI.getMyPanels(filters, { size: 100 }),
+        hrAvailabilityAPI.getAllAvailability(filters),
       ]);
       const [cRes, rRes, pRes, sRes] = results;
-      setCandidates(safeArray(cRes.status === 'fulfilled' ? cRes.value : []));
-      setRequests(safeArray(rRes.status === 'fulfilled' ? rRes.value : []));
-      setPanels(safeArray(pRes.status === 'fulfilled' ? pRes.value : []));
-      setAvailabilitySlots(safeArray(sRes.status === 'fulfilled' ? sRes.value : []));
+      const srvCandidates = safeArray(cRes.status === 'fulfilled' ? cRes.value : []);
+      const srvRequests   = safeArray(rRes.status === 'fulfilled' ? rRes.value : []);
+      const srvPanels     = safeArray(pRes.status === 'fulfilled' ? pRes.value : []);
+      const srvSlots      = safeArray(sRes.status === 'fulfilled' ? sRes.value : []);
+
+      // Client-side fallback: if backend doesn't apply department/tier filters
+      // ensure the dashboard still respects selectedDept/selectedTier.
+      let finalCandidates = srvCandidates;
+      let finalRequests = srvRequests;
+      let finalPanels = srvPanels;
+
+      try {
+        const deptId = filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null;
+        const minTierId = filters?.minTierId ?? null;
+        const exactTierId = filters?.exactTierId ?? null;
+
+        const candidateMap = new Map(srvCandidates.map((c) => [c.id, c]));
+
+        if (deptId) {
+          finalCandidates = finalCandidates.filter((c) => c.departmentId === deptId || (c.department?.id === deptId));
+          finalRequests = finalRequests.filter((r) => {
+            const cand = candidateMap.get(r.candidateId);
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+          finalPanels = finalPanels.filter((p) => {
+            const candId = p.candidate?.id ?? p.candidateId ?? null;
+            const cand = candId ? candidateMap.get(candId) : null;
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+        }
+
+        // Tier filtering uses tierOrder for comparisons. Find tierOrder from tiersForDept
+        let targetTierOrder = null;
+        if (minTierId || exactTierId) {
+          const tid = minTierId || exactTierId;
+          const tierObj = tiersForDept.find((t) => t.id === tid) || null;
+          targetTierOrder = tierObj ? tierObj.tierOrder : null;
+        }
+
+        if (targetTierOrder != null) {
+          if (minTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+          } else if (exactTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Client-side filter fallback failed', e);
+      }
+
+      setCandidates(finalCandidates);
+      setRequests(finalRequests);
+      setPanels(finalPanels);
+      setAvailabilitySlots(srvSlots);
       setLastRefreshed(new Date());
     } catch (err) {
       console.error(err);
@@ -146,6 +241,41 @@ const HRDashboard = () => {
   }, []);
 
   useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
+  useEffect(() => {
+    // load departments for filter UI
+    (async () => {
+      try {
+        const depts = await departmentAPI.getAllDepartments();
+        setDepartments(depts || []);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDept) loadTiersForDept(selectedDept);
+    else setTiersForDept([]);
+  }, [selectedDept]);
+
+  // reload availability when filters change
+  useEffect(() => {
+    // If user selected a specific tier, treat it as an exact-tier filter
+    // scoped to the selected department (user expectation: "Selected Department and Selected Tier only").
+    const filters = {
+      departmentIds: selectedDept ? [parseInt(selectedDept)] : null,
+      minTierId: null,
+      exactTierId: null,
+    };
+
+    if (selectedTier) {
+      filters.exactTierId = parseInt(selectedTier);
+    } else {
+      // no specific tier chosen — honor tierFilterMode when applicable
+      filters.minTierId = tierFilterMode === 'min' && selectedTier ? parseInt(selectedTier) : null;
+      filters.exactTierId = tierFilterMode === 'exact' && selectedTier ? parseInt(selectedTier) : null;
+    }
+
+    loadDashboardData(filters);
+  }, [selectedDept, selectedTier, tierFilterMode]);
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
@@ -343,6 +473,14 @@ const HRDashboard = () => {
             <p className="text-muted-foreground text-lg">
               Manage candidates, schedule interviews, and track your pipeline
             </p>
+            <HRFilters
+              departments={departments}
+              tiersForDept={tiersForDept}
+              selectedDept={selectedDept}
+              setSelectedDept={setSelectedDept}
+              selectedTier={selectedTier}
+              setSelectedTier={setSelectedTier}
+            />
             {lastRefreshed && (
               <p className="text-xs text-muted-foreground mt-1">
                 Last updated: {formatTime(lastRefreshed)}
