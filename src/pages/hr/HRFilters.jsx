@@ -36,10 +36,10 @@ export default function HRFilters({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex items-center gap-2 ml-2">
+      {/* <div className="flex items-center gap-2 ml-2">
         <Label className="text-xs">Min tier (gte)</Label>
         <Switch checked={tierFilterMode === 'min'} onCheckedChange={(v) => setTierFilterMode(v ? 'min' : 'exact')} />
-      </div>
+      </div> */}
     </div>
   );
 }

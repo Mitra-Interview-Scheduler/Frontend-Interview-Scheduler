@@ -149,10 +149,88 @@ const HRDashboard = () => {
         hrAvailabilityAPI.getAllAvailability(filters),
       ]);
       const [cRes, rRes, pRes, sRes] = results;
-      setCandidates(safeArray(cRes.status === 'fulfilled' ? cRes.value : []));
-      setRequests(safeArray(rRes.status === 'fulfilled' ? rRes.value : []));
-      setPanels(safeArray(pRes.status === 'fulfilled' ? pRes.value : []));
-      setAvailabilitySlots(safeArray(sRes.status === 'fulfilled' ? sRes.value : []));
+      const srvCandidates = safeArray(cRes.status === 'fulfilled' ? cRes.value : []);
+      const srvRequests   = safeArray(rRes.status === 'fulfilled' ? rRes.value : []);
+      const srvPanels     = safeArray(pRes.status === 'fulfilled' ? pRes.value : []);
+      const srvSlots      = safeArray(sRes.status === 'fulfilled' ? sRes.value : []);
+
+      // Client-side fallback: if backend doesn't apply department/tier filters
+      // ensure the dashboard still respects selectedDept/selectedTier.
+      let finalCandidates = srvCandidates;
+      let finalRequests = srvRequests;
+      let finalPanels = srvPanels;
+
+      try {
+        const deptId = filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null;
+        const minTierId = filters?.minTierId ?? null;
+        const exactTierId = filters?.exactTierId ?? null;
+
+        const candidateMap = new Map(srvCandidates.map((c) => [c.id, c]));
+
+        if (deptId) {
+          finalCandidates = finalCandidates.filter((c) => c.departmentId === deptId || (c.department?.id === deptId));
+          finalRequests = finalRequests.filter((r) => {
+            const cand = candidateMap.get(r.candidateId);
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+          finalPanels = finalPanels.filter((p) => {
+            const candId = p.candidate?.id ?? p.candidateId ?? null;
+            const cand = candId ? candidateMap.get(candId) : null;
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+        }
+
+        // Tier filtering uses tierOrder for comparisons. Find tierOrder from tiersForDept
+        let targetTierOrder = null;
+        if (minTierId || exactTierId) {
+          const tid = minTierId || exactTierId;
+          const tierObj = tiersForDept.find((t) => t.id === tid) || null;
+          targetTierOrder = tierObj ? tierObj.tierOrder : null;
+        }
+
+        if (targetTierOrder != null) {
+          if (minTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+          } else if (exactTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Client-side filter fallback failed', e);
+      }
+
+      setCandidates(finalCandidates);
+      setRequests(finalRequests);
+      setPanels(finalPanels);
+      setAvailabilitySlots(srvSlots);
       setLastRefreshed(new Date());
     } catch (err) {
       console.error(err);
@@ -180,14 +258,24 @@ const HRDashboard = () => {
 
   // reload availability when filters change
   useEffect(() => {
+    // If user selected a specific tier, treat it as an exact-tier filter
+    // scoped to the selected department (user expectation: "Selected Department and Selected Tier only").
     const filters = {
       departmentIds: selectedDept ? [parseInt(selectedDept)] : null,
-      // choose min or exact depending on mode
-      minTierId: tierFilterMode === 'min' && selectedTier ? parseInt(selectedTier) : null,
-      exactTierId: tierFilterMode === 'exact' && selectedTier ? parseInt(selectedTier) : null,
+      minTierId: null,
+      exactTierId: null,
     };
+
+    if (selectedTier) {
+      filters.exactTierId = parseInt(selectedTier);
+    } else {
+      // no specific tier chosen — honor tierFilterMode when applicable
+      filters.minTierId = tierFilterMode === 'min' && selectedTier ? parseInt(selectedTier) : null;
+      filters.exactTierId = tierFilterMode === 'exact' && selectedTier ? parseInt(selectedTier) : null;
+    }
+
     loadDashboardData(filters);
-  }, [selectedDept, selectedTier]);
+  }, [selectedDept, selectedTier, tierFilterMode]);
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
