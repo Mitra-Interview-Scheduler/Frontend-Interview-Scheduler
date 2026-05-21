@@ -27,6 +27,7 @@ import {
   CheckCircle2, Scissors, Trash2, ShieldAlert,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
@@ -52,7 +53,10 @@ const AvailabilityViewPage = () => {
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [currentView, setCurrentView] = useState('week');
   const [loading, setLoading] = useState(true);
+  const navTimerRef = useRef(null);
+  const viewTimerRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
   const [designations, setDesignations] = useState([]);
@@ -134,6 +138,7 @@ const AvailabilityViewPage = () => {
       try {
         setLoading(true);
         const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
+          // Load initial availability for visible range
           hrAvailabilityAPI.getAllAvailability(),
           departmentAPI.getAllDepartments(),
           technologyAPI.getAllTechnologies(),
@@ -174,7 +179,8 @@ const AvailabilityViewPage = () => {
   };
 
     useEffect(() => {
-    loadInitialData();
+      // initial load
+      loadInitialData();
   }, []);
 
 
@@ -254,6 +260,62 @@ const AvailabilityViewPage = () => {
       setCalendarDate(new Date(dateRange.start));
     }
   }, [dateRange.start]);
+
+  const computeRangeForView = (view, date) => {
+    const d = date ? new Date(date) : new Date();
+    switch ((view || 'week')) {
+      case 'month': return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'day': return { start: startOfDay(d), end: endOfDay(d) };
+      case 'week':
+      default: return { start: startOfWeek(d, { weekStartsOn: 0 }), end: endOfWeek(d, { weekStartsOn: 0 }) };
+    }
+  };
+
+  // Simple toolbar with loading indicator
+  const HRCalendarToolbar = ({ label, onNavigate, onView, view, views, loading }) => {
+    const viewList = Array.isArray(views) ? views : Object.keys(views || {});
+    return (
+      <div className="rbc-toolbar flex items-center justify-between px-2 py-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onNavigate('PREV')} className="btn">Prev</button>
+          <button onClick={() => onNavigate('TODAY')} className="btn">Today</button>
+          <button onClick={() => onNavigate('NEXT')} className="btn">Next</button>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="rbc-toolbar-label text-base font-semibold">{label}</span>
+          {loading && <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin ml-2" />}
+          {viewList.map(v => (
+            <button key={v} onClick={() => onView(v)} className={`btn ${v === view ? 'btn-primary' : ''}`}>{v}</button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const fetchAvailabilityForView = async (view, date) => {
+    try {
+      setLoading(true);
+      const { start, end } = computeRangeForView(view, date || calendarDate);
+      const filters = {
+        startDateTime: formatLocalDateTime(start),
+        endDateTime: formatLocalDateTime(end),
+        departmentIds: filterDept.length > 0 ? filterDept : null,
+        technologyIds: filterTech.length > 0 ? filterTech : null,
+        minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
+        // For month view, request server-side pagination to avoid huge payloads
+        page: view === 'month' ? 0 : null,
+        size: view === 'month' ? 500 : null,
+      };
+      const data = await hrAvailabilityAPI.getAllAvailability(filters);
+      const colorMap = buildColorMap(data);
+      setRawSlots(data);
+      setEvents(formatSlots(data, colorMap));
+    } catch (err) {
+      toast({ title: 'Error loading availability', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   
@@ -1092,7 +1154,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
                   <Calendar
                     localizer={localizer}
-                    components={calendarComponents}
+                    components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
                     events={events}
                     date={calendarDate}
                     onNavigate={(nextDate) => {
@@ -1102,6 +1164,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                         return;
                       }
                       setCalendarDate(nextDay);
+                      // Debounce navigation fetches
+                      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+                      navTimerRef.current = setTimeout(() => fetchAvailabilityForView(currentView, nextDay), 200);
                     }}
                     startAccessor="start"
                     endAccessor="end"
@@ -1115,6 +1180,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
+                    onView={(view) => {
+                      setCurrentView(view);
+                      // Debounce view change fetches
+                      if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+                      viewTimerRef.current = setTimeout(() => fetchAvailabilityForView(view, calendarDate), 200);
+                    }}
                     step={60}
                     timeslots={1}
                     min={new Date(1970, 0, 1, 0, 0, 0)}

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar } from 'react-big-calendar';
 import {
   format,
-  addHours, isSameDay, startOfDay, isBefore,
+  addMinutes, isSameDay, startOfDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay,
 } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
@@ -31,16 +31,22 @@ import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, p
 // ── Status colours ────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   available: {
-    bg:    'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    border:'#312e81', solid:'#6366f1', label:'Available',
+    bg: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+    border: '#312e81',
+    solid: '#6366f1',
+    label: 'Available',
   },
   booked: {
-    bg:    'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border:'#065f46', solid:'#10b981', label:'Booked',
+    bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    border: '#065f46',
+    solid: '#10b981',
+    label: 'Booked',
   },
   blocked: {
-    bg:    'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border:'#92400e', solid:'#f59e0b', label:'Blocked',
+    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border: '#92400e',
+    solid: '#f59e0b',
+    label: 'Blocked',
   },
 };
 
@@ -51,14 +57,6 @@ const isPastDay = (date) => {
   const today = startOfDay(new Date());
   return startOfDay(date) < today;
 };
-
-/** Minimum allowed start for a slot: now + 2 hours. */
-const minimumAllowedStart = () => addHours(new Date(), 0.5);
-
-/**
- * Validate a proposed start time.
- * Returns an error string or null if valid.
- */
 const getSlotStartError = (start) => {
   if (!start) return null;
   if (isPastDay(start)) return 'Cannot add slots for past dates.';
@@ -69,7 +67,12 @@ const getSlotStartError = (start) => {
   return null;
 };
 
-const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingSlots, onToggleUpcomingSlots }) => {
+/** Minimum allowed start time for same-day slots: 30 minutes from now. */
+const minimumAllowedStart = () => {
+  return addMinutes(new Date(), 30);
+};
+
+const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingSlots, onToggleUpcomingSlots, loading }) => {
   const viewList = Array.isArray(views) ? views : Object.keys(views || {});
 
   return (
@@ -89,6 +92,11 @@ const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingS
       <span className="rbc-toolbar-label text-base font-semibold text-foreground md:text-lg">{label}</span>
 
       <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+        {loading && (
+          <div className="flex items-center mr-2">
+            <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        )}
         {viewList.map((availableView) => (
           <Button
             key={availableView}
@@ -106,7 +114,6 @@ const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingS
           onClick={onToggleUpcomingSlots}
           className="h-9 gap-2 px-3"
         >
-         
           {showUpcomingSlots ? 'Hide Upcoming' : 'Show Upcoming'}
         </Button>
       </div>
@@ -119,6 +126,10 @@ const AvailabilityPage = () => {
   const calendarFormats = useCalendarFormats();
   const [events, setEvents]   = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState('week');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const navTimerRef = useRef(null);
+  const viewTimerRef = useRef(null);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
   const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
 
@@ -140,31 +151,58 @@ const AvailabilityPage = () => {
   const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   // ── Data loading 
-  const loadAvailability = useCallback(async () => {
+  const mapSlotsToEvents = (data) => data.map((slot) => ({
+    id: slot.id,
+    title: slot.status === 'BOOKED' ? `🔒 ${slot.candidateName || 'Interview Scheduled'}` : slot.description || 'Available',
+    start: new Date(slot.startDateTime),
+    end: new Date(slot.endDateTime),
+    status: slot.status.toLowerCase(),
+    description: slot.description,
+    candidateName: slot.candidateName,
+    interviewScheduleId: slot.interviewScheduleId,
+    durationHours: slot.durationHours,
+    recurrenceGroupId: slot.recurrenceGroupId,
+    isRecurring: slot.isRecurring,
+  }));
+
+  const computeRangeForView = (view, date) => {
+    const d = date ? new Date(date) : new Date();
+    switch ((view || 'week')) {
+      case 'month':
+        return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'day':
+        return { start: startOfDay(d), end: endOfDay(d) };
+      case 'week':
+      default:
+        return { start: startOfWeek(d, { weekStartsOn: 0 }), end: endOfWeek(d, { weekStartsOn: 0 }) };
+    }
+  };
+
+  const loadAvailability = useCallback(async (opts = {}) => {
     try {
       setLoading(true);
-      const data = await availabilityAPI.getMyAvailability();
-              console.log('Loaded availability:', data)
+      const { start, end } = opts;
+      let data;
+      if (start && end) {
+        console.log('[Availability] Loading range:', { start, end });
+        data = await availabilityAPI.getAvailabilityByDateRange(start, end);
+        console.log(`[Availability] Range result count: ${(data || []).length}`);
+      } else {
+        console.log('[Availability] Loading full availability for user');
+        data = await availabilityAPI.getMyAvailability();
+        console.log(`[Availability] Full availability count: ${(data || []).length}`);
+      }
 
-      setEvents(
-        
-        data.map((slot) => ({
-          
-          id:                  slot.id,
-          title: slot.status === 'BOOKED'
-            ? `🔒 ${slot.candidateName || 'Interview Scheduled'}`
-            : slot.description || 'Available',
-          start:               new Date(slot.startDateTime),
-          end:                 new Date(slot.endDateTime),
-          status:              slot.status.toLowerCase(),
-          description:         slot.description,
-          candidateName:       slot.candidateName,
-          interviewScheduleId: slot.interviewScheduleId,
-          durationHours :      slot.durationHours,
-          recurrenceGroupId:   slot.recurrenceGroupId,
-          isRecurring:         slot.isRecurring,
-        }))
-      );
+      const mapped = mapSlotsToEvents(data || []);
+        console.log('[Availability] Mapped events (sample):', mapped.slice(0, 8));
+        // Log weekday distribution to help debug missing Sunday events
+        const weekdayCounts = mapped.reduce((acc, ev) => {
+          const wd = new Date(ev.start).getDay();
+          acc[wd] = (acc[wd] || 0) + 1;
+          return acc;
+        }, {});
+        console.log('[Availability] Weekday counts (0=Sun..6=Sat):', weekdayCounts);
+      setEvents(mapped);
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -190,10 +228,42 @@ const AvailabilityPage = () => {
     }
   }, []);
 
+  /** Load full future availability for UpcomingCard (not limited to visible range) */
+  const loadAllFutureAvailability = useCallback(async () => {
+    try {
+      console.log('[Availability] Loading all future availability for UpcomingCard');
+      const data = await availabilityAPI.getMyAvailability();
+      console.log(`[Availability] Upcoming total fetched: ${(data || []).length}`);
+      const mapped = mapSlotsToEvents(data || []);
+      const weekdayCounts = mapped.reduce((acc, ev) => {
+        const wd = new Date(ev.start).getDay();
+        acc[wd] = (acc[wd] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('[Availability] Upcoming Weekday counts (0=Sun..6=Sat):', weekdayCounts);
+      return mapped;
+    } catch (err) {
+      console.error('Failed to load all future availability:', err);
+      return [];
+    }
+  }, []);
+
+  // store full events for upcoming card
+  const [allEventsForUpcoming, setAllEventsForUpcoming] = useState([]);
+
+  const refreshUpcomingEvents = useCallback(async () => {
+    const all = await loadAllFutureAvailability();
+    setAllEventsForUpcoming(all);
+  }, [loadAllFutureAvailability]);
+
   useEffect(() => {
-    loadAvailability();
+    // initial load for visible range
+    const { start, end } = computeRangeForView(currentView, calendarDate);
+    loadAvailability({ start, end });
     loadStats();
-  }, [loadAvailability, loadStats]);
+    // also populate upcoming card data
+    refreshUpcomingEvents();
+  }, [loadAvailability, loadStats, currentView, calendarDate, refreshUpcomingEvents]);
 
 
 
@@ -289,14 +359,16 @@ const handleSelectSlot = ({ start, end }) => {
     setSelectedDate(null);
     setStartTime('');
     setEndTime('');
+    await refreshUpcomingEvents();
     await loadStats();
-  }, [loadStats]);
+  }, [loadStats, refreshUpcomingEvents]);
 
   const handleEditSuccess = useCallback(async (updated, scope = 'SINGLE') => {
     const isRecurringEdit = !!editTarget?.isRecurring && !!editTarget?.recurrenceGroupId;
 
     if (isRecurringEdit && scope !== 'SINGLE') {
       await loadAvailability();
+      await refreshUpcomingEvents();
       await loadStats();
     } else {
       setEvents((prev) => prev.map((event) => (
@@ -312,19 +384,21 @@ const handleSelectSlot = ({ start, end }) => {
             }
           : event
       )));
+      await refreshUpcomingEvents();
       await loadStats();
     }
 
     setEditDialogOpen(false);
     setEditTarget(null);
-  }, [editTarget, loadAvailability, loadStats]);
+  }, [editTarget, loadAvailability, loadStats, refreshUpcomingEvents]);
 
   const handleDeleteSuccess = useCallback(async () => {
     setDeleteDialogOpen(false);
     setDeleteTarget(null);
     await loadAvailability();
+    await refreshUpcomingEvents();
     await loadStats();
-  }, [loadAvailability, loadStats]);
+  }, [loadAvailability, loadStats, refreshUpcomingEvents]);
 
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
@@ -434,6 +508,28 @@ const handleSelectSlot = ({ start, end }) => {
                         endAccessor="end"
                         onSelectSlot={handleSelectSlot}
                         onSelectEvent={handleEventClick}
+                        onNavigate={(nextDate) => {
+                          if (navTimerRef.current) clearTimeout(navTimerRef.current);
+                          navTimerRef.current = setTimeout(() => {
+                            setCalendarDate(nextDate);
+                            const { start, end } = computeRangeForView(currentView, nextDate);
+                            console.log('[Availability] onNavigate -> loading range', { nextDate, start, end });
+                            loadAvailability({ start, end });
+                            // refresh upcoming full list when navigating
+                            loadAllFutureAvailability().then((all) => setAllEventsForUpcoming(all));
+                          }, 200);
+                        }}
+                        onView={(view) => {
+                          if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+                          viewTimerRef.current = setTimeout(() => {
+                            setCurrentView(view);
+                            const { start, end } = computeRangeForView(view, calendarDate);
+                            console.log('[Availability] onView -> loading range', { view, start, end });
+                            loadAvailability({ start, end });
+                            // refresh upcoming full list when changing view
+                            loadAllFutureAvailability().then((all) => setAllEventsForUpcoming(all));
+                          }, 200);
+                        }}
                         selectable
                         eventPropGetter={eventStyleGetter}
                         slotPropGetter={slotPropGetter}
@@ -483,6 +579,7 @@ const handleSelectSlot = ({ start, end }) => {
             >
               <UpcomingCard
                 events={events}
+                allEvents={allEventsForUpcoming}
                 stats={stats}
                 onEventClick={handleEventClick}
                 onDeleteClick={openDeleteDialog}

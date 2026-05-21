@@ -9,7 +9,10 @@ export const hrAvailabilityAPI = {
   getAllAvailability: async (filters = null) => {
     if (filters && Object.values(filters).some(v => v !== null && v !== undefined)) {
       const response = await api.post('/hr/availability/filter', filters);
-      return response.data;
+      const data = response.data;
+      // Support paged response: { items, total, page, size }
+      if (data && data.items) return data.items;
+      return data;
     }
     const response = await api.get('/hr/availability');
     return response.data;

@@ -39,6 +39,7 @@ const STATUS_COLORS = {
 
 const UpcomingCard = ({
   events = [],
+  allEvents = null,
   stats = { availableSlots: 0, bookedSlots: 0 },
   onEventClick,
   onDeleteClick,
@@ -47,8 +48,12 @@ const UpcomingCard = ({
   const [availablePage, setAvailablePage] = useState(1);
   const [bookedPage, setBookedPage] = useState(1);
 
-  // Derive upcoming events
-  const upcomingEvents = events
+  // Derive upcoming events. Prefer `allEvents` when provided (full future list), otherwise use `events` (visible range)
+  const sourceEvents = Array.isArray(allEvents) && allEvents.length > 0 ? allEvents : events;
+  console.log('[UpcomingCard] using sourceEvents count:', sourceEvents.length, { usingAll: Array.isArray(allEvents) && allEvents.length > 0 });
+
+  // Derive upcoming events only from the full future list
+  const upcomingEvents = sourceEvents
     .filter((e) => isAfter(new Date(e.start), new Date()))
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 
@@ -67,11 +72,16 @@ const UpcomingCard = ({
     bookedPage * UPCOMING_SLOTS_PER_PAGE
   );
 
-
-  
   const totalUpcomingHours = upcomingEvents.reduce(
     (sum, e) => sum + (e.durationHours || 0), 0
   );
+
+  const formatTotalHours = (hours) => {
+    if (!Number.isFinite(hours)) return '0';
+    const capped = Math.min(hours, 9999);
+    const wholeHours = Math.floor(capped);
+    return String(wholeHours).slice(0, 4) || '0';
+  };
 
   return (
     <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
@@ -94,7 +104,7 @@ const UpcomingCard = ({
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
              <p className="text-lg font-bold text-amber-600">
-              {totalUpcomingHours}h
+              {formatTotalHours(totalUpcomingHours)}h
             </p> 
           </div>
         </div> 
