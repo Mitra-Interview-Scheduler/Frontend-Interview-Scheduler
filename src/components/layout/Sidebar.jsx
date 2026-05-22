@@ -5,7 +5,7 @@ import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
   UserCheck, BarChart3, Clock, FileText, 
-  Shield, Briefcase, Bell, ChevronDown
+  Shield, Briefcase, Bell, ChevronDown, MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,7 +17,7 @@ const adminLinks = [
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
   { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
-  { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
+  // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
   { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
 ];
 
