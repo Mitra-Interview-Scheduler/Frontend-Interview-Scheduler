@@ -19,14 +19,16 @@ import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
 import FeedbackFormsPage from "./pages/admin/FeedbackFormsPage";
 import HRDashboard from "./pages/hr/HRDashboard";
 import CandidatesPage from "./pages/hr/CandidatesPage";
+import CandidateDetailsPage from "./pages/hr/CandidateDetailsPage";
 import SchedulePage from "./pages/hr/SchedulePage";
 import AvailabilityViewPage from "./pages/hr/AvailabilityViewPage";
 import UrgentRequestsPage from "./pages/hr/UrgentRequestsPage";
 import InterviewerDashboard from "./pages/interviewer/InterviewerDashboard";
 import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
+import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
-import ProfilePage from "./pages/interviewer/ProfilePage";
+import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -128,6 +130,14 @@ const App = () => (
               }
             />
             <Route
+              path="/hr/candidates/:candidateId/details"
+              element={
+                <PrivateRoute allowedRoles={['HR']}>
+                  <CandidateDetailsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/hr/schedule"
               element={
                 <PrivateRoute allowedRoles={['HR']}>
@@ -194,6 +204,14 @@ const App = () => (
               }
             />
             <Route
+              path="/interviewer/feedback/:interviewScheduleId"
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <InterviewFeedbackPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/interviewer/requests"
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
@@ -211,8 +229,13 @@ const App = () => (
             />
             <Route
               path="/interviewer/profile"
+              element={<Navigate to="/profile" replace />}
+            />
+
+            <Route
+              path="/profile"
               element={
-                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                <PrivateRoute allowedRoles={['ADMIN', 'HR', 'INTERVIEWER']}>
                   <ProfilePage />
                 </PrivateRoute>
               }

@@ -1,5 +1,6 @@
 // src/services/hrAvailabilityAPI.js
 import api from './api';
+import { withQuery } from './queryParams';
 
 export const hrAvailabilityAPI = {
   /**
@@ -8,7 +9,10 @@ export const hrAvailabilityAPI = {
   getAllAvailability: async (filters = null) => {
     if (filters && Object.values(filters).some(v => v !== null && v !== undefined)) {
       const response = await api.post('/hr/availability/filter', filters);
-      return response.data;
+      const data = response.data;
+      // Support paged response: { items, total, page, size }
+      if (data && data.items) return data.items;
+      return data;
     }
     const response = await api.get('/hr/availability');
     return response.data;
@@ -34,11 +38,15 @@ export const hrAvailabilityAPI = {
   /**
    * Get all interview requests created by the current HR user.
    */
-  getHRRequests: async (params = null) => {
-    const query = new URLSearchParams();
-    if (params?.size !== undefined) query.append('size', params.size);
-    const queryString = query.toString();
-    const response = await api.get(queryString ? `/hr/interviews/my-requests?${queryString}` : '/hr/interviews/my-requests');
+  getHRRequests: async (filters = null, params = null) => {
+    // filters: { departmentIds: [...], minTierId }
+    const query = {
+      size: params?.size,
+      departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null,
+      minTierId: filters?.minTierId ?? null,
+      exactTierId: filters?.exactTierId ?? null,
+    };
+    const response = await api.get(withQuery('/hr/interviews/my-requests', query));
     return response.data;
   },
 
@@ -62,11 +70,14 @@ export const hrAvailabilityAPI = {
   /**
    * Get all panel interviews created by the current HR user.
    */
-  getMyPanels: async (params = null) => {
-    const query = new URLSearchParams();
-    if (params?.size !== undefined) query.append('size', params.size);
-    const queryString = query.toString();
-    const response = await api.get(queryString ? `/hr/panels/my-panels?${queryString}` : '/hr/panels/my-panels');
+  getMyPanels: async (filters = null, params = null) => {
+    const query = {
+      size: params?.size,
+      departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null,
+      minTierId: filters?.minTierId ?? null,
+      exactTierId: filters?.exactTierId ?? null,
+    };
+    const response = await api.get(withQuery('/hr/panels/my-panels', query));
     return response.data;
   },
 

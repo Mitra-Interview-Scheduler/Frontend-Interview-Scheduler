@@ -1,0 +1,104 @@
+{
+  "name": "Standard Interview Feedback",
+  "description": "Comprehensive feedback form for interview evaluations",
+  "scopes": {
+    "departmentIds": [],
+    "designationIds": []
+  },
+  "questions": [
+    {
+      "order": 1,
+      "label": "Technical Skills",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's technical knowledge and problem-solving abilities",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 2,
+      "label": "Communication Skills",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's ability to articulate ideas clearly",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 3,
+      "label": "Problem-Solving Approach",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess how the candidate approaches and solves complex problems",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 4,
+      "label": "Cultural Fit",
+      "category": "Cultural",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's alignment with company values and team dynamics",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 5,
+      "label": "Recommendation",
+      "category": "Outcome",
+      "type": "select",
+      "required": true,
+      "placeholder": "Select recommendation",
+      "helpText": "Overall recommendation for this candidate",
+      "commentsEnabled": true,
+      "options": [
+        { "value": "RECOMMENDED", "label": "Recommended for next round" },
+        { "value": "HOLD", "label": "Hold - needs consideration" },
+        { "value": "REJECTED", "label": "Not recommended" }
+      ]
+    },
+    {
+      "order": 6,
+      "label": "Additional Comments",
+      "category": "Educational Background",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "Share any additional observations or notes about the candidate...",
+      "helpText": "Provide detailed feedback for the hiring team",
+      "commentsEnabled": false,
+      "options": []
+    }
+  ]
+}

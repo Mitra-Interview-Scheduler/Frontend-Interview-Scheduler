@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
@@ -19,15 +20,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
-import {
-  format, parse, startOfWeek, getDay, addMinutes, startOfDay,
-} from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
   CheckCircle2, Scissors, Trash2, ShieldAlert,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
@@ -35,10 +35,10 @@ import { technologyAPI } from '@/services/technologyAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
-import { INTERVIEWER_PALETTES, BOOKED_OVERLAY, PANEL_PALETTE ,CalendarEventComponent, getEventStyle, getTooltipText} from './utils/AvailabilityViewPageUiUtils';
-import {localizer, formatLocalDateTime, formatInputDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege,  formatSlots} from './utils/AvailabilityViewPageHelperUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './utils/AvailabilityViewPageHelperUtils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import './AvailabilityCalendar.css';
+import '@/styles/AvailabilityCalendar.css';
 
 
 const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
@@ -49,10 +49,14 @@ const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19
 const AvailabilityViewPage = () => {
   const location = useLocation();
   const calendarFormats = useCalendarFormats();
+  const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [currentView, setCurrentView] = useState('week');
   const [loading, setLoading] = useState(true);
+  const navTimerRef = useRef(null);
+  const viewTimerRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
   const [designations, setDesignations] = useState([]);
@@ -64,6 +68,7 @@ const AvailabilityViewPage = () => {
   // Filters
   const [filterDept, setFilterDept] = useState([]);
   const [filterTech, setFilterTech] = useState([]);
+  const [selectedTechCategory, setSelectedTechCategory] = useState('');
   const [techSearchTerm, setTechSearchTerm] = useState('');
   const [showTechDropdown, setShowTechDropdown] = useState(false);
   const [minExperience, setMinExperience] = useState('');
@@ -119,8 +124,8 @@ const AvailabilityViewPage = () => {
   [panelSlots]);
 
   const tooltipAccessor = useCallback((event) => 
-    getTooltipText(event, panelSlots), 
-  [panelSlots]);
+    getTooltipText(event, panelSlots, formatTimeRange), 
+  [panelSlots, formatTimeRange]);
 
   // For the calendar components prop
   const calendarComponents = useMemo(() => ({
@@ -133,6 +138,7 @@ const AvailabilityViewPage = () => {
       try {
         setLoading(true);
         const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
+          // Load initial availability for visible range
           hrAvailabilityAPI.getAllAvailability(),
           departmentAPI.getAllDepartments(),
           technologyAPI.getAllTechnologies(),
@@ -173,7 +179,8 @@ const AvailabilityViewPage = () => {
   };
 
     useEffect(() => {
-    loadInitialData();
+      // initial load
+      loadInitialData();
   }, []);
 
 
@@ -210,7 +217,6 @@ const AvailabilityViewPage = () => {
 
   
 
-  // ── Auto-set Tier from pending filter ───────────────────────────────────────
   useEffect(() => {
     if (pendingFilter && tiersForSelectedDept.length > 0) {
       const { minTierOrder } = pendingFilter;
@@ -255,6 +261,62 @@ const AvailabilityViewPage = () => {
     }
   }, [dateRange.start]);
 
+  const computeRangeForView = (view, date) => {
+    const d = date ? new Date(date) : new Date();
+    switch ((view || 'week')) {
+      case 'month': return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'day': return { start: startOfDay(d), end: endOfDay(d) };
+      case 'week':
+      default: return { start: startOfWeek(d, { weekStartsOn: 0 }), end: endOfWeek(d, { weekStartsOn: 0 }) };
+    }
+  };
+
+  // Simple toolbar with loading indicator
+  const HRCalendarToolbar = ({ label, onNavigate, onView, view, views, loading }) => {
+    const viewList = Array.isArray(views) ? views : Object.keys(views || {});
+    return (
+      <div className="rbc-toolbar flex items-center justify-between px-2 py-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onNavigate('PREV')} className="btn">Prev</button>
+          <button onClick={() => onNavigate('TODAY')} className="btn">Today</button>
+          <button onClick={() => onNavigate('NEXT')} className="btn">Next</button>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="rbc-toolbar-label text-base font-semibold">{label}</span>
+          {loading && <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin ml-2" />}
+          {viewList.map(v => (
+            <button key={v} onClick={() => onView(v)} className={`btn ${v === view ? 'btn-primary' : ''}`}>{v}</button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const fetchAvailabilityForView = async (view, date) => {
+    try {
+      setLoading(true);
+      const { start, end } = computeRangeForView(view, date || calendarDate);
+      const filters = {
+        startDateTime: formatLocalDateTime(start),
+        endDateTime: formatLocalDateTime(end),
+        departmentIds: filterDept.length > 0 ? filterDept : null,
+        technologyIds: filterTech.length > 0 ? filterTech : null,
+        minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
+        // For month view, request server-side pagination to avoid huge payloads
+        page: view === 'month' ? 0 : null,
+        size: view === 'month' ? 500 : null,
+      };
+      const data = await hrAvailabilityAPI.getAllAvailability(filters);
+      const colorMap = buildColorMap(data);
+      setRawSlots(data);
+      setEvents(formatSlots(data, colorMap));
+    } catch (err) {
+      toast({ title: 'Error loading availability', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   
   // ── Auto-set Level from pending filter ───────────────────────────────────────
@@ -268,7 +330,6 @@ const AvailabilityViewPage = () => {
           setMinDesignationLevel(matchingDesignation.levelOrder.toString());
         }
       }
-      // ✅ Clear pendingFilter after cascading tier/level updates complete
       setPendingFilter(null);
     }
   }, [pendingFilter, designationsForSelectedTier]);
@@ -327,19 +388,6 @@ const AvailabilityViewPage = () => {
 
   const applyFilters = async () => {
     try {
-      // ── Log all filter states ────────────────────────────────────────────────
-      console.group('📊 FILTER STATE');
-      console.log('filterDept[]:', filterDept);
-      console.log('filterTech[]:', filterTech);
-      console.log('minExperience:', minExperience);
-      console.log('dateRange:', dateRange);
-      console.log('selectedDeptForDesignation:', selectedDeptForDesignation);
-      console.log('selectedTierInDept:', selectedTierInDept);
-      console.log('minDesignationLevel:', minDesignationLevel);
-      console.log('tiersForSelectedDept[]:', tiersForSelectedDept);
-      console.log('designationsForSelectedTier[]:', designationsForSelectedTier);
-      console.groupEnd();
-
       let tierOrderToSend = null;
       if (selectedTierInDept) {
         const t = tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept);
@@ -352,20 +400,6 @@ const AvailabilityViewPage = () => {
         levelOrderToSend = d ? d.levelOrder : null;
       }
 
-      // // ── Log conversion process ───────────────────────────────────────────────
-      console.group('🔄 CONVERSION');
-      console.log('Tier Conversion:', {
-        selectedTierInDept,
-        matchingTier: tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept),
-        tierOrderToSend,
-      });
-      console.log('Level Conversion:', {
-        minDesignationLevel,
-        matchingDesignation: designationsForSelectedTier.find((d) => d.levelOrder.toString() === minDesignationLevel),
-        levelOrderToSend,
-      });
-      console.groupEnd();
-
       const filters = {
         departmentIds: filterDept.length > 0 ? filterDept : null,
         technologyIds: filterTech.length > 0 ? filterTech : null,
@@ -377,36 +411,13 @@ const AvailabilityViewPage = () => {
         minDesignationLevelInDepartment: levelOrderToSend,
       };
 
-      // ── Log final filters object ─────────────────────────────────────────────
-      console.group('📤 SENDING TO API');
-      console.table(filters);
-      console.groupEnd();
-
-      const data = await hrAvailabilityAPI.getAllAvailability(filters);
-
-      // ── Log retrieved data ───────────────────────────────────────────────────
-      console.group('📥 RECEIVED DATA');
-      console.log(`Total slots: ${data.length}`);
-      console.table(data.map(slot => ({
-        slotId: slot.slotId,
-        interviewerName: slot.interviewerName,
-        interviewerLevelOrder: slot.interviewerLevelOrder,
-        interviewerTierOrder: slot.interviewerTierOrder,
-        startDateTime: slot.startDateTime,
-        status: slot.status,
-      })));
-      console.groupEnd();
-
-      // ── Summary ──────────────────────────────────────────────────────────────
-      console.group('✅ SUMMARY');
-      console.log(`Filter applied. Returned: ${data.length} slots`);
+    
+      const data = await hrAvailabilityAPI.getAllAvailability(filters);  
       const byStatus = data.reduce((acc, slot) => {
         acc[slot.status] = (acc[slot.status] || 0) + 1;
         return acc;
       }, {});
-      console.table(byStatus);
-      console.groupEnd();
-
+     
       const colorMap = buildColorMap(data);
       setRawSlots(data);
       setEvents(formatSlots(data, colorMap));
@@ -494,6 +505,7 @@ const AvailabilityViewPage = () => {
     }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
+    
   };
 
 
@@ -611,7 +623,7 @@ const AvailabilityViewPage = () => {
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
   const clearFilters = () => {
-    setFilterDept([]); setFilterTech([]); setTechSearchTerm(''); setMinExperience('');
+    setFilterDept([]); setFilterTech([]); setSelectedTechCategory(''); setTechSearchTerm(''); setMinExperience('');
     setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
     setMinDesignationLevel(''); setSelectedTierInDept('');
     setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
@@ -669,16 +681,17 @@ const calendarSlotPropGetter = useCallback((date) => {
 
   return {};
 }, [calendarLockStart]);
-  const filteredTechnologies = techSearchTerm.trim()
-    ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
-    : technologies;
+  const technologyCategories = useMemo(() => {
+    const categories = Array.from(new Set(technologies.map((tech) => tech.category || 'Other')))
+      .sort((a, b) => a.localeCompare(b));
+    return categories;
+  }, [technologies]);
 
-  const filteredGroupedTechs = filteredTechnologies.reduce((acc, tech) => {
-    const cat = tech.category || 'Other';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(tech);
-    return acc;
-  }, {});
+  const filteredTechnologies = useMemo(() => {
+    return technologies
+      .filter((tech) => !selectedTechCategory || (tech.category || 'Other') === selectedTechCategory)
+      .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
+  }, [technologies, selectedTechCategory, techSearchTerm]);
 
   const filteredCandidates = candidates.filter((c) =>
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
@@ -876,46 +889,71 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
 
               <div className="space-y-2" ref={techDropdownRef}>
-                <Label className="flex items-center gap-2">
-                  <Code className="w-4 h-4" /> Technologies {filterTech.length > 0 && `(${filterTech.length})`}
-                </Label>
-                <div className="relative">
+                <Label>Categories</Label>
+                  <Select
+                    value={selectedTechCategory || 'NONE'}
+                    onValueChange={(value) => {
+                      setSelectedTechCategory(value === 'NONE' ? '' : value);
+                      setShowTechDropdown(false);
+                      setTechSearchTerm('');
+                      // preserve already-selected technologies so user can pick across categories
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">All Categories</SelectItem>
+                      {technologyCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  </div>
+
+                <div className="space-y-1">
+                  <Label >Technologies</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search…" value={techSearchTerm}
+                    <Input
+                      placeholder={'Select technologies…'}
+                      disabled={!selectedTechCategory}
+                      value={techSearchTerm}
                       onChange={(e) => setTechSearchTerm(e.target.value)}
                       onFocus={() => setShowTechDropdown(true)}
-                      className="pl-10 pr-10" />
-                    <button onClick={() => setShowTechDropdown(!showTechDropdown)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      onClick={() => setShowTechDropdown(!showTechDropdown)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
                       <ChevronDown className={`w-4 h-4 transition-transform ${showTechDropdown ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
+
                   <AnimatePresence>
-                    {showTechDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                        {Object.keys(filteredGroupedTechs).length === 0
-                          ? <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
-                          : <div className="py-2">
-                            {Object.entries(filteredGroupedTechs).sort(([a], [b]) => a.localeCompare(b)).map(([cat, techs]) => (
-                              <div key={cat} className="mb-2">
-                                <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">{cat}</div>
-                                {techs.map((tech) => (
-                                  <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
-                                    className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
-                                    <span className="font-medium">{tech.name}</span>
-                                    {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
-                                  </button>
-                                ))}
-                              </div>
+                    {selectedTechCategory && showTechDropdown && (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }} className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                        {filteredTechnologies.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
+                        ) : (
+                          <div className="py-2">
+                            {filteredTechnologies.map((tech) => (
+                              <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
+                                <span className="font-medium">{tech.name}</span>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">{tech.category || 'Other'}</span>
+                                  {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
+                                </span>
+                              </button>
                             ))}
                           </div>
-                        }
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                
+
                 {filterTech.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {filterTech.map((id) => {
@@ -953,7 +991,8 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Award className="w-4 h-4" /> Min. Tier</Label>
+                <Label className="flex items-center gap-2">
+                  <Award className="w-4 h-4" /> Min. Tier</Label>
                 <Select value={selectedTierInDept || 'ANY'}
                   onValueChange={(v) => { if (v === 'ANY') { setSelectedTierInDept(''); setMinDesignationLevel(''); } else setSelectedTierInDept(v); }}
                   disabled={!selectedDeptForDesignation}>
@@ -1115,7 +1154,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
                   <Calendar
                     localizer={localizer}
-                    components={calendarComponents}
+                    components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
                     events={events}
                     date={calendarDate}
                     onNavigate={(nextDate) => {
@@ -1125,6 +1164,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                         return;
                       }
                       setCalendarDate(nextDay);
+                      // Debounce navigation fetches
+                      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+                      navTimerRef.current = setTimeout(() => fetchAvailabilityForView(currentView, nextDay), 200);
                     }}
                     startAccessor="start"
                     endAccessor="end"
@@ -1138,6 +1180,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
+                    onView={(view) => {
+                      setCurrentView(view);
+                      // Debounce view change fetches
+                      if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+                      viewTimerRef.current = setTimeout(() => fetchAvailabilityForView(view, calendarDate), 200);
+                    }}
                     step={60}
                     timeslots={1}
                     min={new Date(1970, 0, 1, 0, 0, 0)}
@@ -1177,7 +1225,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
               )}
               <p className="text-xs text-muted-foreground">
-                {format(cancelTarget.start, 'PPP')} · {format(cancelTarget.start, 'h:mm a')} – {format(cancelTarget.end, 'h:mm a')}
+                {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
               </p>
             </div>
           )}
@@ -1234,7 +1282,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex items-center gap-3">
                     <Clock className="w-5 h-5 text-primary" />
                     <p className="text-sm">
-                      {format(selectedSlot.start, 'PPP')} · {format(selectedSlot.start, 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')}
+                      {formatDateTimeRange(selectedSlot.start, selectedSlot.end)}
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -1282,12 +1330,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </div>
                   {bookStartTime && bookEndTime && (
                     <div className="mt-3 p-2 rounded bg-amber-100 dark:bg-amber-900/30 text-xs text-amber-800 space-y-1">
-                      <p><strong>Interview:</strong> {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} – {format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')}</p>
+                      <p><strong>Interview:</strong> {formatTimeRange(parseTimeOnDate(bookStartTime, selectedSlot.start), parseTimeOnDate(bookEndTime, selectedSlot.start))}</p>
                       {bookStartTime > format(selectedSlot.start, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(selectedSlot.start, 'h:mm a')} – {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available</p>
                       )}
                       {bookEndTime < format(selectedSlot.end, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available</p>
                       )}
                     </div>
                   )}
@@ -1350,7 +1398,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                               {privErr && <ShieldAlert className="w-3.5 h-3.5 text-red-500" />}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {ps.slot.resource.department} · Slot: {format(ps.slot.start, 'h:mm a')} – {format(ps.slot.end, 'h:mm a')}
+                              {ps.slot.resource.department} · Slot: {formatTimeRange(ps.slot.start, ps.slot.end)}
                               {ps.slot.resource.interviewerTierOrder != null && (
                                 <span className="ml-1 text-indigo-600">(Tier {ps.slot.resource.interviewerTierOrder})</span>
                               )}
@@ -1408,7 +1456,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     {panelBookStart && panelBookEnd && (
                       <p className="mt-2 text-xs text-amber-800">
                         <strong>Interview:</strong>{' '}
-                        {format(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), 'h:mm a')} – {format(parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start), 'h:mm a')}
+                        {formatTimeRange(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start))}
                       </p>
                     )}
                   </>

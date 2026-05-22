@@ -1,10 +1,11 @@
 import React, { useEffect, useState ,useRef} from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogBody,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -15,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
+import { downloadBlobResponse } from '@/lib/documentUtils';
 
 const CANDIDATE_STATUSES = [
   'APPLIED','SCREENING','SCHEDULED','INTERVIEWED',
@@ -26,10 +28,10 @@ const EMPTY_FORM = {
   departmentId: '', tierId: '', targetDesignationId: '',
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', jobReferenceCode: '', location: '',
-  notes: '', status: 'APPLIED',
+  notes: '', status: 'APPLIED',resourceRequestNumber: '',
 };
 
-function CandidateEditDialog({ 
+function CandidateDialogPage({ 
   open, 
   candidate, 
   departments = [],
@@ -41,6 +43,7 @@ function CandidateEditDialog({
   mode = 'edit'
 }) {
   const isCreate = mode === 'create';
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -85,6 +88,7 @@ function CandidateEditDialog({
       location:          candidate.location || '',
       notes:             candidate.notes || '',
       status:            candidate.status || 'APPLIED',
+      resourceRequestNumber: candidate.resourceRequestNumber || '',
     };
     
     setForm(newForm);
@@ -189,14 +193,7 @@ function CandidateEditDialog({
     if (!candidate?.id || !document?.id) return;
     try {
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: document.contentType }));
-      const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document.fileName;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlobResponse(response, document);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to download document');
     }
@@ -237,7 +234,7 @@ function CandidateEditDialog({
     const payload = {
       name:              form.name.trim(),
       email:             form.email.trim(),
-      phone:             form.phone?.trim() || null,
+      phone:             form.phone?.trim() ,
       departmentId:      form.departmentId ? parseInt(form.departmentId) : null,
       targetDesignationId: form.targetDesignationId ? parseInt(form.targetDesignationId) : null,
       status:            form.status,
@@ -246,6 +243,7 @@ function CandidateEditDialog({
       jobReferenceCode:  form.jobReferenceCode?.trim() || null,
       location:          form.location?.trim() || null,
       notes:             form.notes?.trim() || null,
+      resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
     };
 
     setSaving(true);
@@ -289,13 +287,26 @@ function CandidateEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}> 
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}</DialogTitle>
+      <DialogContent className="w-[95vw] max-w-4xl max-h-[92vh] p-0 border-0 bg-gradient-to-br from-white to-slate-50">
+        <DialogHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+          <DialogTitle className="text-blue-900">
+            {isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}
+          </DialogTitle>
+          <DialogDescription>
+            {isCreate
+              ? 'Fill in candidate details and attach documents before saving.'
+              : readOnly
+                ? 'Review candidate profile, documents, and next actions.'
+                : 'Update candidate information, hierarchy mapping, and documents.'}
+          </DialogDescription>
         </DialogHeader>
 
-        <DialogBody>
-          <div className="grid grid-cols-1 px-7 md:grid-cols-2 gap-4">
+        <DialogBody className="px-4 py-4 md:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-white p-4 md:p-5">
+
+          <div className="md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Candidate Information</p>
+          </div>
 
           {/* Name */}
           <div className="space-y-2">
@@ -322,7 +333,7 @@ function CandidateEditDialog({
 
           {/* Phone */}
           <div className="space-y-2">
-            <Label>Phone</Label>
+            <Label>Phone *</Label>
             <Input 
               value={form.phone} 
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -370,6 +381,19 @@ function CandidateEditDialog({
             />
           </div>
 
+          {/* Resource Request Code */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1">
+              <Hash className="w-3.5 h-3.5" /> Resource Request Number (RR Number)
+            </Label>
+            <Input 
+              value={form.resourceRequestNumber} 
+              onChange={(e) => setForm({ ...form, resourceRequestNumber: e.target.value })}
+              placeholder="REQ-2024-001" 
+              disabled={saving || readOnly} 
+            />
+          </div>
+
           {!isCreate && (
             <div className="space-y-2">
               <Label>Status</Label>
@@ -387,6 +411,10 @@ function CandidateEditDialog({
               </Select>
             </div>
           )}
+
+          <div className="md:col-span-2 pt-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Hiring Mapping</p>
+          </div>
 
           {/* Department */}
           <div className="space-y-2">
@@ -468,17 +496,15 @@ function CandidateEditDialog({
               disabled={saving || readOnly} 
             />
           </div>
-
-
           <div className="space-y-2 md:col-span-2">
-            <Label className="flex items-center ">
+            <Label className="flex items-center gap-1">
                 <FileText className="w-3.5 h-3.5" /> Documents
               </Label>
             <div className="flex items-center justify-between gap-2 ">
               {documentsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
             </div>
 
-          <div className="border rounded-md p-3">
+          <div className="border border-slate-200 bg-slate-50/60 rounded-lg p-3">
             {documents.length === 0 && !documentsLoading ? (
               <p className="text-xs text-muted-foreground">
                 {isCreate
@@ -554,7 +580,7 @@ function CandidateEditDialog({
             )}
 
             {!readOnly && (
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-3 border-t border-slate-200 mt-3">
                 
                 <div className="space-y-2">
                   <div
@@ -634,6 +660,9 @@ function CandidateEditDialog({
           </div>
 
           {/* Notes */}
+          <div className="md:col-span-2 pt-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Additional Notes</p>
+          </div>
           <div className="space-y-2 md:col-span-2">
             <Label>Notes</Label>
             <Textarea 
@@ -661,7 +690,7 @@ function CandidateEditDialog({
           </div>
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 bg-white border-t border-slate-200">
           {readOnly ? (
             <>
               {/* <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -671,8 +700,20 @@ function CandidateEditDialog({
                 <CalendarClock className="w-4 h-4" />
                 Schedule Interview
               </Button>
+              
               <Button onClick={onEdit} className="gap-2">
                 Edit Candidate
+              </Button>
+
+              <Button 
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/hr/candidates/${candidate.id}/details`);
+                }} 
+                variant="outline"
+                className="gap-2"
+              >
+                Detailed View
               </Button>
             </>
           ) : (
@@ -698,4 +739,4 @@ function CandidateEditDialog({
   );
 }
 
-export default CandidateEditDialog;
+export default CandidateDialogPage;

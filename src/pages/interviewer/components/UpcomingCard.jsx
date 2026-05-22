@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { format, isAfter } from 'date-fns';
+import { isAfter } from 'date-fns';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -9,9 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Clock, Trash2, Calendar as CalendarIcon, User, Pencil,
-  CheckCircle2,
+  CheckCircle2,Calendar
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const UPCOMING_SLOTS_PER_PAGE = 10;
 
@@ -38,15 +39,21 @@ const STATUS_COLORS = {
 
 const UpcomingCard = ({
   events = [],
+  allEvents = null,
   stats = { availableSlots: 0, bookedSlots: 0 },
   onEventClick,
   onDeleteClick,
 }) => {
+  const { formatDate, formatTimeRange } = useFormattedDateTime();
   const [availablePage, setAvailablePage] = useState(1);
   const [bookedPage, setBookedPage] = useState(1);
 
-  // Derive upcoming events
-  const upcomingEvents = events
+  // Derive upcoming events. Prefer `allEvents` when provided (full future list), otherwise use `events` (visible range)
+  const sourceEvents = Array.isArray(allEvents) && allEvents.length > 0 ? allEvents : events;
+  console.log('[UpcomingCard] using sourceEvents count:', sourceEvents.length, { usingAll: Array.isArray(allEvents) && allEvents.length > 0 });
+
+  // Derive upcoming events only from the full future list
+  const upcomingEvents = sourceEvents
     .filter((e) => isAfter(new Date(e.start), new Date()))
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 
@@ -65,11 +72,16 @@ const UpcomingCard = ({
     bookedPage * UPCOMING_SLOTS_PER_PAGE
   );
 
-
-  
   const totalUpcomingHours = upcomingEvents.reduce(
     (sum, e) => sum + (e.durationHours || 0), 0
   );
+
+  const formatTotalHours = (hours) => {
+    if (!Number.isFinite(hours)) return '0';
+    const capped = Math.min(hours, 9999);
+    const wholeHours = Math.floor(capped);
+    return String(wholeHours).slice(0, 4) || '0';
+  };
 
   return (
     <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
@@ -92,7 +104,7 @@ const UpcomingCard = ({
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Hrs</p>
              <p className="text-lg font-bold text-amber-600">
-              {totalUpcomingHours}h
+              {formatTotalHours(totalUpcomingHours)}h
             </p> 
           </div>
         </div> 
@@ -142,18 +154,25 @@ const UpcomingCard = ({
                       className="group relative flex flex-col p-2.5 rounded-xl border-2 border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all cursor-pointer"
                       onClick={() => onEventClick(event)}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
-                      </div>
+                     
+
+
+                      {event.description ? (
+                        <span className="text-xs font-bold text-slate-700">{event.description}</span>
+                      ) : <span className="text-xs font-bold text-slate-700">Available</span>}
 
                       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                        {formatTimeRange(event.start, event.end)}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                        <CalendarIcon className="w-3 h-3" />
+                        {formatDate(event.start)}
                       </div>
 
-                      {event.description && (
-                        <p className="text-[10px] text-slate-600 mt-1 truncate">{event.description}</p>
-                      )}
+                       
+
+
 
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-100 transition-opacity">
                         <Button
@@ -230,7 +249,7 @@ const UpcomingCard = ({
                       className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all"
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-700">{format(event.start, 'MMM dd, yyyy')}</span>
+                        <span className="text-xs font-bold text-slate-700">{formatDate(event.start)}</span>
                         <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
                           Booked
                         </Badge>
@@ -238,7 +257,7 @@ const UpcomingCard = ({
 
                       <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        {format(event.start, 'HH:mm')} – {format(event.end, 'HH:mm')}
+                        {formatTimeRange(event.start, event.end)}
                       </div>
 
                       {event.candidateName && (

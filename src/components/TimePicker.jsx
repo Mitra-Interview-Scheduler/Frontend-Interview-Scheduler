@@ -1,61 +1,94 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 
-const  TimePicker = ({ value, onChange, label, isEnd = false, minTime = null, maxTime = null }) => {
+const TimePicker = ({ value, onChange, label, isEnd = false, minTime = null, maxTime = null }) => {
   const { is12h, is24h } = useTimeFormat();
 
-  // Parse time string (HH:mm format)
-  const [hours, minutes] = useMemo(() => {
+  // Safely parse the incoming value from the parent
+  const [parentHours, parentMinutes] = useMemo(() => {
     const parts = (value || '09:00').split(':');
     return [parts[0] || '00', parts[1] || '00'];
   }, [value]);
 
-  // Handle hour input change
-  const handleHourChange = (e) => {
-    const inputValue = e.target.value;
-    let displayH = parseInt(inputValue) || (is12h ? 12 : 0);
+  // Local state allows the user to freely type and delete characters
+  const [localHour, setLocalHour] = useState('');
+  const [localMinute, setLocalMinute] = useState('');
 
-    // Validate based on format
+  // Sync local display state with parent value on mount or external change
+  useEffect(() => {
     if (is12h) {
-      displayH = Math.max(1, Math.min(12, displayH));
-      // Convert 12h to 24h: preserve current AM/PM
-      const currentHours = parseInt(hours);
-      const isPM = currentHours >= 12;
-      let h = displayH === 12 ? (isPM ? 12 : 0) : displayH + (isPM ? 12 : 0);
-      h = Math.max(0, Math.min(23, h));
-      const newTime = `${String(h).padStart(2, '0')}:${minutes}`;
-      onChange(newTime);
+      const hInt = parseInt(parentHours, 10) || 0;
+      setLocalHour(String((hInt % 12) || 12));
     } else {
-      displayH = Math.max(0, Math.min(23, displayH));
-      const newTime = `${String(displayH).padStart(2, '0')}:${minutes}`;
-      onChange(newTime);
+      setLocalHour(parentHours);
+    }
+    setLocalMinute(parentMinutes);
+  }, [parentHours, parentMinutes, is12h]);
+
+  // --- HOUR HANDLERS ---
+  const handleHourChange = (e) => {
+    // Strip out any character that is NOT a digit
+    const onlyNumbers = e.target.value.replace(/\D/g, '');
+    setLocalHour(onlyNumbers);
+  };
+
+  const handleHourBlur = () => {
+    let hInt = parseInt(localHour, 10);
+
+    // If they left it blank or typed nonsense, revert to previous valid parent state
+    if (isNaN(hInt)) {
+      onChange(`${parentHours}:${parentMinutes}`);
+      return;
+    }
+
+    // Validate and push to parent
+    if (is12h) {
+      hInt = Math.max(1, Math.min(12, hInt));
+      const currentHours = parseInt(parentHours, 10);
+      const isPM = currentHours >= 12;
+
+      let finalH = hInt === 12 ? (isPM ? 12 : 0) : hInt + (isPM ? 12 : 0);
+      finalH = Math.max(0, Math.min(23, finalH));
+      onChange(`${String(finalH).padStart(2, '0')}:${parentMinutes}`);
+    } else {
+      hInt = Math.max(0, Math.min(23, hInt));
+      onChange(`${String(hInt).padStart(2, '0')}:${parentMinutes}`);
     }
   };
 
-  // Handle minute input change
+  // --- MINUTE HANDLERS ---
   const handleMinuteChange = (e) => {
-    const inputValue = e.target.value;
-    const m = Math.max(0, Math.min(59, parseInt(inputValue) || 0));
-    const newTime = `${hours}:${String(m).padStart(2, '0')}`;
-    onChange(newTime);
+    // Strip out any character that is NOT a digit
+    const onlyNumbers = e.target.value.replace(/\D/g, '');
+    setLocalMinute(onlyNumbers);
   };
 
-  // Convert 24h to 12h for display
-  const displayHours = is12h ? ((parseInt(hours) % 12) || 12) : hours;
-  const period = is12h ? (parseInt(hours) >= 12 ? 'PM' : 'AM') : '';
+  const handleMinuteBlur = () => {
+    let mInt = parseInt(localMinute, 10);
+    if (isNaN(mInt)) {
+      onChange(`${parentHours}:${parentMinutes}`);
+      return;
+    }
+    mInt = Math.max(0, Math.min(59, mInt));
+    onChange(`${parentHours}:${String(mInt).padStart(2, '0')}`);
+  };
+
+  const period = is12h ? (parseInt(parentHours, 10) >= 12 ? 'PM' : 'AM') : '';
 
   return (
     <div className="space-y-2">
       <label className="font-semibold text-sm">{label}</label>
-      <div className="flex items-center gap-1 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+      <div className="flex items-center justify-evenly gap-1 p-2 border-2 border-indigo-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400">
+        
         {/* Hour Input */}
         <input
-          type="number"
-          min={is12h ? 1 : 0}
-          max={is12h ? 12 : 23}
-          value={displayHours}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={localHour}
           onChange={handleHourChange}
+          onBlur={handleHourBlur}
           className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
           placeholder={is12h ? '12' : '09'}
         />
@@ -65,11 +98,12 @@ const  TimePicker = ({ value, onChange, label, isEnd = false, minTime = null, ma
 
         {/* Minute Input */}
         <input
-          type="number"
-          min="0"
-          max="59"
-          value={minutes}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={localMinute}
           onChange={handleMinuteChange}
+          onBlur={handleMinuteBlur}
           className="w-12 text-center font-bold text-lg border-0 bg-transparent focus:outline-none"
           placeholder="00"
         />
@@ -81,10 +115,9 @@ const  TimePicker = ({ value, onChange, label, isEnd = false, minTime = null, ma
             <button
               type="button"
               onClick={() => {
-                const h = parseInt(hours);
+                const h = parseInt(parentHours, 10);
                 const newHours = h >= 12 ? h - 12 : h + 12;
-                const newTime = `${String(newHours).padStart(2, '0')}:${minutes}`;
-                onChange(newTime);
+                onChange(`${String(newHours).padStart(2, '0')}:${parentMinutes}`);
               }}
               className="px-2 py-1 text-xs font-semibold rounded bg-indigo-100 hover:bg-indigo-200 transition-colors text-indigo-700 whitespace-nowrap"
             >

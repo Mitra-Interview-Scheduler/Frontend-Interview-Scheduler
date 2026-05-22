@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { authAPI, usersAPI } from '@/services/api'; 
 import UserRoleStatusDialog from './components/UserRoleStatusDialog';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { getInitial } from '@/lib/personUtils';
+
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const ROOT_KEY = import.meta.env.VITE_ROOT_KEY ?? "root"; 
@@ -105,7 +109,7 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
 
 // ─── Register dialog ──────────────────────────────────────────────────────────
 
-const EMPTY = { firstName: '', lastName: '', email: '', password: '', role: '' };
+const EMPTY = { firstName: '', lastName: '', email: '', password: '', roles: [],auth_provider: 'LOCAL' };
 
 function RegisterDialog({ open, onOpenChange, onSuccess }) {
   const [form, setForm]         = useState(EMPTY);
@@ -211,6 +215,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
                 type="password"
                 placeholder="Min. 6 characters"
                 value={form.password}
+                autoComplete="new-password"
                 onChange={(e) => set('password')(e.target.value)}
                 className="pl-8 h-9 text-sm"
               />
@@ -222,7 +227,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Role <span className="text-red-400 normal-case">*</span>
             </Label>
-            <Select value={form.role} onValueChange={set('role')}>
+            <Select value={form.role} onValueChange={set('roles')}>
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select a role…" />
               </SelectTrigger>
@@ -295,6 +300,7 @@ export default function UsersPage() {
   const [actionId, setActionId]     = useState(null);
   const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [guardTarget, setGuardTarget] = useState(null); // user pending admin-delete guard
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -308,7 +314,7 @@ export default function UsersPage() {
     try {
       const data = await usersAPI.getAll(
         { page: currentPage - 1, size: USERS_PER_PAGE },
-        { search, role: roleFilter }
+        { search, role: roleFilter, status: statusFilter }
       );
       if (Array.isArray(data)) {
         setUsers(data);
@@ -324,21 +330,70 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, search, roleFilter]);
+  }, [currentPage, search, roleFilter, statusFilter]);
+
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const toggleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir('asc');
+      return;
+    }
+    if (sortDir === 'asc') setSortDir('desc');
+    else if (sortDir === 'desc') { setSortKey(null); setSortDir('asc'); }
+    else setSortDir('asc');
+  };
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, roleFilter]);
+  }, [search, roleFilter, statusFilter]);
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, roleFilter]);
+  }, [search, roleFilter, statusFilter]);
 
   const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+
+  const displayedUsers = React.useMemo(() => {
+    const list = (users || []).slice();
+    if (sortKey) {
+      list.sort((a, b) => {
+        let va = '';
+        let vb = '';
+        switch (sortKey) {
+          case 'name':
+            va = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
+            vb = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
+            break;
+          case 'email':
+            va = (a.email || '').toLowerCase();
+            vb = (b.email || '').toLowerCase();
+            break;
+          case 'status':
+            va = a.active !== false ? 'ACTIVE' : 'INACTIVE';
+            vb = b.active !== false ? 'ACTIVE' : 'INACTIVE';
+            break;
+          case 'roles':
+            va = (a.roles || [a.role]).join(',').toLowerCase();
+            vb = (b.roles || [b.role]).join(',').toLowerCase();
+            break;
+          default:
+            va = '';
+            vb = '';
+        }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return list;
+  }, [users, sortKey, sortDir]);
 
   const handleToggle = async (user) => {
     setActionId(user.id);
@@ -354,7 +409,7 @@ export default function UsersPage() {
   const initiateDelete = (user) => {
     const userRoles = user.roles || (user.role ? [user.role] : []);
     if (userRoles.includes('ADMIN')) { setGuardTarget(user); }
-    else                              { executeDelete(user.id); }
+    else{ executeDelete(user.id); }
   };
 
   const executeDelete = async (id) => {
@@ -364,9 +419,14 @@ export default function UsersPage() {
       await usersAPI.delete(id);
       setUsers((p) => p.filter((u) => u.id !== id));
       toast({ title: 'User deleted' });
+
     } catch (err) {
       toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
-    } finally { setActionId(null); }
+    } finally { setActionId(null);
+          setRoleFilter('ALL');
+          setSearch('');
+
+     }
   };
 
   const openDetails = (user) => {
@@ -390,14 +450,14 @@ export default function UsersPage() {
 
   return (
     <Layout>
-      <div className="space-y-5 max-w-4xl mx-auto">
+      <div  className="space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {totalUsers} total in current filter
+            <h1 className="text-3xl font-bold text-foreground">User Management</h1>
+            <p className="text-muted-foreground">
+              Manage and track all users with access to the system, including their roles and activity status.
             </p>
           </div>
           <div className="flex gap-2">
@@ -411,117 +471,211 @@ export default function UsersPage() {
         </div>
 
         {/* Filter pills + search row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1.5">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setRoleFilter(f.value)}
-                className={`px-3 py-1 rounded-full text-sm font-medium border transition-all
-                  ${roleFilter === f.value
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
-              >
-                {f.label}
-                {counts[f.value] !== null && (
-                  <span className="ml-1.5 opacity-60 text-xs">{counts[f.value]}</span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative ml-auto">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 text-sm w-52"
-            />
-          </div>
-        </div>
-
-        {/* List */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        {/* Filters Card */}
+        <Card className="mb-6">
+          <CardHeader className="py-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or email…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 h-10"
+                />
               </div>
-            ) : users.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-16">No users found.</p>
-            ) : (
-              <div className="divide-y">
-                {users.map((user, i) => (
-                  <motion.div
-                    key={user.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.025 }}
-                    className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors group cursor-pointer"
+
+              {/* Role Filter Select */}
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-48 h-10">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">
+                    All Roles
+                  </SelectItem>
+                  {FILTERS.filter(f => f.value !== 'ALL').map((f) => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Status Filter Select */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-40 h-10">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          </Card>
+
+          <div className="space-y-2 mt-2">
+            <div className="hidden lg:block rounded-lg border bg-card">
+              <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky top-0 z-20 w-[30%] cursor-pointer bg-card" onClick={() => toggleSort('name')}>Name {sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="sticky top-0 z-20 w-[30%] cursor-pointer bg-card" onClick={() => toggleSort('email')}>Email {sortKey === 'email' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="sticky top-0 z-20 w-[15%] cursor-pointer bg-card" onClick={() => toggleSort('status')}>Status {sortKey === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="sticky top-0 z-20 w-[15%] cursor-pointer bg-card" onClick={() => toggleSort('roles')}>Roles {sortKey === 'roles' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="sticky top-0 z-20 w-[10%] text-right bg-card">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayedUsers.map((user) => (
+                    <TableRow key={user.id} className="group">
+                      <TableCell>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar className="h-9 w-9 border shrink-0">
+                            <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                              {getInitial(user.firstName, user.lastName, user.email)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{user.firstName} {user.lastName}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2 min-w-0 text-sm text-muted-foreground">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{user.email}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Badge variant="outline" className={`text-[10px] px-2 py-0 h-5 font-medium border ${activeBadge(user.active)}`}>
+                            {user.active !== false ? 'ACTIVE' : 'INACTIVE'}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(user.roles || [user.role]).map((r) => (
+                            <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-medium border ${ROLE_META[r]?.badge}`}>
+                              {ROLE_META[r]?.label || r}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
+                            disabled={actionId === user.id}
+                            title={user.active !== false ? 'Deactivate' : 'Activate'}
+                          >
+                            {actionId === user.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : user.active !== false ? (
+                              <UserX className="w-4 h-4" />
+                            ) : (
+                              <UserCheck className="w-4 h-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
+                            onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
+                            disabled={actionId === user.id}
+                            title="Delete User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="space-y-2 lg:hidden">
+              {displayedUsers.map((user, i) => (
+                <motion.div
+                  key={user.id}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="group"
+                >
+                  <Card
+                    className="hover:shadow-md transition-all cursor-pointer border border-border bg-card"
                     onClick={() => openDetails(user)}
                   >
-                    {/* Avatar */}
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-bold text-primary">{initials(user)}</span>
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-sm font-medium">
-                          {user.firstName} {user.lastName}
-                        </span>
-                        {/* Display all roles */}
-                        {user.roles && user.roles.length > 0 ? (
-                          user.roles.map((role) => (
-                            <Badge key={role} className={`text-[10px] px-1.5 py-0 h-4 border font-medium ${roleBadge(role)}`}>
-                              {ROLE_META[role]?.label ?? role}
-                            </Badge>
-                          ))
-                        ) : (
-                          <Badge className={`text-[10px] px-1.5 py-0 h-4 border font-medium ${roleBadge(user.role)}`}>
-                            {ROLE_META[user.role]?.label ?? user.role}
+                    <CardContent className="p-3">
+                      <div className="grid grid-cols-12 gap-3 md:gap-4 items-center w-full">
+                        <div className="col-span-12 md:col-span-3 flex items-center gap-3">
+                          <Avatar className="h-9 w-9 border shrink-0">
+                            <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                              {getInitial(user.firstName, user.lastName, user.email)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-medium truncate">{user.firstName} {user.lastName}</span>
+                        </div>
+                        <div className="col-span-12 md:col-span-3 flex items-center gap-2 text-sm text-muted-foreground">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{user.email}</span>
+                        </div>
+                        <div className="col-span-6 md:col-span-2 flex md:justify-center">
+                          <Badge variant="outline" className={`text-[10px] px-2 py-0 h-5 font-medium border ${activeBadge(user.active)}`}>
+                            {user.active !== false ? 'ACTIVE' : 'INACTIVE'}
                           </Badge>
-                        )}
-                        <Badge className={`text-[10px] px-1.5 py-0 h-4 border ${activeBadge(user.active)}`}>
-                          {user.active !== false ? 'Active' : 'Inactive'}
-                        </Badge>
+                        </div>
+                        <div className="col-span-6 md:col-span-2 flex flex-wrap gap-1">
+                          {(user.roles || [user.role]).map((r) => (
+                            <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-medium border ${ROLE_META[r]?.badge}`}>
+                              {ROLE_META[r]?.label || r}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="col-span-12 md:col-span-2 flex justify-end items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
+                            disabled={actionId === user.id}
+                            title={user.active !== false ? 'Deactivate' : 'Activate'}
+                          >
+                            {actionId === user.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : user.active !== false ? (
+                              <UserX className="w-4 h-4" />
+                            ) : (
+                              <UserCheck className="w-4 h-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0  text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
+                            onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
+                            disabled={actionId === user.id}
+                            title="Delete User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                    </div>
-
-                    {/* Actions — visible on hover */}
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost" size="icon"
-                        className="w-7 h-7 text-muted-foreground hover:text-foreground"
-                        disabled={actionId === user.id}
-                        onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
-                        title={user.active !== false ? 'Deactivate' : 'Activate'}
-                      >
-                        {actionId === user.id
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : user.active !== false
-                            ? <UserX className="w-3.5 h-3.5" />
-                            : <UserCheck className="w-3.5 h-3.5" />}
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon"
-                        className="w-7 h-7 text-muted-foreground hover:text-red-500"
-                        disabled={actionId === user.id}
-                        onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          </div>
 
         {!loading && totalUsers > 0 && totalPages > 1 && (
           <div className="flex items-center justify-between gap-2">

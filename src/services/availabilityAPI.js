@@ -1,14 +1,8 @@
 // src/services/availabilityAPI.js
 import api from './api';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
-const formatLocalDateTime = (date) => {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-         `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-
 export const availabilityAPI = {
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +29,22 @@ export const availabilityAPI = {
     return response.data;
   },
 
+  /** Get full interview details for a booked slot by interviewScheduleId */
+  getInterviewDetails: async (interviewScheduleId) => {
+    try {
+      const response = await api.get(`interviewer/interviews/bookedInterviews/${interviewScheduleId}`);
+      console.log('Fetched interview details:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching interview details for ID ${interviewScheduleId}:`, {
+        status: error.response?.status,
+        message: error.response?.statusText,
+        data: error.response?.data,
+      });
+      throw error; // Re-throw so caller knows the request failed
+    }
+  },
+
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a single availability slot */
@@ -44,6 +54,7 @@ export const availabilityAPI = {
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
       currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description || null,
+      recurrenceGroupId: slotData.recurrenceGroupId || null,
     });
     return response.data;
   },
@@ -56,6 +67,7 @@ export const availabilityAPI = {
         endDateTime:   formatLocalDateTime(slot.endDateTime),
         currentTime:   formatLocalDateTime(slot.currentTime),
         description:   slot.description || null,
+        recurrenceGroupId: slot.recurrenceGroupId || null,
       })),
     });
     return response.data;
@@ -65,19 +77,23 @@ export const availabilityAPI = {
    * Update an existing AVAILABLE slot's time range / description.
    * The backend rejects BOOKED slots with a 400.
    */
-  updateAvailabilitySlot: async (slotId, slotData) => {
+  updateAvailabilitySlot: async (slotId, slotData, scope = 'SINGLE') => {
     const response = await api.put(`/availability/${slotId}`, {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
       currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description ?? null,
+    }, {
+      params: { scope },
     });
     return response.data;
   },
 
   /** Soft-delete (deactivate) an AVAILABLE slot */
-  deleteAvailabilitySlot: async (slotId) => {
-    await api.delete(`/availability/${slotId}`);
+  deleteAvailabilitySlot: async (slotId, scope = 'SINGLE') => {
+    await api.delete(`/availability/${slotId}`, {
+      params: { scope },
+    });
   },
 };
 

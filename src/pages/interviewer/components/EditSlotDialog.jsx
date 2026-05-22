@@ -8,16 +8,18 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { toast } from '@/hooks/use-toast';
 import TimePicker from '@/components/TimePicker';
-
-const parseTimeOnDate = (timeStr, referenceDate) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  const d = new Date(referenceDate);
-  d.setHours(h, m, 0, 0);
-  return d;
-};
+import { parseTimeOnDate } from '@/lib/calendarUtils';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const EditSlotDialog = ({
   isOpen,
@@ -27,11 +29,22 @@ const EditSlotDialog = ({
   onDelete,
   getSlotStartError,
 }) => {
+  const {
+    formatDate,
+    formatDateWithWeekday,
+    formatDateTimeRange,
+    formatTime,
+    formatTimeRange,
+  } = useFormattedDateTime();
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editScope, setEditScope] = useState('SINGLE');
+
+  const isRecurringSlot = !!slot?.isRecurring && !!slot?.recurrenceGroupId;
+  const recurringDayLabel = slot ? format(slot.start, 'EEEE') : '';
 
   // Initialize form when slot changes
   useEffect(() => {
@@ -45,6 +58,7 @@ const EditSlotDialog = ({
           ? slot.description
           : ''
       );
+      setEditScope('SINGLE');
       setError(null);
     }
   }, [slot, isOpen]);
@@ -103,14 +117,14 @@ const EditSlotDialog = ({
         endDateTime: newEnd,
         currentTime: currentDate,
         description: description || null,
-      });
+      }, editScope);
 
       toast({
-        title: '✓ Slot updated',
-        description: `${format(new Date(updated.startDateTime), 'MMM dd, yyyy')} · ${format(new Date(updated.startDateTime), 'HH:mm')} – ${format(new Date(updated.endDateTime), 'HH:mm')}`,
+        title: 'Slot updated',
+        description: formatDateTimeRange(new Date(updated.startDateTime), new Date(updated.endDateTime)),
       });
 
-      onSuccess(updated);
+      onSuccess(updated, editScope);
       onOpenChange(false);
     } catch (err) {
       toast({
@@ -139,9 +153,9 @@ const EditSlotDialog = ({
           <DialogBody className="space-y-4 py-2">
             <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
               <p className="text-xs text-muted-foreground mb-1">Editing slot</p>
-              <p className="font-semibold text-sm">{format(slot.start, 'EEEE, MMMM dd, yyyy')}</p>
+              <p className="font-semibold text-sm">{formatDateWithWeekday(slot.start)}</p>
               <p className="text-xs text-indigo-600 mt-0.5">
-                Currently: {format(slot.start, 'HH:mm')} – {format(slot.end, 'HH:mm')}
+                Currently: {formatTimeRange(slot.start, slot.end)}
               </p>
             </div>
 
@@ -162,6 +176,22 @@ const EditSlotDialog = ({
               />
             </div>
 
+            {isRecurringSlot && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-900">Update recurring slot scope</p>
+                <Select value={editScope} onValueChange={setEditScope}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select update scope" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SINGLE">Only this event</SelectItem>
+                    <SelectItem value="FUTURE">This and future events</SelectItem>
+                    <SelectItem value="ALL">All recurring events of {recurringDayLabel}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
            <div className="grid grid-cols-2 gap-3">
               <TimePicker
                 value={startTime}
@@ -180,9 +210,9 @@ const EditSlotDialog = ({
                 <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
                 <p className="text-sm text-green-800">
                   <strong>New window:</strong>{' '}
-                  {format(parseTimeOnDate(startTime, slot.start), 'h:mm a')} –{' '}
-                  {format(parseTimeOnDate(endTime, slot.start), 'h:mm a')} on{' '}
-                  {format(slot.start, 'MMM dd')}
+                  {formatTime(parseTimeOnDate(startTime, slot.start))} -{' '}
+                  {formatTime(parseTimeOnDate(endTime, slot.start))} on{' '}
+                  {formatDate(slot.start)}
                 </p>
               </div>
             )}
@@ -199,10 +229,7 @@ const EditSlotDialog = ({
           </Button>
           <Button
             variant="destructive"
-            onClick={() => {
-              onOpenChange(false);
-              onDelete();
-            }}
+            onClick={onDelete}
             disabled={isSubmitting}
             className="gap-2"
           >
@@ -220,7 +247,7 @@ const EditSlotDialog = ({
               </>
             ) : (
               <>
-                <Save className="w-4 h-4" /> Save
+                <Save className="w-4 h-4" /> {isRecurringSlot && editScope !== 'SINGLE' ? 'Update Series' : 'Save'}
               </>
             )}
           </Button>

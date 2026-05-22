@@ -108,6 +108,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
       onSave(updatedUser);
       setEditing(false);
+      onOpenChange(false);
       toast({
         title: 'User updated',
         description: 'Roles and status saved successfully.',
@@ -123,22 +124,19 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent >
         <div className="px-6 py-5 border-b bg-muted/40 flex items-start justify-between gap-4">
+        
           <div>
-            <DialogTitle className="text-base font-semibold">User Details</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+            <DialogTitle >User Details</DialogTitle>
+            <DialogDescription >
               Admin can edit roles (multiple) and status.
             </DialogDescription>
           </div>
-          <Button
-            size="sm"
-            variant={editing ? 'secondary' : 'outline'}
-            onClick={() => setEditing((v) => !v)}
-            disabled={saving || !user}
-          >
-            {editing ? 'Cancel Edit' : 'Edit'}
-          </Button>
+         
+          <div variant="" size="sm" onClick={() => onOpenChange(false)} disabled={saving} className="h-8 w-8 p-0 cursor-pointer ">
+            X
+          </div>
         </div>
 
         {!user ? (
@@ -230,14 +228,31 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
         )}
 
         <DialogFooter className="flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
-            Close
-          </Button>
-          <Button
+
+        
+
+
+           <Button
             size="sm"
-            onClick={handleSave}
-            disabled={!editing || saving || !user}
+            variant={editing ? 'secondary' : ''}
+            onClick={() => setEditing((v) => !v)}
+            disabled={saving || !user}
             className="min-w-[110px]"
+          >
+            {editing ? 'Cancel Edit' : 'Edit'}
+          </Button>
+
+
+
+
+
+
+          {editing && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!editing || saving || !user}
+              className="min-w-[110px]"
           >
             {saving ? (
               <>
@@ -247,7 +262,8 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
             ) : (
               'Save'
             )}
-          </Button>
+          </Button>)
+}
         </DialogFooter>
       </DialogContent>
     </Dialog>

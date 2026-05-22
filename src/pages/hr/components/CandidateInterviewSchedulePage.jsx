@@ -68,7 +68,9 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
             <DialogTitle >
               Schedule Interview
             </DialogTitle>
-            
+            <DialogDescription>
+              Select a date for candidate availability and find matching interviewers.
+            </DialogDescription>
           </DialogHeader>
         <DialogBody>
           <div className="space-y-8 flex-grow">

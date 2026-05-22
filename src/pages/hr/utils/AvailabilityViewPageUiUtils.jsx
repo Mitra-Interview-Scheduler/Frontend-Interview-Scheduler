@@ -1,9 +1,6 @@
 import React from 'react';
-import { CheckCircle2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { CheckCircle2, Lock } from 'lucide-react';
 
-
-// ── Per-interviewer color palette ────────────────────────────────────────────
 export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
   { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', solid: '#f59e0b', border: '#78350f', text: '#fff' },
@@ -23,8 +20,6 @@ export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', solid: '#0ea5e9', border: '#0c4a6e', text: '#fff' },
 ];
 
-
-// ── Per-interviewer color palette ────────────────────────────────────────────
 export const PANEL_PALETTE = {
   bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
   solid: '#0ea5e9',
@@ -33,17 +28,33 @@ export const PANEL_PALETTE = {
 };
 
 export const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg,#10b981,#059669)',
-  solid: '#10b981',
-  border: '#064e3b',
+  bg: 'linear-gradient(135deg, #e5e7eb, #9ca3af)',
+  border: '#6b7280',
 };
 
+// Explicit, stable mapping of departments to palettes
+export const DEPARTMENT_PALETTES = {
+  Engineering: INTERVIEWER_PALETTES[0],
+  HR: INTERVIEWER_PALETTES[2],
+  Design: INTERVIEWER_PALETTES[3],
+  Product: INTERVIEWER_PALETTES[4],
+  QA: INTERVIEWER_PALETTES[5],
+  DevOps: INTERVIEWER_PALETTES[6],
+  Marketing: INTERVIEWER_PALETTES[7],
+  Sales: INTERVIEWER_PALETTES[8],
+  Finance: INTERVIEWER_PALETTES[9],
+  Legal: INTERVIEWER_PALETTES[14],
+};
 
+export const getDepartmentPalette = (department) => {
+  if (!department) return null;
+  const key = String(department).trim();
+  if (DEPARTMENT_PALETTES[key]) return DEPARTMENT_PALETTES[key];
+  // fallback: hash into available palettes
+  const sum = Array.from(key).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return INTERVIEWER_PALETTES[sum % INTERVIEWER_PALETTES.length];
+};
 
-/**
- * ── Custom calendar event component ──
- * Renders the inside of a calendar slot (Icons, Labels, Names)
- */
 export const CalendarEventComponent = ({ event, panelSlots }) => {
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const isBooked = event.resource?.status === 'BOOKED';
@@ -59,6 +70,7 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
     }}>
       {isInPanel && (
         <span style={{
+
           display: 'inline-flex',
           alignItems: 'center',
           gap: 2,
@@ -74,47 +86,79 @@ export const CalendarEventComponent = ({ event, panelSlots }) => {
           Panel
         </span>
       )}
-      {isBooked && !isInPanel && (
-        <span style={{ fontSize: 10, flexShrink: 0 }}>🔒</span>
-      )}
-      <span style={{
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        fontSize: 11,
-        flex: 1,
-        minWidth: 0,
-      }}>
-        {isBooked
-          ? event.title.replace(/^🔒\s*/, '')
-          : event.resource?.interviewer || event.title}
-      </span>
+      {isBooked && !isInPanel ? (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          flex: 1,
+          minWidth: 0,
+          padding: '4px',
+          height: '100%',
+          borderRadius: 3,
+          textAlign: 'center',
+        }}>
+          <Lock style={{ width: 30, height: 30, color: 'inherit' }} />
+          <span style={{
+            fontSize: 11,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textAlign: 'center',
+            marginTop: 6,
+            lineHeight: '1.1',
+            maxWidth: '100%',
+            fontWeight: 600,
+            color: 'inherit',
+          }}>
+            {event.title.replace(/^Booked\s*/, '')}
+          </span>
+        </div>
+      ) : (
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: 11,
+          flex: 1,
+          minWidth: 0,
+          
+        }}>
+          {event.resource?.interviewer || event.title}
+        </span>
+      )
+      }
     </div>
   );
 };
 
-/**
- * ── Event style getter ──
- * Determines the colors, borders, and shadows of the slot
- */
 export const getEventStyle = (event, panelSlots) => {
   const isBooked = event.resource?.status === 'BOOKED';
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-  let palette;
+  const deptPalette = getDepartmentPalette(event.resource?.department);
+  const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
 
-  if (isInPanel) {
-    palette = PANEL_PALETTE;
-  } else {
-    palette = event.resource?.palette || INTERVIEWER_PALETTES[0];
-  }
+  // Mix gray booked overlay with department gradient for booked slots
+  const background = isBooked
+    ? `${BOOKED_OVERLAY.bg}, ${basePalette.bg}`
+    : basePalette.bg;
+
+  const textColor = isBooked ? '#000' : (basePalette.text || 'white');
+  const leftBorder = isBooked
+    ? `3px solid ${BOOKED_OVERLAY.border || basePalette.border || basePalette.solid}`
+    : `3px solid ${basePalette.border || basePalette.solid}`;
 
   return {
+    className: isBooked ? 'booked-event' : 'available-event',
     style: {
-      background: palette.bg,
+      background,
       borderRadius: '5px',
-      opacity: isBooked ? 0.82 : 0.94,
-      color: 'white',
-      borderLeft: `3px solid ${palette.border || palette.solid}`,
+      opacity: isBooked ? 0.95 : 0.94,
+      color: textColor,
+      borderLeft: leftBorder,
       borderTop: 'none',
       borderRight: 'none',
       borderBottom: 'none',
@@ -123,7 +167,7 @@ export const getEventStyle = (event, panelSlots) => {
       fontWeight: '500',
       boxShadow: isInPanel
         ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-        : `0 1px 4px ${palette.solid}30`,
+        : `0 1px 4px ${basePalette.solid}30`,
       cursor: 'pointer',
       overflow: 'hidden',
       maxWidth: '100%',
@@ -132,28 +176,25 @@ export const getEventStyle = (event, panelSlots) => {
   };
 };
 
-/**
- * ── Tooltip Accessor ──
- * Generates the text shown on hover
- */
-export const getTooltipText = (event, panelSlots) => {
+export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`) => {
   const r = event.resource;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
+  const timeRange = formatTimeRange(event.start, event.end);
 
   if (r?.status === 'BOOKED') {
-    return `🔒 BOOKED — ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick to cancel & restore slot`;
+    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;
   }
 
   if (isInPanel) {
-    return `✅ PANEL SELECTED — ${r.interviewer}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick again to remove from panel`;
+    return `PANEL SELECTED - ${r.interviewer}\n${timeRange}\n\nClick again to remove from panel`;
   }
 
   return [
-    `👤 ${r.interviewer}`,
-    r.designation ? `📋 ${r.designation}` : null,
-    r.department ? `🏢 ${r.department}` : null,
-    r.yearsOfExperience ? `⏱ ${r.yearsOfExperience} yrs` : null,
-    r.skills?.length ? `💻 ${r.skills.join(', ')}` : null,
-    `🕐 ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`,
+    `Interviewer: ${r.interviewer}`,
+    r.designation ? `Designation: ${r.designation}` : null,
+    r.department ? `Department: ${r.department}` : null,
+    r.yearsOfExperience ? `Experience: ${r.yearsOfExperience} yrs` : null,
+    r.skills?.length ? `Skills: ${r.skills.join(', ')}` : null,
+    `Time: ${timeRange}`,
   ].filter(Boolean).join('\n');
 };
