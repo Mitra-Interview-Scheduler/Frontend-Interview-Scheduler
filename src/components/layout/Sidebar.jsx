@@ -16,6 +16,8 @@ const adminLinks = [
   { icon: Shield, label: 'Designations', path: '/admin/designations' },
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
   { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
+  // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
+  { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
   { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
 ];
 
