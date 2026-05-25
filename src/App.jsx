@@ -15,6 +15,8 @@ import DesignationsPage from "./pages/admin/DesignationsPage";
 import TechnologiesPage from "./pages/admin/TechnologiesPage";
 import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
+import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
+import FeedbackFormsPage from "./pages/admin/FeedbackFormsPage";
 import HRDashboard from "./pages/hr/HRDashboard";
 import CandidatesPage from "./pages/hr/CandidatesPage";
 import CandidateDetailsPage from "./pages/hr/CandidateDetailsPage";
@@ -90,6 +92,22 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['ADMIN']}>
                   <AnalyticsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/feedback-questions"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <FeedbackQuestionsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/feedback-forms"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <FeedbackFormsPage />
                 </PrivateRoute>
               }
             />
