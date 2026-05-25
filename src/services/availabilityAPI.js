@@ -13,14 +13,16 @@ export const availabilityAPI = {
   },
 
   /** Availability slots in a date range */
-  getAvailabilityByDateRange: async (start, end) => {
+  getAvailabilityByDateRange: async (start, end, page = 0, size = 200) => {
     const response = await api.get('/availability/range', {
       params: {
         start: formatLocalDateTime(start),
         end:   formatLocalDateTime(end),
+        page,
+        size,
       },
     });
-    return response.data;
+    return response.data?.items || response.data;
   },
 
   /** Available + booked slot counts */
