@@ -1,11 +1,5 @@
-import axios from 'axios';
+import api from './api';
 import mockFeedbackQuestions from '@/data/mockFeedbackQuestions.json';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
-const instance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
 
 const feedbackAPI = {
   /**
@@ -13,8 +7,13 @@ const feedbackAPI = {
    * Falls back to mock data if the API is unavailable or returns no data.
    */
   async getFeedbackQuestions() {
+    // TEMPORARILY USING MOCK DATA - Remove this line to use API
+    console.warn('Using mock feedback questions for testing');
+    return mockFeedbackQuestions;
+    
+    /* Original API code - commented for testing
     try {
-      const response = await instance.get('/feedback/questions');
+      const response = await api.get('/feedback/questions');
       if (response.data && response.data.questions && response.data.questions.length > 0) {
         return response.data;
       }
@@ -25,6 +24,7 @@ const feedbackAPI = {
       console.warn('Failed to fetch feedback questions from API, using mock data:', error.message);
       return mockFeedbackQuestions;
     }
+    */
   },
 
   /**
@@ -38,7 +38,7 @@ const feedbackAPI = {
         responses,
         submittedAt: new Date().toISOString(),
       };
-      const response = await instance.post('/feedback/responses', payload);
+      const response = await api.post('/feedback/responses', payload);
       return response.data;
     } catch (error) {
       console.error('Failed to submit feedback:', error);
@@ -60,7 +60,7 @@ const feedbackAPI = {
    */
   async getFeedbackForInterview(interviewScheduleId) {
     try {
-      const response = await instance.get(`/feedback/responses/${interviewScheduleId}`);
+      const response = await api.get(`/feedback/responses/${interviewScheduleId}`);
       return response.data;
     } catch (error) {
       if (error.response?.status === 404) {
