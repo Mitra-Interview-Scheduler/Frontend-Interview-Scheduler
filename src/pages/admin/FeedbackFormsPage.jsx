@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -13,62 +13,20 @@ import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
-
-const getMockForms = () => [
-  {
-    id: '1',
-    name: 'Technical Assessment - Frontend',
-    description: 'Evaluation form for frontend developer candidates focusing on React and modern web technologies.',
-    scopes: {
-      departmentIds: [1],
-      designationIds: [1, 2],
-      tierIds: [1, 2],
-    },
-    questions: [
-      { id: 'q1', label: 'How strong is the candidate with React hooks?', category: 'Technical Expertise', type: 'text', required: true },
-      { id: 'q2', label: 'What is their experience with CSS frameworks?', category: 'Technical Expertise', type: 'dropdown', required: false },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Soft Skills Evaluation',
-    description: 'Assess communication, teamwork, and leadership potential of all candidates.',
-    scopes: {
-      departmentIds: [1, 2],
-      designationIds: [3, 4],
-      tierIds: [2, 3],
-    },
-    questions: [
-      { id: 'q3', label: 'How effectively did they communicate their ideas?', category: 'Communication Skills', type: 'text', required: true },
-      { id: 'q4', label: 'Rate their teamwork capability', category: 'Teamwork', type: 'dropdown', required: true },
-    ],
-  },
-  {
-    id: '3',
-    name: 'System Design Interview',
-    description: 'In-depth evaluation of system design and architectural thinking for senior positions.',
-    scopes: {
-      departmentIds: [1],
-      designationIds: [5],
-      tierIds: [3],
-    },
-    questions: [
-      { id: 'q5', label: 'Explain your approach to the system design problem', category: 'Architecture & Systems Design', type: 'text', required: true },
-      { id: 'q6', label: 'What trade-offs did you consider?', category: 'Architecture & Systems Design', type: 'text', required: true },
-    ],
-  },
-];
+import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewForm, setPreviewForm] = useState(null);
   const [forms, setForms] = useState([]);
   const [filteredForms, setFilteredForms] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 10;
   
   const [filters, setFilters] = useState({
     searchTerm: '',
@@ -95,24 +53,29 @@ const FeedbackFormsPage = () => {
           designationAPI.getAllDesignations(),
         ]);
         
-        // Try to load forms, but default to mock data if it fails
+        // Load forms only from the database
         try {
           const formsData = await feedbackQuestionsAPI.getAll();
-          setForms(Array.isArray(formsData) && formsData.length > 0 ? formsData : getMockForms());
+          setForms(Array.isArray(formsData) ? formsData : []);
         } catch (formError) {
-          console.warn('Could not load feedback forms, using mock data:', formError);
-          setForms(getMockForms());
+          console.error('Could not load feedback forms:', formError);
+          setForms([]);
+          toast({
+            title: 'Load failed',
+            description: 'Unable to load feedback forms from the database.',
+            variant: 'destructive',
+          });
         }
         
         setDepartments(deptData || []);
         setDesignations(desigData || []);
       } catch (error) {
         console.error('Load failed:', error);
-        setForms(getMockForms());
+        setForms([]);
         toast({
           title: 'Load failed',
-          description: 'Using demo data. Configure APIs to load real forms.',
-          variant: 'default',
+          description: 'Unable to load data from the server.',
+          variant: 'destructive',
         });
       } finally {
         setLoading(false);
@@ -157,6 +120,9 @@ const FeedbackFormsPage = () => {
       await feedbackQuestionsAPI.delete(formId);
       setForms((prev) => prev.filter((f) => f.id !== formId));
       toast({ title: 'Deleted', description: 'Form deleted successfully.' });
+      setPreviewOpen(false);
+      // Navigate to feedback forms page after successful delete
+      setTimeout(() => navigate('/admin/feedback-forms'), 500);
     } catch (error) {
       toast({
         title: 'Delete failed',
@@ -269,6 +235,15 @@ const FeedbackFormsPage = () => {
           </CardContent>
         </Card>
 
+        {/* Preview Dialog */}
+        <FeedbackFormPreview 
+          open={previewOpen} 
+          onOpenChange={setPreviewOpen} 
+          form={previewForm} 
+          getDepartmentName={getDepartmentName} 
+          getDesignationName={getDesignationName} 
+        />
+
         {loading ? (
           <div className="flex h-64 items-center justify-center rounded-lg border">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -300,7 +275,7 @@ const FeedbackFormsPage = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <Card className="hover:shadow-md transition-shadow">
+                  <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setPreviewForm(form); setPreviewOpen(true); }}>
                     <CardContent className="pt-6">
                       <div className="flex flex-col gap-4">
                         <div className="flex items-start justify-between gap-4">
@@ -314,7 +289,7 @@ const FeedbackFormsPage = () => {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <Button
                               variant="outline"
                               size="sm"
