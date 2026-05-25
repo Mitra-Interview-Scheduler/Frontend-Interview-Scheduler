@@ -328,8 +328,8 @@ function InterviewFeedbackPage() {
   };
 
   return (
-    <Layout hasPadding={false} >
-      <div className="max-h-[93vh] flex flex-col ">
+    <Layout hasPadding={false}>
+      <div className="max-h-[90vh] flex flex-col ">
         
         {/* Fixed Header */}
         <motion.div 
@@ -439,7 +439,7 @@ function InterviewFeedbackPage() {
                           </div>
                         )}
 
-                        {candidate.yearsOfExperience && (
+                        {candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined && (
                           <div className="flex items-start gap-2">
                             <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
                             <div className="min-w-0">
@@ -525,35 +525,55 @@ function InterviewFeedbackPage() {
             {/* Right Content Area - Scrollable */}
             <div className="flex-1 flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm">
               
-              {/* Scrollable Questions */}
+              {/* Fixed Header with Progress */}
+              <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
+                <h2 className="text-lg font-bold text-gray-900 mb-2">Feedback Questions</h2>
+                <p className="text-xs text-gray-600 mb-3">Please provide your assessment for each question</p>
+                {/* Progress Bar */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-600">Progress</span>
+                    <span className="font-semibold text-blue-600">
+                      {Object.values(formResponses).filter(v => v && v.toString().trim() !== '').length} / {questions.length}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: questions.length > 0 
+                          ? `${(Object.values(formResponses).filter(v => v && v.toString().trim() !== '').length / questions.length) * 100}%`
+                          : '0%'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Scrollable Questions Only */}
               <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
-                className="flex-1 overflow-y-auto  max-h-full rounded-lg border border-gray-200 shadow-sm"
+                className="flex-1 overflow-y-auto"
               >
-                <div className="p-2 space-y-2">
-                  <div className=" p-2 shadow-sm">
-                    <h2 className="text-xl font-bold text-gray-900 mb-1">Feedback Questions</h2>
-                    <p className="text-sm text-gray-600">Please provide your assessment for each question</p>
-                  </div>
-
+                <div className="p-4 space-y-4">
                   {/* Questions */}
-                  <div className="space-y-5">
+                  <div className="space-y-4">
                     {questions.map((question, index) => (
                       <motion.div
                         key={question.order}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                        className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                       >
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="bg-blue-100 rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-bold text-blue-600">{index + 1}</span>
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="bg-blue-100 rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-blue-600">{index + 1}</span>
                           </div>
                           <div className="flex-1">
                             <div className="flex items-start justify-between gap-2">
-                              <Label className="text-base font-bold text-gray-900">
+                              <Label className="text-sm font-bold text-gray-900">
                                 {question.label}
                                 {question.required && <span className="text-red-500 ml-1">*</span>}
                               </Label>
@@ -582,9 +602,6 @@ function InterviewFeedbackPage() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-
-                  {/* Spacing for footer */}
-                  
                 </div>
               </motion.div>
 
