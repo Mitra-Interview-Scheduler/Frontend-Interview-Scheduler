@@ -50,6 +50,12 @@ const STATUS_COLORS = {
   },
 };
 
+const CALENDAR_PAGE_SIZES = {
+  month: 500,
+  week: 200,
+  day: 100,
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Returns true when the date is strictly before today (midnight normalised). */
@@ -178,20 +184,19 @@ const AvailabilityPage = () => {
     }
   };
 
+  const getCalendarPageSize = (view) => CALENDAR_PAGE_SIZES[view] || CALENDAR_PAGE_SIZES.week;
+
   const loadAvailability = useCallback(async (opts = {}) => {
     try {
       setLoading(true);
-      const { start, end } = opts;
-      let data;
-      if (start && end) {
-        console.log('[Availability] Loading range:', { start, end });
-        data = await availabilityAPI.getAvailabilityByDateRange(start, end);
-        console.log(`[Availability] Range result count: ${(data || []).length}`);
-      } else {
-        console.log('[Availability] Loading full availability for user');
-        data = await availabilityAPI.getMyAvailability();
-        console.log(`[Availability] Full availability count: ${(data || []).length}`);
-      }
+      const view = opts.view || currentView;
+      const { start, end } = opts.start && opts.end
+        ? opts
+        : computeRangeForView(view, opts.date || calendarDate);
+      const pageSize = getCalendarPageSize(view);
+      console.log('[Availability] Loading paged range:', { view, start, end, pageSize });
+      const data = await availabilityAPI.getAvailabilityByDateRange(start, end, 0, pageSize);
+      console.log(`[Availability] Range result count: ${(data || []).length}`);
 
       const mapped = mapSlotsToEvents(data || []);
         console.log('[Availability] Mapped events (sample):', mapped.slice(0, 8));
@@ -212,7 +217,7 @@ const AvailabilityPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [calendarDate, currentView]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -256,14 +261,20 @@ const AvailabilityPage = () => {
     setAllEventsForUpcoming(all);
   }, [loadAllFutureAvailability]);
 
-  useEffect(() => {
-    // initial load for visible range
+  const refreshCalendarAvailability = useCallback(async () => {
     const { start, end } = computeRangeForView(currentView, calendarDate);
-    loadAvailability({ start, end });
+    await loadAvailability({ start, end, view: currentView });
+  }, [calendarDate, currentView, loadAvailability]);
+
+  useEffect(() => {
+    const { start, end } = computeRangeForView(currentView, calendarDate);
+    loadAvailability({ start, end, view: currentView });
+  }, [loadAvailability, currentView, calendarDate]);
+
+  useEffect(() => {
     loadStats();
-    // also populate upcoming card data
     refreshUpcomingEvents();
-  }, [loadAvailability, loadStats, currentView, calendarDate, refreshUpcomingEvents]);
+  }, [loadStats, refreshUpcomingEvents]);
 
 
 
@@ -322,7 +333,7 @@ const handleSelectSlot = ({ start, end }) => {
     try {
       await availabilityAPI.deleteAvailabilitySlot(event.id, 'SINGLE');
       toast({ title: 'Time slot deleted' });
-      await loadAvailability();
+      await refreshCalendarAvailability();
       await loadStats();
     } catch (error) {
       toast({
@@ -331,7 +342,7 @@ const handleSelectSlot = ({ start, end }) => {
         variant: 'destructive',
       });
     }
-  }, [loadAvailability, loadStats]);
+  }, [loadStats, refreshCalendarAvailability]);
 
   const openDeleteDialog = async (event, e) => {
     if (e) e.stopPropagation();
@@ -367,7 +378,7 @@ const handleSelectSlot = ({ start, end }) => {
     const isRecurringEdit = !!editTarget?.isRecurring && !!editTarget?.recurrenceGroupId;
 
     if (isRecurringEdit && scope !== 'SINGLE') {
-      await loadAvailability();
+      await refreshCalendarAvailability();
       await refreshUpcomingEvents();
       await loadStats();
     } else {
@@ -390,15 +401,15 @@ const handleSelectSlot = ({ start, end }) => {
 
     setEditDialogOpen(false);
     setEditTarget(null);
-  }, [editTarget, loadAvailability, loadStats, refreshUpcomingEvents]);
+  }, [editTarget, loadStats, refreshCalendarAvailability, refreshUpcomingEvents]);
 
   const handleDeleteSuccess = useCallback(async () => {
     setDeleteDialogOpen(false);
     setDeleteTarget(null);
-    await loadAvailability();
+    await refreshCalendarAvailability();
     await refreshUpcomingEvents();
     await loadStats();
-  }, [loadAvailability, loadStats, refreshUpcomingEvents]);
+  }, [loadStats, refreshCalendarAvailability, refreshUpcomingEvents]);
 
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
@@ -513,22 +524,12 @@ const handleSelectSlot = ({ start, end }) => {
                           if (navTimerRef.current) clearTimeout(navTimerRef.current);
                           navTimerRef.current = setTimeout(() => {
                             setCalendarDate(nextDate);
-                            const { start, end } = computeRangeForView(currentView, nextDate);
-                            console.log('[Availability] onNavigate -> loading range', { nextDate, start, end });
-                            loadAvailability({ start, end });
-                            // refresh upcoming full list when navigating
-                            loadAllFutureAvailability().then((all) => setAllEventsForUpcoming(all));
                           }, 200);
                         }}
                         onView={(view) => {
                           if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
                           viewTimerRef.current = setTimeout(() => {
                             setCurrentView(view);
-                            const { start, end } = computeRangeForView(view, calendarDate);
-                            console.log('[Availability] onView -> loading range', { view, start, end });
-                            loadAvailability({ start, end });
-                            // refresh upcoming full list when changing view
-                            loadAllFutureAvailability().then((all) => setAllEventsForUpcoming(all));
                           }, 200);
                         }}
                         selectable
