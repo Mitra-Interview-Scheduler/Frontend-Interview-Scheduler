@@ -1,22 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import { Plus, Trash2, Eye, Save, Copy, GripVertical, MessageSquare, Loader2, ChevronDown } from 'lucide-react';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
+import { Plus, Trash2, Eye, Save, Copy, GripVertical, Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { departmentAPI } from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
-import { tierAPI } from '@/services/tierAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
+import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
@@ -56,7 +56,20 @@ const normalizeMultiLine = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const normalizeQuestionOptions = (options) => {
+  const labels = (Array.isArray(options) ? options : [])
+    .map((option) => {
+      if (typeof option === 'string') return option;
+      return option?.label ?? option?.value ?? '';
+    })
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+
+  return labels.length ? labels : [''];
+};
+
 const FeedbackQuestionsPage = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -69,6 +82,18 @@ const FeedbackQuestionsPage = () => {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [questions, setQuestions] = useState([createQuestion()]);
+  const [initialData, setInitialData] = useState(null);
+
+  const hasChanges = useMemo(() => {
+    if (!initialData) return true;
+    return (
+      formName !== initialData.formName ||
+      formDescription !== initialData.formDescription ||
+      JSON.stringify(selectedDepartmentIds) !== JSON.stringify(initialData.selectedDepartmentIds) ||
+      JSON.stringify(selectedDesignationIds) !== JSON.stringify(initialData.selectedDesignationIds) ||
+      JSON.stringify(questions) !== JSON.stringify(initialData.questions)
+    );
+  }, [formName, formDescription, selectedDepartmentIds, selectedDesignationIds, questions, initialData]);
 
   useEffect(() => {
     const loadLookups = async () => {
@@ -80,6 +105,41 @@ const FeedbackQuestionsPage = () => {
         ]);
         setDepartments(deptData || []);
         setDesignations(designationData || []);
+        // Prefill when editing existing form via ?id=
+        const params = new URLSearchParams(window.location.search);
+        const editId = params.get('id');
+        if (editId) {
+          try {
+            const form = await feedbackQuestionsAPI.getById(editId);
+            if (form) {
+              setFormName(form.name || '');
+              setFormDescription(form.description || '');
+              setSelectedDepartmentIds((form.scopes?.departmentIds || []).map(String));
+              setSelectedDesignationIds((form.scopes?.designationIds || []).map(String));
+              const questionsData = (form.questions || []).map((q) => ({
+                id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                label: q.label || '',
+                category: q.category || QUESTION_CATEGORIES[0],
+                type: q.type || 'text',
+                required: q.required || false,
+                commentsEnabled: q.commentsEnabled || false,
+                placeholder: q.placeholder || '',
+                helpText: q.helpText || '',
+                options: normalizeQuestionOptions(q.options),
+              }));
+              setQuestions(questionsData);
+              setInitialData({
+                formName: form.name || '',
+                formDescription: form.description || '',
+                selectedDepartmentIds: (form.scopes?.departmentIds || []).map(String),
+                selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
+                questions: questionsData,
+              });
+            }
+          } catch (err) {
+            console.warn('Failed to load form for editing:', err);
+          }
+        }
       } catch (error) {
         toast({
           title: 'Lookup load failed',
@@ -207,7 +267,12 @@ const FeedbackQuestionsPage = () => {
       commentsEnabled: question.commentsEnabled,
       placeholder: question.placeholder.trim(),
       helpText: question.helpText.trim(),
-      options: question.type === 'dropdown' ? question.options.map((item) => item.trim()).filter(Boolean) : [],
+      options: question.type === 'dropdown'
+        ? question.options
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((label) => ({ value: label, label }))
+        : [],
     })),
   });
 
@@ -231,8 +296,16 @@ const FeedbackQuestionsPage = () => {
     try {
       setSaving(true);
       const payload = buildPayload();
-      await feedbackQuestionsAPI.save(payload);
+      const params = new URLSearchParams(window.location.search);
+      const editId = params.get('id');
+      if (editId) {
+        await feedbackQuestionsAPI.update(editId, payload);
+      } else {
+        await feedbackQuestionsAPI.save(payload);
+      }
       toast({ title: 'Saved', description: 'Feedback questions saved successfully.' });
+      // Navigate to feedback forms page after successful save
+      setTimeout(() => navigate('/admin/feedback-forms'), 500);
     } catch (error) {
       toast({
         title: 'Save failed',
@@ -261,29 +334,36 @@ const FeedbackQuestionsPage = () => {
             <Button variant="outline" onClick={() => setPreviewOpen(true)} className="gap-2" disabled={loading}>
               <Eye className="w-4 h-4" /> Preview
             </Button>
-            <Button onClick={handleSave} className="gap-2" disabled={saving || loading}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Form
+            {hasChanges && (
+              <Button onClick={handleSave} className="gap-2" disabled={saving || loading}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Form
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => navigate('/admin/feedback-forms')} className="gap-2">
+              Close
             </Button>
           </div>
         </div>
 
         <Collapsible open={scopeOpen} onOpenChange={setScopeOpen} className="w-full">
           <Card>
-            <CardHeader>
-              <CollapsibleTrigger asChild>
-                <button className="flex w-full items-center justify-between hover:bg-muted/30 rounded-t-lg px-1 py-1">
-                  <div className="flex items-center gap-3 flex-1">
-                    <ChevronDown 
-                      className={`w-5 h-5 transition-transform ${scopeOpen ? 'rotate-0' : '-rotate-90'}`}
-                    />
-                    <div className="text-left">
-                      <CardTitle>Form Scope</CardTitle>
-                      <CardDescription>Select departments and their relevant designations for this form.</CardDescription>
-                    </div>
-                  </div>
-                </button>
-              </CollapsibleTrigger>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle>Form Scope</CardTitle>
+                <CardDescription>Select departments and their relevant designations for this form.</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setScopeOpen((value) => !value)}
+                className="h-9 gap-2"
+                aria-expanded={scopeOpen}
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${scopeOpen ? '' : '-rotate-90'}`} />
+                {scopeOpen ? 'Hide' : 'Show'}
+              </Button>
             </CardHeader>
             <CollapsibleContent asChild>
               <CardContent className="space-y-5">
@@ -430,7 +510,8 @@ const FeedbackQuestionsPage = () => {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <div className="max-h-[60vh] overflow-y-auto">
+            <CardContent className="space-y-4">
             <AnimatePresence initial={false}>
               {questions.map((question, index) => (
                 <motion.div
@@ -592,7 +673,8 @@ const FeedbackQuestionsPage = () => {
                 </motion.div>
               ))}
             </AnimatePresence>
-          </CardContent>
+            </CardContent>
+          </div>
         </Card>
 
         {/* <Card>
@@ -607,68 +689,14 @@ const FeedbackQuestionsPage = () => {
           </CardContent>
         </Card> */}
 
-        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent className="min-w-80">
-            <DialogHeader>
-              <DialogTitle>Preview Feedback Form</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-xl font-semibold text-foreground">{formName || 'Untitled Feedback Form'}</h3>
-                <p className="text-sm text-muted-foreground">{formDescription || 'No description provided.'}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {selectedDepartmentIds.length > 0 && <span>Departments: {selectedDepartmentIds.length}</span>}
-                  {selectedDesignationIds.length > 0 && <span>Designations: {selectedDesignationIds.length}</span>}
-                </div>
-              </div>
-
-              {questions.map((question, index) => (
-                <div key={`preview-${question.id}`} className="rounded-2xl border bg-card p-4">
-                  <div className="mb-3 flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <Label className="text-base font-medium ">{index + 1}. {question.label || 'Question'} </Label>
-                      <Badge className="mt-1 ml-4 px-2.5 py-1 text-xs font-medium ">{question.category}</Badge>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {/* {question.required && (
-                        <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                          Required
-                        </span>
-                      )} */}
-                     
-                    </div>
-                  </div>
-                  {question.helpText && <p className="mb-3 text-xs text-muted-foreground">{question.helpText}</p>}
-
-                  {question.type === 'dropdown' ? (
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder={question.placeholder || 'Select an option'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {normalizeMultiLine(question.options.join('\n')).map((option) => (
-                          <SelectItem key={option} value={option}>{option}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input placeholder={question.placeholder || 'Type your response'} />
-                  )}
-
-                  {question.commentsEnabled && (
-                    <div className="mt-3 space-y-2">
-                      <Label className="text-sm">Comments</Label>
-                      <Textarea placeholder="Add optional comments..." rows={3} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close Preview</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <FeedbackFormPreview
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          form={previewPayload}
+          getDepartmentName={(id) => departments.find((department) => department.id === id)?.name || `Dept #${id}`}
+          getDesignationName={(id) => designations.find((designation) => designation.id === id)?.name || `Desig #${id}`}
+          showEdit={false}
+        />
       </div>
     </Layout>
   );
