@@ -52,8 +52,8 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
         filterData: {
           startDateTime: availabilityDate,
           departmentId: candidate.departmentId,
-          minTierOrder: candidate.tierId,
-          minLevelOrder: candidate.targetDesignationId,
+          minTierOrder: candidate.tierOrder,
+          minLevelOrder: candidate.levelOrder,
           candidateId: candidate.id,
           candidateName: candidate.name
         }
