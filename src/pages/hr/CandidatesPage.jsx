@@ -28,6 +28,7 @@ import {
   CalendarClockIcon,
   Eye,
 } from 'lucide-react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -71,6 +72,20 @@ const getCandidateSubtitle = (candidate) => {
 
 const getTargetDesignation = (candidate) => {
   return candidate.targetDesignationName || '-';
+};
+
+const getRowTooltip = (candidate) => {
+  if (!candidate) return '';
+  const parts = [
+    candidate.name || '-',
+    candidate.email || '-',
+    candidate.phone || '-',
+    `RR: ${candidate.resourceRequestNumber || '-'}`,
+    `Exp: ${candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y` : '-'}`,
+    `Target: ${candidate.targetDesignationName || '-'}`,
+    `Status: ${candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}`,
+  ];
+  return parts.join(' • ');
 };
 
 const CandidatesPage = () => {
@@ -272,50 +287,85 @@ const CandidatesPage = () => {
                       {candidates.map((candidate) => (
                         <TableRow key={candidate.id} className="cursor-pointer" onClick={() => handleOpenView(candidate)}>
                           <TableCell>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Avatar className="h-9 w-9 border border-border shrink-0">
-                                <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                  {getInitial(candidate.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <p className="font-semibold truncate">{candidate.name}</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <Avatar className="h-9 w-9 border border-border shrink-0">
+                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                                      {getInitial(candidate.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="font-semibold truncate">{candidate.name}</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {getCandidateSubtitle(candidate)}
+                                    </p>
+                                  </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {getCandidateSubtitle(candidate)}
-                                </p>
-                              </div>
-                            </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.name || getCandidateSubtitle(candidate)}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.email}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.email}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.email || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Phone className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.phone || '-'}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Phone className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.phone || '-'}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.phone || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Hash className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.resourceRequestNumber || '-'}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Hash className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.resourceRequestNumber || '-'}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.resourceRequestNumber || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <span className="truncate">{candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y exp` : '-'}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y exp` : '-'}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.yearsOfExperience ? `${candidate.yearsOfExperience} years experience` : '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <span className="truncate">{getTargetDesignation(candidate)}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{getTargetDesignation(candidate)}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{getTargetDesignation(candidate)}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs shrink-0`}>
-                              {candidate.status.replace(/_/g, ' ')}
-                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs shrink-0`}>
+                                  {candidate.status.replace(/_/g, ' ')}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5">
@@ -368,19 +418,26 @@ const CandidatesPage = () => {
                       <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                         <CardContent className="p-3">
                           <div className="flex items-center gap-1 min-w-0 w-full">
-                            <Avatar className="h-9 w-9 border border-border shrink-0">
-                              <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                {getInitial(candidate.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col min-w-0 flex-1">
-                              <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {getCandidateSubtitle(candidate)}
-                              </p>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 min-w-0 w-full">
+                                  <Avatar className="h-9 w-9 border border-border shrink-0">
+                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                                      {getInitial(candidate.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {getCandidateSubtitle(candidate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.name || getCandidateSubtitle(candidate)}</TooltipContent>
+                            </Tooltip>
                             <div className="shrink-0 ml-2">
-                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}>
+                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}> 
                                 {candidate.status.replace(/_/g, ' ')}
                               </Badge>
                             </div>

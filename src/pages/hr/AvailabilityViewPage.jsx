@@ -1106,77 +1106,81 @@ const calendarSlotPropGetter = useCallback((date) => {
           )}
         </Card>
 
-        {/* Panel mode banner */}
-        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : '' }>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4">
-                <Switch checked={panelMode} onCheckedChange={(v) => { setPanelMode(v); setPanelSlots([]); }} />
-                <div>
-                  <p className="font-semibold text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-sky-600" /> Panel Interview Mode
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {panelMode
-                      ? 'Click AVAILABLE slots to add interviewers. Selected slots show a ✓ badge. Overlap window calculated automatically.'
-                      : 'Enable to schedule one candidate with multiple interviewers at the same time.'}
-                  </p>
-                </div>
-              </div>
-
-              {panelMode && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  {panelSlots.length > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {panelSlots.map((ps) => (
-                        <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {ps.slot.resource.interviewer}
-                          <button onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
-                            className="ml-1 hover:text-red-600"><X className="w-3 h-3" /></button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {panelSlots.length > 0 ? (
-                    <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white gap-2"
-                      disabled={panelTimeOptions.length === 0}
-                      onClick={() => {
-                        setPanelBookStartOverride(''); setPanelBookEndOverride('');
-                        setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
-                        setCandidateSearchTerm('');
-                        setPanelDialogOpen(true);
-                      }}>
-                      <Send className="w-4 h-4" />
-                      Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
-                  )}
-                  {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
-                    <p className="text-xs text-red-600 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> No overlapping time
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5" /> Availability Calendar
-              {panelMode && <Badge className="ml-2 bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
-            </CardTitle>
-            <CardDescription>
-              {panelMode
-                ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
-                : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" /> Availability Calendar
+                {panelMode && <Badge className="bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
+              </CardTitle>
+              <CardDescription>
+                {panelMode
+                  ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
+                  : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+              </CardDescription>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={panelMode ? 'default' : 'outline'}
+              className="gap-2 lg:self-start"
+              onClick={() => {
+                setPanelMode((value) => !value);
+                setPanelSlots([]);
+              }}
+            >
+              <Users className="w-4 h-4" />
+              {panelMode ? 'Exit Panel Mode' : 'Panel Interview Mode'}
+            </Button>
           </CardHeader>
+          {panelMode && (
+            <CardContent className="pt-0 pb-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-sky-300 bg-sky-50 p-3 dark:bg-sky-950/20">
+                {panelSlots.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {panelSlots.map((ps) => (
+                      <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {ps.slot.resource.interviewer}
+                        <button
+                          onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
+                          className="ml-1 hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {panelSlots.length > 0 ? (
+                  <Button
+                    size="sm"
+                    className="bg-sky-600 hover:bg-sky-700 text-white gap-2 self-start"
+                    disabled={panelTimeOptions.length === 0}
+                    onClick={() => {
+                      setPanelBookStartOverride('');
+                      setPanelBookEndOverride('');
+                      setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
+                      setCandidateSearchTerm('');
+                      setPanelDialogOpen(true);
+                    }}
+                  >
+                    <Send className="w-4 h-4" />
+                    Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
+                )}
+                {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
+                  <p className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> No overlapping time
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          )}
           <CardContent>
             <AnimatePresence mode="wait">
               {loading ? (
