@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Download, Loader2, FileText, X } from 'lucide-react';
+import { Download, Loader2, FileText, X, ExternalLink } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 function InterviewDocumentPreviewDialog({
@@ -107,6 +107,19 @@ function InterviewDocumentPreviewDialog({
                 )}
 
                 <div className="flex gap-3 ml-3 mr-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (!previewUrl) return;
+                      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                    disabled={!previewUrl || previewLoading}
+                    className="gap-2 text-sm h-9"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open In New Tab
+                  </Button>
                   <Button
                     onClick={() => onDownload(document)}
                     className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 text-sm h-9"

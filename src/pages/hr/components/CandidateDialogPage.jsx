@@ -27,7 +27,7 @@ const EMPTY_FORM = {
   name: '', email: '', phone: '',
   departmentId: '', tierId: '', targetDesignationId: '',
   yearsOfExperience: '',
-  resumeUrl: '', jdUrl: '', jobReferenceCode: '', location: '',
+  resumeUrl: '', jdUrl: '', resourceLink: '', jobReferenceCode: '', location: '',
   notes: '', status: 'APPLIED',resourceRequestNumber: '',
 };
 
@@ -84,6 +84,7 @@ function CandidateDialogPage({
       yearsOfExperience: candidate.yearsOfExperience?.toString() || '',
       resumeUrl:         candidate.resumeUrl || '',
       jdUrl:             candidate.jdUrl || '',
+      resourceLink:      candidate.resourceLink || '',
       jobReferenceCode:  candidate.jobReferenceCode || '',
       location:          candidate.location || '',
       notes:             candidate.notes || '',
@@ -240,6 +241,7 @@ function CandidateDialogPage({
       status:            form.status,
       yearsOfExperience: form.yearsOfExperience ? parseInt(form.yearsOfExperience) : null,
       jdUrl:             form.jdUrl?.trim() || null,
+      resourceLink:      form.resourceLink?.trim() || null,
       jobReferenceCode:  form.jobReferenceCode?.trim() || null,
       location:          form.location?.trim() || null,
       notes:             form.notes?.trim() || null,
@@ -494,6 +496,18 @@ function CandidateDialogPage({
               onChange={(e) => setForm({ ...form, jdUrl: e.target.value })}
               placeholder="https://careers.company.com/jd/..." 
               disabled={saving || readOnly} 
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label className="flex items-center gap-1">
+              <Link className="w-3.5 h-3.5" /> Resource Link (Drive URL)
+            </Label>
+            <Input
+              value={form.resourceLink}
+              onChange={(e) => setForm({ ...form, resourceLink: e.target.value })}
+              placeholder="https://drive.google.com/..."
+              disabled={saving || readOnly}
             />
           </div>
           <div className="space-y-2 md:col-span-2">

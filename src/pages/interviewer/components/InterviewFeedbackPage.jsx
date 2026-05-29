@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import { feedbackAPI } from '@/services/feedbackAPI';
+import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
@@ -25,6 +26,8 @@ function InterviewFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [forms, setForms] = useState([]);
+  const [selectedFormId, setSelectedFormId] = useState(null);
   
   // Questions and form state
   const [questions, setQuestions] = useState([]);
@@ -42,46 +45,105 @@ function InterviewFeedbackPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-// Initialize on mount
+  const candidateDepartmentId = candidate?.departmentId ?? interviewDetails?.departmentId ?? null;
+  const candidateDesignationId = candidate?.targetDesignationId ?? interviewDetails?.candidateDesignationId ?? null;
+  const candidateScopeReady = !interviewDetails?.candidateId || candidate !== null;
+
+  const availableForms = useMemo(() => {
+    if (!forms.length || !candidateScopeReady) return [];
+
+    const activeForms = forms.filter((form) => form.isActive !== false);
+
+    const normalizedDepartmentId = candidateDepartmentId != null ? Number(candidateDepartmentId) : null;
+    const normalizedDesignationId = candidateDesignationId != null ? Number(candidateDesignationId) : null;
+
+    const departmentMatches = normalizedDepartmentId
+      ? activeForms.filter((form) => (form.scopes?.departmentIds || []).map(Number).includes(normalizedDepartmentId))
+      : activeForms;
+
+    if (!normalizedDesignationId) {
+      return departmentMatches;
+    }
+
+    const designationMatches = departmentMatches.filter((form) =>
+      (form.scopes?.designationIds || []).map(Number).includes(normalizedDesignationId)
+    );
+
+    return designationMatches.length > 0 ? designationMatches : departmentMatches;
+  }, [forms, candidateDepartmentId, candidateDesignationId, candidateScopeReady]);
+
+  const selectedForm = useMemo(
+    () => availableForms.find((form) => form.id === selectedFormId) || availableForms[0] || null,
+    [availableForms, selectedFormId]
+  );
+
+  const completedCount = useMemo(
+    () => Object.values(formResponses).filter((value) => value && value.toString().trim() !== '').length,
+    [formResponses]
+  );
+
+  // Initialize on mount
   useEffect(() => {
     if (!interviewScheduleId) return;
     loadFeedbackPage();
   }, [interviewScheduleId]);
+
+  useEffect(() => {
+    if (!availableForms.length) {
+      setSelectedFormId(null);
+      return;
+    }
+
+    if (!selectedFormId || !availableForms.some((form) => form.id === selectedFormId)) {
+      setSelectedFormId(availableForms[0].id);
+    }
+  }, [availableForms, selectedFormId]);
+
+  useEffect(() => {
+    if (!selectedForm) {
+      setQuestions([]);
+      setFormResponses({});
+      setValidationErrors({});
+      return;
+    }
+
+    const selectedQuestions = selectedForm.questions || [];
+    setQuestions(selectedQuestions);
+
+    const initialResponses = {};
+    selectedQuestions.forEach((question) => {
+      initialResponses[question.order] = '';
+      if (question.commentsEnabled) {
+        initialResponses[`${question.order}_comment`] = '';
+      }
+    });
+
+    setFormResponses(initialResponses);
+    setValidationErrors({});
+  }, [selectedForm]);
 
   const loadFeedbackPage = async () => {
     try {
       setLoading(true);
       setError('');
 
-      // Fetch questions
-      const questionsData = await feedbackAPI.getFeedbackQuestions();
-      setQuestions(questionsData.questions || []);
-
-      // Initialize form responses from questions
-      const initialResponses = {};
-      (questionsData.questions || []).forEach((q) => {
-        initialResponses[q.order] = '';
-        // Initialize comment field if enabled
-        if (q.commentsEnabled) {
-          initialResponses[`${q.order}_comment`] = '';
-        }
-      });
-      setFormResponses(initialResponses);
-
-      // Fetch interview details (interviewScheduleId → interviewDetails with candidateId, etc.)
+      // Fetch interview details first so we can scope the forms.
       const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
-      
-      // Handle array response (if backend returns array)
       const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
-      console.log('Interview details:', interview);
       setInterviewDetails(interview);
 
-      if (interview?.candidateId) {
-        // Fetch candidate details
-        const candidateData = await candidateAPI.getCandidateById(interview.candidateId);
-        setCandidate(candidateData);
+      const formsPromise = feedbackQuestionsAPI.getAll();
+      const candidatePromise = interview?.candidateId ? candidateAPI.getCandidateById(interview.candidateId) : Promise.resolve(null);
+      const [formsData, candidateData] = await Promise.all([formsPromise, candidatePromise]);
 
-        // Fetch candidate documents
+      const formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
+      setForms(formList);
+
+      if (candidateData) {
+        setCandidate(candidateData);
+      }
+
+      if (interview?.candidateId) {
         await loadCandidateDocuments(interview.candidateId);
       }
     } catch (err) {
@@ -134,6 +196,15 @@ function InterviewFeedbackPage() {
   };
 
   const handleSubmit = async () => {
+    if (!selectedForm) {
+      toast({
+        title: 'No feedback form selected',
+        description: 'Choose a feedback form before submitting the interview assessment.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!validateForm()) {
       toast({
         title: 'Validation Error',
@@ -146,12 +217,11 @@ function InterviewFeedbackPage() {
     setSubmitting(true);
     setError('');
     try {
-      await feedbackAPI.submitFeedback(interviewScheduleId, formResponses);
+      await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
       toast({
         title: 'Success',
         description: 'Feedback submitted successfully',
       });
-      onOpenChange(false);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to submit feedback');
     } finally {
@@ -209,11 +279,11 @@ function InterviewFeedbackPage() {
       case 'text':
         return (
           <div key={question.order} className="space-y-2">
-            <Label htmlFor={`q-${question.order}`}>
+            {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>}
+            </Label> */}
+            {/* {question.helpText && <p className="text-xs text-muted-foreground ">{question.helpText}</p>} */}
             <Input
               id={`q-${question.order}`}
               type="text"
@@ -222,7 +292,7 @@ function InterviewFeedbackPage() {
               onChange={(e) => handleFormChange(question.order, e.target.value)}
               disabled={submitting}
               className={error ? 'border-red-500' : ''}
-            />
+            /> 
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
         );
@@ -230,11 +300,11 @@ function InterviewFeedbackPage() {
       case 'textarea':
         return (
           <div key={question.order} className="space-y-2">
-            <Label htmlFor={`q-${question.order}`}>
+            {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
             </Label>
-            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>}
+            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <Textarea
               id={`q-${question.order}`}
               placeholder={question.placeholder}
@@ -248,14 +318,15 @@ function InterviewFeedbackPage() {
           </div>
         );
 
+      case 'dropdown':
       case 'select':
         return (
           <div key={question.order} className="space-y-2">
-            <Label htmlFor={`q-${question.order}`}>
+            {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>}
+            </Label> */}
+            {/* {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <Select value={value} onValueChange={(v) => handleFormChange(question.order, v)} disabled={submitting}>
               <SelectTrigger className={error ? 'border-red-500' : ''}>
                 <SelectValue placeholder={question.placeholder || 'Select an option'} />
@@ -275,11 +346,11 @@ function InterviewFeedbackPage() {
       case 'rating':
         return (
           <div key={question.order} className="space-y-3">
-            <Label>
+            {/* <Label>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>}
+            </Label> */}
+            {/* {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <div className="flex gap-2">
               {question.options?.map((opt) => (
                 <Button
@@ -528,13 +599,17 @@ function InterviewFeedbackPage() {
               {/* Fixed Header with Progress */}
               <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
                 <h2 className="text-lg font-bold text-gray-900 mb-2">Feedback Questions</h2>
-                <p className="text-xs text-gray-600 mb-3">Please provide your assessment for each question</p>
+                <p className="text-xs text-gray-600 mb-3">
+                  {selectedForm
+                    ? `Selected form: ${selectedForm.name}`
+                    : 'No feedback form matched this candidate yet.'}
+                </p>
                 {/* Progress Bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-600">Progress</span>
                     <span className="font-semibold text-blue-600">
-                      {Object.values(formResponses).filter(v => v && v.toString().trim() !== '').length} / {questions.length}
+                      {completedCount} / {questions.length}
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -542,7 +617,7 @@ function InterviewFeedbackPage() {
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{
                         width: questions.length > 0 
-                          ? `${(Object.values(formResponses).filter(v => v && v.toString().trim() !== '').length / questions.length) * 100}%`
+                          ? `${(completedCount / questions.length) * 100}%`
                           : '0%'
                       }}
                     />
@@ -557,6 +632,62 @@ function InterviewFeedbackPage() {
                 className="flex-1 overflow-y-auto"
               >
                 <div className="p-4 space-y-4">
+                  {availableForms.length > 0 && (
+                    <div className="space-y-3">
+                      {/* <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Available Feedback Forms</h3>
+                          <p className="text-xs text-gray-600">
+                            These forms match the candidate's department{candidateDesignationId ? ' and designation preference' : ''}.
+                          </p>
+                        </div>
+                        <Badge variant="outline">{availableForms.length} forms</Badge>
+                      </div> */}
+
+                      {availableForms.length > 1 && (
+                        <div className="space-y-2">
+                          <Label htmlFor="feedback-form-select" className="text-xs text-gray-700">
+                            Select feedback form
+                          </Label>
+                          <Select
+                            value={selectedFormId?.toString() || ''}
+                            onValueChange={(value) => setSelectedFormId(Number(value))}
+                            disabled={submitting}
+                          >
+                            <SelectTrigger id="feedback-form-select" className="bg-white">
+                              <SelectValue placeholder="Choose a feedback form" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableForms.map((form) => (
+                                <SelectItem key={form.id} value={form.id.toString()}>
+                                  {form.name} {form.versionNumber ? `(v${form.versionNumber})` : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedForm?.description && (
+                            <p className="text-xs text-gray-600">
+                              {selectedForm.description}
+                            </p>
+                          )}
+                        </div>
+                      ) }
+                    </div>
+                  )}
+
+                  {availableForms.length === 0 && (
+                    // If there are no active forms at all, give a different UX message
+                    !forms.some((f) => f.isActive !== false) ? (
+                      <div className="rounded-xl border border-dashed border-red-300 bg-red-50 px-4 py-6 text-sm text-red-700">
+                        No active feedback forms are available. Please contact your administrator to create or activate a form.
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
+                        No feedback forms matched this candidate's department{candidateDesignationId ? ' or designation' : ''}.
+                      </div>
+                    )
+                  )}
+
                   {/* Questions */}
                   <div className="space-y-4">
                     {questions.map((question, index) => (
@@ -618,7 +749,7 @@ function InterviewFeedbackPage() {
                 </Button>
                 <Button 
                   onClick={handleSubmit} 
-                  disabled={submitting}
+                  disabled={submitting || !selectedForm || questions.length === 0}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[44px]"
                 >
                   {submitting ? (

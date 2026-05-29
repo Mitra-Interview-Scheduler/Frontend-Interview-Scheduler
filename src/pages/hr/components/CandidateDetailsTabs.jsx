@@ -1,10 +1,24 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const STATUS_COLORS = {
+  APPLIED: 'bg-blue-100 text-blue-800',
+  SCREENING: 'bg-yellow-100 text-yellow-800',
+  SCHEDULED: 'bg-purple-100 text-purple-800',
+  INTERVIEWED: 'bg-indigo-100 text-indigo-800',
+  TECHNICAL_ROUND: 'bg-cyan-100 text-cyan-800',
+  HR_ROUND: 'bg-pink-100 text-pink-800',
+  SELECTED: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+  WITHDRAWN: 'bg-gray-100 text-gray-800',
+  ON_HOLD: 'bg-orange-100 text-orange-800',
+};
 
 const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
   const [activeTab, setActiveTab] = useState('screening');
@@ -40,11 +54,21 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
     return <div className="text-center text-gray-500">No candidate data available</div>;
   }
 
+  const formatDateTime = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString();
+  };
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col overflow-hidden ">
 
 
-      <TabsList className="grid w-full grid-cols-2 bg-gradient-to-r from-blue-50 to-indigo-50 p-1 rounded-lg border border-blue-200 flex-shrink-0">
+      <TabsList className="grid w-full grid-cols-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-1 rounded-lg border border-blue-200 flex-shrink-0">
+        <TabsTrigger value="profile" className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+          Profile Summary
+        </TabsTrigger>
         <TabsTrigger value="screening" className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
           Screening
         </TabsTrigger>
@@ -52,6 +76,79 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
           Interview Summary
         </TabsTrigger>
       </TabsList>
+
+
+      <TabsContent value="profile" className="mt-6 space-y-6 flex-1 overflow-y-auto pr-4">
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 pb-4">
+            <h3 className="text-sm font-semibold text-blue-900">Profile Summary</h3>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Status</p>
+                <Badge className={STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'}>
+                  {candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Profile Active</p>
+                <p className="text-gray-900">{candidate.isActive ? 'Yes' : 'No'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Job Reference Code</p>
+                <p className="text-gray-900">{candidate.jobReferenceCode || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
+                <p className="text-gray-900">{candidate.resourceRequestNumber || '-'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-gray-600">Job Description URL</p>
+                {candidate.jdUrl ? (
+                  <a
+                    href={candidate.jdUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-700 hover:underline break-all"
+                  >
+                    {candidate.jdUrl}
+                  </a>
+                ) : (
+                  <p className="text-gray-900">-</p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-gray-600">Resource Link</p>
+                {candidate.resourceLink ? (
+                  <a
+                    href={candidate.resourceLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-700 hover:underline break-all"
+                  >
+                    {candidate.resourceLink}
+                  </a>
+                ) : (
+                  <p className="text-gray-900">-</p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-gray-600">Notes</p>
+                <p className="text-gray-900 whitespace-pre-wrap">{candidate.notes || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Applied At</p>
+                <p className="text-gray-900">{formatDateTime(candidate.appliedAt)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Last Updated</p>
+                <p className="text-gray-900">{formatDateTime(candidate.updatedAt)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
 
 
 

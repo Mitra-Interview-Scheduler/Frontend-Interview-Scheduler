@@ -204,7 +204,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
 
-                  {candidate?.yearsOfExperience && (
+                  {candidate?.yearsOfExperience !== undefined && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <Hash className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
