@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download,Hash } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash, Link } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -13,19 +13,6 @@ import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewD
 import { candidateAPI } from '@/services/candidateAPI';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
-
-const STATUS_COLORS = {
-  APPLIED: 'bg-blue-100 text-blue-800',
-  SCREENING: 'bg-yellow-100 text-yellow-800',
-  SCHEDULED: 'bg-purple-100 text-purple-800',
-  INTERVIEWED: 'bg-indigo-100 text-indigo-800',
-  TECHNICAL_ROUND: 'bg-cyan-100 text-cyan-800',
-  HR_ROUND: 'bg-pink-100 text-pink-800',
-  SELECTED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  WITHDRAWN: 'bg-gray-100 text-gray-800',
-  ON_HOLD: 'bg-orange-100 text-orange-800',
-};
 
 function CandidateDetailsPage() {
   const navigate = useNavigate();
@@ -201,88 +188,74 @@ function CandidateDetailsPage() {
                 </div>
 
                 <div className="space-y-3 border-t border-blue-200 pt-4">
-                  {candidate.email && (
-                    <div className="flex items-start gap-2">
-                      <Mail className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-gray-600">Email</p>
-                        <p className="text-sm text-gray-900 break-all">{candidate.email}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Mail className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-600">Email</p>
+                      <p className="text-sm text-gray-900 break-all">{candidate.email || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  {candidate.phone && (
-                    <div className="flex items-start gap-2">
-                      <Phone className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Phone</p>
-                        <p className="text-sm text-gray-900">{candidate.phone}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Phone className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Phone</p>
+                      <p className="text-sm text-gray-900">{candidate.phone || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  {candidate.departmentName && (
-                    <div className="flex items-start gap-2">
-                      <Network className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Department</p>
-                        <p className="text-sm text-gray-900">{candidate.departmentName}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Network className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Department</p>
+                      <p className="text-sm text-gray-900">{candidate.departmentName || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  {candidate.targetDesignationName && (
-                    <div className="flex items-start gap-2">
-                      <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Target Designation</p>
-                        <p className="text-sm text-gray-900">{candidate.targetDesignationName}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Target Designation</p>
+                      <p className="text-sm text-gray-900">{candidate.targetDesignationName || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  {candidate.tierName && (
-                    <div className="flex items-start gap-2">
-                      <Layers3 className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Tier</p>
-                        <p className="text-sm text-gray-900">{candidate.tierName}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Layers3 className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Tier</p>
+                      <p className="text-sm text-gray-900">{candidate.tierName || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  {candidate.yearsOfExperience !== 0 && (
-                    <div className="flex items-start gap-2">
-                      <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Experience</p>
-                        <p className="text-sm text-gray-900">{candidate.yearsOfExperience} years</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Experience</p>
+                      <p className="text-sm text-gray-900">
+                        {candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined
+                          ? `${candidate.yearsOfExperience} years`
+                          : '-'}
+                      </p>
                     </div>
-                  )}
+                  </div>
 
-                  
-                  {candidate.location && (
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Location</p>
-                        <p className="text-sm text-gray-900">{candidate.location}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Location</p>
+                      <p className="text-sm text-gray-900">{candidate.location || '-'}</p>
                     </div>
-                  )}
+                  </div>
 
-                  
-                  {candidate.resourceRequestNumber && (
-                    <div className="flex items-start gap-2">
-                      <Hash className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
-                        <p className="text-sm text-gray-900">{candidate.resourceRequestNumber}</p>
-                      </div>
+                  <div className="flex items-start gap-2">
+                    <Hash className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
+                      <p className="text-sm text-gray-900">{candidate.resourceRequestNumber || '-'}</p>
                     </div>
-                  )}
-                      
+                    
+                  </div>
                 </div>
               </div>
 
