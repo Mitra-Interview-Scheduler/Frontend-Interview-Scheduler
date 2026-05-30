@@ -278,7 +278,7 @@ function InterviewFeedbackPage() {
     switch (question.type) {
       case 'text':
         return (
-          <div key={question.order} className="space-y-2">
+          <div key={question.order} className="space-y-2 mt-4 px-4 ">
             {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
@@ -299,7 +299,7 @@ function InterviewFeedbackPage() {
 
       case 'textarea':
         return (
-          <div key={question.order} className="space-y-2">
+          <div key={question.order} className="space-y-2 mt-4 px-4 ">
             {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
@@ -321,7 +321,7 @@ function InterviewFeedbackPage() {
       case 'dropdown':
       case 'select':
         return (
-          <div key={question.order} className="space-y-2">
+          <div key={question.order} className="space-y-2 mt-4 px-4 ">
             {/* <Label htmlFor={`q-${question.order}`}>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
@@ -345,7 +345,7 @@ function InterviewFeedbackPage() {
 
       case 'rating':
         return (
-          <div key={question.order} className="space-y-3">
+          <div key={question.order} className="space-y-3 mt-4 px-4 ">
             {/* <Label>
               {question.label}
               {question.required && <span className="text-red-500 ml-1">*</span>}
@@ -376,10 +376,10 @@ function InterviewFeedbackPage() {
     })();
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 ">
         {mainField}
         {question.commentsEnabled && (
-          <div className="mt-4 pl-4 border-l-2 border-blue-200">
+          <div className=" mt-4 px-4  ">
             <Label htmlFor={`q-${question.order}-comment`} className="text-sm text-gray-700">
               Comments
             </Label>
@@ -601,7 +601,7 @@ function InterviewFeedbackPage() {
                 <h2 className="text-lg font-bold text-gray-900 mb-2">Feedback Questions</h2>
                 <p className="text-xs text-gray-600 mb-3">
                   {selectedForm
-                    ? `Selected form: ${selectedForm.name}`
+                    ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
                     : 'No feedback form matched this candidate yet.'}
                 </p>
                 {/* Progress Bar */}
@@ -695,7 +695,7 @@ function InterviewFeedbackPage() {
                         key={question.order}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
+                        transition={{ delay: index * 0.1 }}
                         className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                       >
                         <div className="flex items-start gap-3 mb-3">
@@ -714,7 +714,10 @@ function InterviewFeedbackPage() {
                             )}
                           </div>
                         </div>
+                        <div className="mt-3  bg-slate-100 border  rounded-lg py-3" >
                         {renderFormField(question)}
+                        </div>
+                        
                       </motion.div>
                     ))}
                   </div>

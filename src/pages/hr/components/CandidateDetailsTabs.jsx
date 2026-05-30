@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CalendarDays, Download, Eye, ExternalLink, FileText, Link2, Loader2, MapPin, NotebookPen, UserCircle2 } from 'lucide-react';
 
 const STATUS_COLORS = {
   APPLIED: 'bg-blue-100 text-blue-800',
@@ -20,8 +22,15 @@ const STATUS_COLORS = {
   ON_HOLD: 'bg-orange-100 text-orange-800',
 };
 
-const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
-  const [activeTab, setActiveTab] = useState('screening');
+const CandidateDetailsTabs = ({
+  candidate,
+  readOnly = false,
+  documents = [],
+  documentsLoading = false,
+  onPreviewDocument = () => {},
+  onDownloadDocument = () => {},
+}) => {
+  const [activeTab, setActiveTab] = useState('profile');
   const [formData, setFormData] = useState({
     isProjectSpecific: '',
     projectName: '',
@@ -61,6 +70,46 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
     return date.toLocaleString();
   };
 
+  const parseResourceLinks = (rawValue) => {
+    if (!rawValue || !String(rawValue).trim()) return [];
+
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (!Array.isArray(parsed)) {
+        return [{
+          url: String(rawValue).trim(),
+          tag: '',
+        }];
+      }
+
+      return parsed
+        .map((item) => ({
+          url: typeof item === 'string' ? item.trim() : (item?.url || '').trim(),
+          tag: typeof item === 'string' ? '' : (item?.tag || '').trim(),
+        }))
+        .filter((item) => item.url);
+    } catch {
+      return String(rawValue)
+        .split('\n')
+        .map((url) => ({
+          url: url.trim(),
+          tag: '',
+        }))
+        .filter((item) => item.url);
+    }
+  };
+
+  const resourceLinks = parseResourceLinks(candidate.resourceLink);
+
+  const getHostLabel = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.replace('www.', '');
+    } catch {
+      return 'External';
+    }
+  };
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col overflow-hidden ">
 
@@ -78,80 +127,236 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
       </TabsList>
 
 
-      <TabsContent value="profile" className="mt-6 space-y-6 flex-1 overflow-y-auto pr-4">
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 pb-4">
-            <h3 className="text-sm font-semibold text-blue-900">Profile Summary</h3>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Status</p>
-                <Badge className={STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'}>
-                  {candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Profile Active</p>
-                <p className="text-gray-900">{candidate.isActive ? 'Yes' : 'No'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Job Reference Code</p>
-                <p className="text-gray-900">{candidate.jobReferenceCode || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
-                <p className="text-gray-900">{candidate.resourceRequestNumber || '-'}</p>
-              </div>
-              <div className="md:col-span-2">
-                <p className="text-xs font-semibold text-gray-600">Job Description URL</p>
+      <TabsContent value="profile" className="mt-6 space-y-4 flex-1 overflow-y-auto pr-4">
+        <div className="grid grid-cols-1 gap-4">
+          <Card className="border border-slate-200 shadow-sm">
+            <CardContent className="px-2 py-1">
+              {/* <div className="grid grid-cols-1 gap-3 md:grid-cols-4"> */}
+                {/* <div className="md:col-span-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] text-slate-500">Job Reference</p>
+                  <p className="font-medium text-slate-900">{candidate.jobReferenceCode || '-'}</p>
+                </div>
+                <div className="md:col-span-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] text-slate-500">Request Number</p>
+                  <p className="font-medium text-slate-900">{candidate.resourceRequestNumber || '-'}</p>
+                </div> */}
+                {/* <div className="md:col-span-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] text-slate-500">Location</p>
+                  <p className="font-medium text-slate-900">{candidate.location || '-'}</p>
+                </div>
+                <div className="md:col-span-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] text-slate-500">Experience</p>
+                  <p className="font-medium text-slate-900">{candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined ? `${candidate.yearsOfExperience} years` : '-'}</p>
+                </div> */}
+              {/* </div> */}
+
+              {/* <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Department</p>
+                  <p className="text-sm font-medium text-slate-900">{candidate.departmentName || '-'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Tier</p>
+                  <p className="text-sm font-medium text-slate-900">{candidate.tierName || '-'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Target Designation</p>
+                  <p className="text-sm font-medium text-slate-900">{candidate.targetDesignationName || '-'}</p>
+                </div>
+              </div> */}
+
+              <div className="mt-3 rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job Description</p>
+                </div>
+
                 {candidate.jdUrl ? (
                   <a
                     href={candidate.jdUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-700 hover:underline break-all"
+                    className="mt-2 inline-flex items-center gap-1 break-all text-sm text-blue-700 hover:underline"
                   >
+                    <ExternalLink className="h-3.5 w-3.5" />
                     {candidate.jdUrl}
                   </a>
                 ) : (
-                  <p className="text-gray-900">-</p>
+                  <p className="mt-2 text-sm text-slate-700">-</p>
                 )}
               </div>
-              <div className="md:col-span-2">
-                <p className="text-xs font-semibold text-gray-600">Resource Link</p>
-                {candidate.resourceLink ? (
-                  <a
-                    href={candidate.resourceLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-700 hover:underline break-all"
-                  >
-                    {candidate.resourceLink}
-                  </a>
-                ) : (
-                  <p className="text-gray-900">-</p>
-                )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
+          <Card className="border border-slate-200 shadow-sm lg:col-span-2">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <NotebookPen className="h-4 w-4 text-blue-600" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
               </div>
-              <div className="md:col-span-2">
-                <p className="text-xs font-semibold text-gray-600">Notes</p>
-                <p className="text-gray-900 whitespace-pre-wrap">{candidate.notes || '-'}</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{candidate.notes || '-'}</p>
+            </CardContent>
+          </Card>
+
+          {/* <Card className="border border-slate-200 shadow-sm lg:col-span-1">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-blue-600" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Timeline</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Applied At</p>
-                <p className="text-gray-900">{formatDateTime(candidate.appliedAt)}</p>
+
+              <div className="rounded-lg border border-slate-200 px-3 py-2">
+                <p className="text-[11px] text-slate-500">Applied At</p>
+                <p className="text-sm font-medium text-slate-900">{formatDateTime(candidate.appliedAt)}</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Last Updated</p>
-                <p className="text-gray-900">{formatDateTime(candidate.updatedAt)}</p>
+              <div className="rounded-lg border border-slate-200 px-3 py-2">
+                <p className="text-[11px] text-slate-500">Last Updated</p>
+                <p className="text-sm font-medium text-slate-900">{formatDateTime(candidate.updatedAt)}</p>
               </div>
+              
+            </CardContent>
+          </Card> */}
+        </div>
+        <Card className="border border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-blue-600" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Resource Links</p>
+              <Badge variant="outline" className="ml-auto rounded-full text-[11px]">
+                {resourceLinks.length}
+              </Badge>
             </div>
+
+            {resourceLinks.length === 0 && (
+              <p className="text-sm text-slate-500">No resource links available.</p>
+            )}
+
+            {resourceLinks.length > 0 && (
+              <div className="space-y-2">
+                {resourceLinks.map((item, index) => (
+                  <div
+                    key={`${item.url}-${index}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => window.open(item.url, '_blank', 'noopener,noreferrer')}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        window.open(item.url, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="w-28 justify-center rounded-full text-[11px] font-medium shrink-0 truncate">
+                          {item.tag || getHostLabel(item.url)}
+                        </Badge>
+                        <p className="text-xs font-medium text-gray-900 truncate hover:text-blue-600">
+                          {item.url}
+                        </p>
+                      </div>
+                    </div>
+
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline shrink-0"
+                    >
+                      Open
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        <Card className="border border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-blue-600" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Documents</p>
+              <Badge variant="outline" className="ml-auto rounded-full text-[11px]">
+                {Array.isArray(documents) ? documents.length : 0}
+              </Badge>
+            </div>
+
+            {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
+            {!documentsLoading && documents.length === 0 && (
+              <p className="text-sm text-slate-500">No documents available.</p>
+            )}
+
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                {documents.map((document) => (
+                  <div
+                    key={document.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onPreviewDocument(document)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onPreviewDocument(document);
+                      }
+                    }}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="w-28 justify-center rounded-full text-[11px] font-medium shrink-0 truncate">
+                          {document.documentType || 'Document'}
+                        </Badge>
+                        <p className="min-w-0 text-left text-xs font-medium text-gray-900 truncate group-hover:text-blue-600">
+                          {document.fileName || 'Untitled document'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onPreviewDocument(document);
+                        }}
+                        title="Preview"
+                      >
+                        <Eye className="h-4 w-4 text-blue-600" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDownloadDocument(document);
+                        }}
+                        title="Download"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+       
       </TabsContent>
-
-
-
+      
       {/* Screening Tab */}
       <TabsContent value="screening" className="mt-6 space-y-6 flex-1 overflow-y-auto pr-4">
            {/* Basic Information Section */}
@@ -398,6 +603,7 @@ const CandidateDetailsTabs = ({ candidate, readOnly = false }) => {
           </CardContent>
         </Card>
       </TabsContent>
+
       {/* Interview Summary Tab */}
       <TabsContent value="summary" className="mt-6 space-y-6 flex-1 overflow-y-auto pr-4">
       </TabsContent>

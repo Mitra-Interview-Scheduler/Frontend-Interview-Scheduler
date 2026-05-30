@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash, Link } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -36,7 +36,6 @@ function CandidateDetailsPage() {
       setLoading(true);
       setError('');
       const data = await candidateAPI.getCandidateById(candidateId);
-      console.log('Candidate details:', data);
       setCandidate(data);
       await loadCandidateDocuments(candidateId);
     } catch (err) {
@@ -133,11 +132,10 @@ function CandidateDetailsPage() {
   return (
     <Layout hasPadding={false} className="overflow-hidden">
       <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className=" border-blue-200 px-4 py-3 shadow-sm flex-shrink-0"
+          className="border-blue-200 px-4 py-3 shadow-sm flex-shrink-0"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -155,18 +153,14 @@ function CandidateDetailsPage() {
                 <p className="text-blue-600 text-sm mt-1">View comprehensive candidate information</p>
               </div>
             </div>
-           
           </div>
         </motion.div>
 
-        {/* Step Progress Indicator */}
-        <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50  flex-shrink-0">
+        <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
           <StepProgressIndicator currentStatus={candidate.status} />
         </div>
 
-        {/* Main Content Area - Scrollable (responsive: stack on small screens) */}
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-2">
-          {/* Left Sidebar - Candidate Basic Info */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -254,74 +248,28 @@ function CandidateDetailsPage() {
                       <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
                       <p className="text-sm text-gray-900">{candidate.resourceRequestNumber || '-'}</p>
                     </div>
-                    
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-2 border border-blue-200">
-                <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> Documents
-                </h3>
-
-                {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
-                {!documentsLoading && documents.length === 0 && (
-                  <p className="text-xs text-gray-500 text-center py-4 italic">No documents</p>
-                )}
-
-                <div className="space-y-2 p-1">
-                  {documents.map((document) => (
-                    <div
-                      key={document.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDocument(document)}
-                        className="min-w-0 flex-1 text-left hover:text-blue-600 transition-colors"
-                      >
-                        <p className="text-xs font-medium text-gray-900 truncate">{document.fileName}</p>
-                        <Badge variant="outline" className="text-xs mt-1">
-                          {document.documentType}
-                        </Badge>
-                      </button>
-                      <div className="flex gap-1 shrink-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => handlePreviewDocument(document)}
-                          title="Preview"
-                        >
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleDownloadDocument(document)}
-                          title="Download"
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              
             </div>
           </motion.div>
 
-          {/* Right Content - Tabs Scrollable */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
             className="flex-1 flex flex-col overflow-auto py-4 pr-0 md:pr-4 md:pl-4 md:max-h-[70vh]"
           >
-            <CandidateDetailsTabs candidate={candidate} readOnly={true} />
+            <CandidateDetailsTabs
+              candidate={candidate}
+              readOnly={true}
+              documents={documents}
+              documentsLoading={documentsLoading}
+              onPreviewDocument={handlePreviewDocument}
+              onDownloadDocument={handleDownloadDocument}
+            />
           </motion.div>
         </div>
 
