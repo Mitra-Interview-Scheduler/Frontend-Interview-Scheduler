@@ -9,19 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarDays, Download, Eye, ExternalLink, FileText, Link2, Loader2, MapPin, NotebookPen, UserCircle2 } from 'lucide-react';
 
-const STATUS_COLORS = {
-  APPLIED: 'bg-blue-100 text-blue-800',
-  SCREENING: 'bg-yellow-100 text-yellow-800',
-  SCHEDULED: 'bg-purple-100 text-purple-800',
-  INTERVIEWED: 'bg-indigo-100 text-indigo-800',
-  TECHNICAL_ROUND: 'bg-cyan-100 text-cyan-800',
-  HR_ROUND: 'bg-pink-100 text-pink-800',
-  SELECTED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  WITHDRAWN: 'bg-gray-100 text-gray-800',
-  ON_HOLD: 'bg-orange-100 text-orange-800',
-};
-
 const CandidateDetailsTabs = ({
   candidate,
   readOnly = false,

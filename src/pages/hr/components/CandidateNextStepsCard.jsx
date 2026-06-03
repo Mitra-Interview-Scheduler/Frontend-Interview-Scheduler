@@ -8,12 +8,13 @@ import { Label } from '@/components/ui/label';
 import { ArrowRight, MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
+import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
 
 function CandidateNextStepsCard({
   candidate,
   prompt = '',
-  nextStage = '',
   actions = [],
+  steps = [],
   onUpdated,
   initiallyOpen = true,
 }) {
@@ -31,7 +32,7 @@ function CandidateNextStepsCard({
       await candidateAPI.updateCandidate(candidate.id, {
         status,
       });
-      toast({ title: 'Status updated', description: `Candidate moved to ${status.replace(/_/g, ' ')}.` });
+      toast({ title: 'Status updated', description: `Candidate moved to ${getCandidateStatusLabel(steps, status)}.` });
       onUpdated?.();
     } catch (err) {
       toast({
@@ -49,14 +50,9 @@ function CandidateNextStepsCard({
     setShowRejectDialog(true);
   };
 
-  const CLOSE_STATUS_OPTIONS = [
-    { key: 'SELECTED', label: 'Selected', colorClass: 'border-green-200 bg-green-50 text-green-800' },
-    { key: 'REJECTED', label: 'Rejected', colorClass: 'border-red-200 bg-red-50 text-red-800' },
-    { key: 'ON_HOLD', label: 'On Hold', colorClass: 'border-orange-200 bg-orange-50 text-orange-800' },
-    { key: 'WITHDRAWN', label: 'Withdrawn', colorClass: 'border-gray-200 bg-gray-50 text-gray-800' },
-  ];
+  const CLOSE_STATUS_OPTIONS = getCandidateClosingSteps(steps);
 
-  const isCommentStage = ['SELECTED', 'REJECTED', 'ON_HOLD', 'WITHDRAWN'].includes(closeStatus);
+  const isCommentStage = CLOSE_STATUS_OPTIONS.some((statusOption) => statusOption.key === closeStatus);
 
   const confirmReject = async () => {
     if (!candidate?.id) return;
@@ -66,7 +62,7 @@ function CandidateNextStepsCard({
         status: closeStatus,
         notes: closeReason || undefined,
       });
-      toast({ title: 'Application updated', description: `Candidate moved to ${closeStatus.replace(/_/g, ' ')}.` });
+      toast({ title: 'Application updated', description: `Candidate moved to ${getCandidateStatusLabel(steps, closeStatus)}.` });
       onUpdated?.();
       setShowRejectDialog(false);
       setCloseReason('');
@@ -77,8 +73,6 @@ function CandidateNextStepsCard({
       setSaving(false);
     }
   };
-
-  const FINAL_STATUSES = ['REJECTED', 'SELECTED', 'WITHDRAWN'];
 
   return (
     <>
@@ -177,7 +171,7 @@ function CandidateNextStepsCard({
                             key={statusOption.key}
                             type="button"
                             onClick={() => setCloseStatus(statusOption.key)}
-                            className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'ring-2 ring-blue-500 ' + statusOption.colorClass : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                            className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'ring-2 ring-blue-500 ' + statusOption.badgeClass : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                           >
                             <div className="text-sm font-semibold">{statusOption.label}</div>
                             <div className="text-xs text-slate-500">{statusOption.key.replace(/_/g, ' ')}</div>

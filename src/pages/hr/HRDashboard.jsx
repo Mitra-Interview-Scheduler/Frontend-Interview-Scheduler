@@ -23,6 +23,12 @@ import { tierAPI } from '@/services/tierAPI';
 import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import HRFilters from './HRFilters';
+import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import {
+  getCandidateStep,
+  getCandidateStatusBadgeClass,
+  getCandidateStatusLabel,
+} from '@/lib/candidateSteps';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +101,7 @@ const buildScheduleItems = (requests, panels) => {
 const HRDashboard = () => {
   const navigate = useNavigate();
   const { formatDateTime, formatTime } = useFormattedDateTime();
+  const { candidateSteps } = useCandidateSteps();
 
   const [candidates, setCandidates]           = useState([]);
   const [requests, setRequests]               = useState([]);
@@ -382,18 +389,9 @@ const HRDashboard = () => {
   };
 
   const getCandidateStatusBadge = (status) => {
-    const map = {
-      APPLIED:     'bg-blue-100 text-blue-800',
-      SCREENING:   'bg-purple-100 text-purple-800',
-      SCHEDULED:   'bg-green-100 text-green-800',
-      INTERVIEWED: 'bg-teal-100 text-teal-800',
-      OFFERED:     'bg-amber-100 text-amber-800',
-      HIRED:       'bg-emerald-100 text-emerald-800',
-      REJECTED:    'bg-red-100 text-red-800',
-    };
     return (
-      <Badge className={`${map[status] || 'bg-gray-100 text-gray-700'} text-xs font-medium`}>
-        {status}
+      <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, status)} text-xs font-medium`}>
+        {getCandidateStatusLabel(candidateSteps, status)}
       </Badge>
     );
   };
@@ -412,7 +410,7 @@ const HRDashboard = () => {
     {
       title: 'Total Candidates',
       value: totalCandidates,
-      subtext: `${candidatesByStatus.APPLIED || 0} applied · ${candidatesByStatus.SCREENING || 0} screening`,
+      subtext: `${candidatesByStatus.NEW || 0} ${getCandidateStatusLabel(candidateSteps, 'NEW').toLowerCase()} · ${candidatesByStatus.SCREENING || 0} ${getCandidateStatusLabel(candidateSteps, 'SCREENING').toLowerCase()}`,
       icon: Users, color: 'text-blue-600', bg: 'bg-blue-50',
       onClick: () => navigate('/hr/candidates'),
     },
@@ -765,19 +763,12 @@ const HRDashboard = () => {
                   <p className="text-sm text-muted-foreground text-center py-8">No candidate data</p>
                 ) : (
                   <div className="space-y-3">
-                    {[
-                      { label: 'Applied',     key: 'APPLIED',     color: 'bg-blue-500' },
-                      { label: 'Screening',   key: 'SCREENING',   color: 'bg-purple-500' },
-                      { label: 'Scheduled',   key: 'SCHEDULED',   color: 'bg-green-500' },
-                      { label: 'Interviewed', key: 'INTERVIEWED', color: 'bg-teal-500' },
-                      { label: 'Offered',     key: 'OFFERED',     color: 'bg-amber-500' },
-                      { label: 'Hired',       key: 'HIRED',       color: 'bg-emerald-600' },
-                      { label: 'Rejected',    key: 'REJECTED',    color: 'bg-red-400' },
-                    ]
+                    {candidateSteps
                       .filter((s) => (candidatesByStatus[s.key] || 0) > 0)
                       .map((stage) => {
                         const count = candidatesByStatus[stage.key] || 0;
                         const pct   = Math.round((count / totalCandidates) * 100);
+                        const configuredStage = getCandidateStep(candidateSteps, stage.key);
                         return (
                           <div key={stage.key} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
@@ -787,7 +778,10 @@ const HRDashboard = () => {
                               </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${stage.color} transition-all duration-700`} style={{ width: `${pct}%` }} />
+                              <div
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${pct}%`, backgroundColor: configuredStage?.bgColor || '#6b7280' }}
+                              />
                             </div>
                           </div>
                         );

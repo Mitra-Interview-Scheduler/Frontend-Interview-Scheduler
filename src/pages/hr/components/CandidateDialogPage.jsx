@@ -17,11 +17,7 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { downloadBlobResponse } from '@/lib/documentUtils';
-
-const CANDIDATE_STATUSES = [
-  'APPLIED','SCREENING','SCHEDULED','INTERVIEWED',
-  'TECHNICAL_ROUND','HR_ROUND','SELECTED','REJECTED','WITHDRAWN','ON_HOLD',
-];
+import { FALLBACK_CANDIDATE_STEPS } from '@/lib/candidateSteps';
 
 const RESOURCE_LINK_TAG_OPTIONS = ['CV', 'Profile Picture', 'Certificate', 'Portfolio', 'Other'];
 
@@ -30,13 +26,14 @@ const EMPTY_FORM = {
   departmentId: '', tierId: '', targetDesignationId: '',
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', resourceLink: '', jobReferenceCode: '', location: '',
-  notes: '', status: 'APPLIED',resourceRequestNumber: '',
+  notes: '', status: 'NEW',resourceRequestNumber: '',
 };
 
 function CandidateDialogPage({ 
   open, 
   candidate, 
   departments = [],
+  candidateSteps = FALLBACK_CANDIDATE_STEPS,
   onOpenChange, 
   onSaveSuccess,
   readOnly = false,
@@ -155,7 +152,7 @@ function CandidateDialogPage({
       jobReferenceCode:  candidate.jobReferenceCode || '',
       location:          candidate.location || '',
       notes:             candidate.notes || '',
-      status:            candidate.status || 'APPLIED',
+      status:            candidate.status || 'NEW',
       resourceRequestNumber: candidate.resourceRequestNumber || '',
     };
     
@@ -475,8 +472,8 @@ function CandidateDialogPage({
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CANDIDATE_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                  {candidateSteps.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

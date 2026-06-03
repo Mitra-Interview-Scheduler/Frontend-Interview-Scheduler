@@ -37,34 +37,10 @@ import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
-
-const CANDIDATE_STATUSES = [
-  'APPLIED',
-  'SCREENING',
-  'SCHEDULED',
-  'INTERVIEWED',
-  'TECHNICAL_ROUND',
-  'HR_ROUND',
-  'SELECTED',
-  'REJECTED',
-  'WITHDRAWN',
-  'ON_HOLD',
-];
+import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { getCandidateStatusBadgeClass, getCandidateStatusLabel } from '@/lib/candidateSteps';
 
 const CANDIDATES_PER_PAGE = 10;
-
-const STATUS_COLORS = {
-  APPLIED: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  SCREENING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  SCHEDULED: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  INTERVIEWED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
-  TECHNICAL_ROUND: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
-  HR_ROUND: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
-  SELECTED: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  WITHDRAWN: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-  ON_HOLD: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-};
 
 const getCandidateSubtitle = (candidate) => {
   return candidate.departmentName || candidate.email || '-';
@@ -91,6 +67,7 @@ const getRowTooltip = (candidate) => {
 const CandidatesPage = () => {
   const navigate = useNavigate();
   const { formatDate } = useFormattedDateTime();
+  const { candidateSteps } = useCandidateSteps();
   const [candidates, setCandidates] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -249,8 +226,8 @@ const CandidatesPage = () => {
                 <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
-                  {CANDIDATE_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                  {candidateSteps.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -360,11 +337,11 @@ const CandidatesPage = () => {
                           <TableCell>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs shrink-0`}>
-                                  {candidate.status.replace(/_/g, ' ')}
+                                <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, candidate.status)} text-xs shrink-0`}>
+                                  {getCandidateStatusLabel(candidateSteps, candidate.status)}
                                 </Badge>
                               </TooltipTrigger>
-                              <TooltipContent>{candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}</TooltipContent>
+                              <TooltipContent>{getCandidateStatusLabel(candidateSteps, candidate.status)}</TooltipContent>
                             </Tooltip>
                           </TableCell>
                           <TableCell className="text-right">
@@ -437,8 +414,8 @@ const CandidatesPage = () => {
                               <TooltipContent>{candidate.name || getCandidateSubtitle(candidate)}</TooltipContent>
                             </Tooltip>
                             <div className="shrink-0 ml-2">
-                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}> 
-                                {candidate.status.replace(/_/g, ' ')}
+                              <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, candidate.status)} text-xs`}> 
+                                {getCandidateStatusLabel(candidateSteps, candidate.status)}
                               </Badge>
                             </div>
                           </div>
@@ -508,6 +485,7 @@ const CandidatesPage = () => {
           open={isAddOpen}
           candidate={null}
           departments={departments}
+          candidateSteps={candidateSteps}
           onOpenChange={setIsAddOpen}
           onSaveSuccess={applyFilters}
           onSchedule={setIsInterviewSchedulePageOpen}
@@ -518,6 +496,7 @@ const CandidatesPage = () => {
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
+          candidateSteps={candidateSteps}
           onOpenChange={setIsEditOpen}
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}
