@@ -281,7 +281,6 @@ function CandidateDetailsPage() {
           >
             <CandidateDetailsTabs
               candidate={candidate}
-              readOnly={true}
               documents={documents}
               documentsLoading={documentsLoading}
               onPreviewDocument={handlePreviewDocument}
