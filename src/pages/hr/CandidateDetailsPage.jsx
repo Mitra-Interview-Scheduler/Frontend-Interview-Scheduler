@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import StepProgressIndicator from '@/components/StepProgressIndicator';
+import CandidateNextStepsCard from './components/CandidateNextStepsCard';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
 import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -25,6 +26,13 @@ function CandidateDetailsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  const nextStepsPrompt = 'Review the candidate and choose the next stage to move the process forward.';
+  const nextStepsActions = [
+    { label: 'INT', status: 'INTERVIEWED' },
+    { label: 'Selected', status: 'SCHEDULED' },
+    { label: 'Rejected', status: 'HR_ROUND' },
+  ];
 
   useEffect(() => {
     if (!candidateId) return;
@@ -160,13 +168,22 @@ function CandidateDetailsPage() {
           <StepProgressIndicator currentStatus={candidate.status} />
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-2">
-          <motion.div
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-0">
+          <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-2 min-h-0">
+            <CandidateNextStepsCard
+              candidate={candidate}
+              prompt={nextStepsPrompt}
+              nextStage="Screening"
+              actions={nextStepsActions}
+              onUpdated={loadCandidateDetails}
+            />
+
+            <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-full md:w-80 bg-white rounded-lg border border-gray-200 flex-shrink-0 shadow-sm flex flex-col min-h-0 max-h-[40vh] md:max-h-[70vh] overflow-hidden"
-          >
+            className="w-full bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-2 custom-scrollbar scrollbar-none">
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
                 <div className="flex items-center gap-3 mb-4">
@@ -254,7 +271,8 @@ function CandidateDetailsPage() {
 
               
             </div>
-          </motion.div>
+            </motion.div>
+          </div>
 
           <motion.div
             initial={{ opacity: 0, x: 20 }}

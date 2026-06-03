@@ -10,7 +10,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Download, FileText, Hash, Link, Loader2, MapPin, Trash2, TrendingUp, Award, Upload, CalendarClock } from 'lucide-react';
+import { Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, Award, Upload, CalendarClock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -22,6 +22,8 @@ const CANDIDATE_STATUSES = [
   'APPLIED','SCREENING','SCHEDULED','INTERVIEWED',
   'TECHNICAL_ROUND','HR_ROUND','SELECTED','REJECTED','WITHDRAWN','ON_HOLD',
 ];
+
+const RESOURCE_LINK_TAG_OPTIONS = ['CV', 'Profile Picture', 'Certificate', 'Portfolio', 'Other'];
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '',
@@ -54,7 +56,71 @@ function CandidateDialogPage({
   const [documentFile, setDocumentFile] = useState(null);
   const [documentType, setDocumentType] = useState('CV');
   const [isUploadDragging, setIsUploadDragging] = useState(false);
+  const [resourceLinks, setResourceLinks] = useState([{ tagType: '', customTag: '', url: '' }]);
   const fileInputRef = useRef(null);
+
+  const parseResourceLinks = (rawValue) => {
+    if (!rawValue || !String(rawValue).trim()) return [{ tagType: '', customTag: '', url: '' }];
+
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (!Array.isArray(parsed)) {
+        return [{ tagType: '', customTag: '', url: String(rawValue).trim() }];
+      }
+
+      const normalized = parsed
+        .map((item) => ({
+          tagType: (() => {
+            const rawTag = typeof item === 'string' ? '' : (item?.tag || item?.name || '').trim();
+            if (!rawTag) return '';
+            return RESOURCE_LINK_TAG_OPTIONS.includes(rawTag) ? rawTag : 'Other';
+          })(),
+          customTag: (() => {
+            const rawTag = typeof item === 'string' ? '' : (item?.tag || item?.name || '').trim();
+            return RESOURCE_LINK_TAG_OPTIONS.includes(rawTag) ? '' : rawTag;
+          })(),
+          url: typeof item === 'string' ? item.trim() : (item?.url || '').trim(),
+        }))
+        .filter((item) => item.url);
+
+      return normalized.length > 0 ? normalized : [{ tagType: '', customTag: '', url: '' }];
+    } catch {
+      const normalized = String(rawValue)
+        .split('\n')
+        .map((url) => ({ tagType: '', customTag: '', url: url.trim() }))
+        .filter((item) => item.url);
+
+      return normalized.length > 0 ? normalized : [{ tagType: '', customTag: '', url: '' }];
+    }
+  };
+
+  const updateResourceLink = (index, field, value) => {
+    setResourceLinks((current) => current.map((item, currentIndex) => (
+      currentIndex === index ? { ...item, [field]: value } : item
+    )));
+  };
+
+  const addResourceLink = () => {
+    setResourceLinks((current) => [...current, { tagType: '', customTag: '', url: '' }]);
+  };
+
+  const removeResourceLink = (index) => {
+    setResourceLinks((current) => {
+      const next = current.filter((_, currentIndex) => currentIndex !== index);
+      return next.length > 0 ? next : [{ tagType: '', customTag: '', url: '' }];
+    });
+  };
+
+  const serializeResourceLinks = () => {
+    const normalized = resourceLinks
+      .map((item) => ({
+        tag: (item.tagType === 'Other' ? item.customTag : item.tagType).trim(),
+        url: item.url.trim(),
+      }))
+      .filter((item) => item.url);
+
+    return normalized.length > 0 ? JSON.stringify(normalized) : null;
+  };
   // Initialize form when dialog opens
   useEffect(() => {
     if (!open) return;
@@ -69,6 +135,7 @@ function CandidateDialogPage({
       setDocumentFile(null);
       setDocumentType('CV');
       setIsUploadDragging(false);
+      setResourceLinks([{ tagType: '', customTag: '', url: '' }]);
       return;
     }
 
@@ -101,6 +168,7 @@ function CandidateDialogPage({
     setDocumentFile(null);
     setDocumentType('CV');
     setIsUploadDragging(false);
+    setResourceLinks(parseResourceLinks(candidate.resourceLink));
     loadDocuments(candidate.id);
 
     // Pre-load cascades
@@ -241,7 +309,7 @@ function CandidateDialogPage({
       status:            form.status,
       yearsOfExperience: form.yearsOfExperience ? parseInt(form.yearsOfExperience) : null,
       jdUrl:             form.jdUrl?.trim() || null,
-      resourceLink:      form.resourceLink?.trim() || null,
+      resourceLink:      serializeResourceLinks(),
       jobReferenceCode:  form.jobReferenceCode?.trim() || null,
       location:          form.location?.trim() || null,
       notes:             form.notes?.trim() || null,
@@ -283,6 +351,7 @@ function CandidateDialogPage({
     setDocumentFile(null);
     setDocumentType('CV');
     setIsUploadDragging(false);
+    setResourceLinks([{ tagType: '', customTag: '', url: '' }]);
     setForm(EMPTY_FORM);
 
   };
@@ -462,53 +531,102 @@ function CandidateDialogPage({
             </Select>
           </div>
 
-          {/* Designation */}
-          <div className="space-y-2 md:col-span-2">
-            <Label className="flex items-center gap-1">
-              <Award className="w-3.5 h-3.5" /> Target Designation
-            </Label>
-            <Select 
-              value={form.targetDesignationId || 'NONE'}
-              onValueChange={(v) => setForm({ ...form, targetDesignationId: v === 'NONE' ? '' : v })}
-              disabled={saving || readOnly || !form.tierId}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={form.tierId ? 'Select designation' : 'Select tier first'} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NONE">None</SelectItem>
-                {desigs.map((d) => (
-                  <SelectItem key={d.id} value={d.id.toString()}>
-                    Level {d.levelOrder} – {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Resource Links */}
+          <div className="space-y-3 md:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="flex items-center gap-1">
+                <Link className="w-3.5 h-3.5" /> Resource Links (Drive URL)
+              </Label>
 
-          {/* JD URL */}
-          <div className="space-y-2 md:col-span-2">
-            <Label className="flex items-center gap-1">
-              <Link className="w-3.5 h-3.5" /> Job Description URL
-            </Label>
-            <Input 
-              value={form.jdUrl} 
-              onChange={(e) => setForm({ ...form, jdUrl: e.target.value })}
-              placeholder="https://careers.company.com/jd/..." 
-              disabled={saving || readOnly} 
-            />
-          </div>
+              {!readOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={addResourceLink}
+                  disabled={saving}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Link
+                </Button>
+              )}
+            </div>
 
-          <div className="space-y-2 md:col-span-2">
-            <Label className="flex items-center gap-1">
-              <Link className="w-3.5 h-3.5" /> Resource Link (Drive URL)
-            </Label>
-            <Input
-              value={form.resourceLink}
-              onChange={(e) => setForm({ ...form, resourceLink: e.target.value })}
-              placeholder="https://drive.google.com/..."
-              disabled={saving || readOnly}
-            />
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              {resourceLinks.map((item, index) => (
+                <div key={`${index}-${item.url}`} className="rounded-md border border-slate-200 bg-white p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500"></p>
+
+                    {!readOnly && resourceLinks.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                        onClick={() => removeResourceLink(index)}
+                        disabled={saving}
+                        title="Remove"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <div className="w-8" />
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className={`grid grid-cols-1 gap-3 ${item.tagType === 'Other' ? 'md:grid-cols-[1fr_auto_auto]' : 'md:grid-cols-[1fr_auto]'} items-end`}>
+                      <div className="space-y-2">
+                        <Label>Drive URL *</Label>
+                        <Input
+                          value={item.url}
+                          onChange={(e) => updateResourceLink(index, 'url', e.target.value)}
+                          placeholder="https://drive.google.com/..."
+                          disabled={saving || readOnly}
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:w-44">
+                        <Label>Tag</Label>
+                        <Select
+                          value={item.tagType || ''}
+                          onValueChange={(value) => {
+                            updateResourceLink(index, 'tagType', value);
+                            if (value !== 'Other') updateResourceLink(index, 'customTag', '');
+                          }}
+                          disabled={saving || readOnly}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select tag" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RESOURCE_LINK_TAG_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {item.tagType === 'Other' && (
+                        <div className="space-y-2">
+                          <Label>Custom Tag Name</Label>
+                          <Input
+                            value={item.customTag}
+                            onChange={(e) => updateResourceLink(index, 'customTag', e.target.value)}
+                            placeholder="Enter tag name"
+                            disabled={saving || readOnly}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label className="flex items-center gap-1">
