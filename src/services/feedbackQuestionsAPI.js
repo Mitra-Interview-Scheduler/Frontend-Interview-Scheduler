@@ -8,6 +8,17 @@ export const feedbackQuestionsAPI = {
     return response.data;
   },
 
+  getByDepartmentAndRole: async (departmentId, designationId) => {
+  const response = await api.get('/feedback/candidateforms', {
+    params: {
+      departmentId: departmentId,
+      designationId: designationId
+    }
+  });
+  return response.data;
+},
+
+  // Get a single form by ID
   getById: async (id) => {
     const response = await api.get(`/feedback/forms/${id}`);
     return response.data;
