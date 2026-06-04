@@ -18,21 +18,21 @@ export const TABS_CONFIG = [
     value: 'profile',
     label: 'Profile Summary',
     component: ProfileSummaryTab,
-    allowedStages: ['NEW', 'SCREENING', 'SCHEDULED', 'INTERVIEWED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
+    allowedStages: ['NEW', 'SCREENING', 'SCHEDULED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
     editableStages: [], // Profile is edited via the main dialog, so this is read-only here.
   },
   {
     value: 'screening',
     label: 'Screening',
     component: ScreeningTab,
-    allowedStages: ['SCREENING', 'SCHEDULED', 'INTERVIEWED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
+    allowedStages: ['SCREENING', 'SCHEDULED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
     editableStages: ['SCREENING'],
   },
   {
     value: 'summary',
     label: 'Interview Summary',
     component: InterviewSummaryTab,
-    allowedStages: ['INTERVIEWED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
+    allowedStages: ['OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
     editableStages: [], // Summary is read-only for now.
   },
 ];
