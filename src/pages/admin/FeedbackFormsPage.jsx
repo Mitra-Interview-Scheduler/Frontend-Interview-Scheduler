@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Trash2, Edit, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
@@ -18,9 +18,10 @@ import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewForm, setPreviewForm] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
   const [forms, setForms] = useState([]);
   const [filteredForms, setFilteredForms] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -40,53 +41,60 @@ const FeedbackFormsPage = () => {
     currentPage * itemsPerPage
   );
 
+  const refreshData = async () => {
+    try {
+      setLoading(true);
+      const [deptData, desigData] = await Promise.all([
+        departmentAPI.getAllDepartments(),
+        designationAPI.getAllDesignations(),
+      ]);
+
+      try {
+        const formsData = await feedbackQuestionsAPI.getAll();
+        setForms(Array.isArray(formsData) ? formsData : []);
+      } catch (formError) {
+        console.error('Could not load feedback forms:', formError);
+        setForms([]);
+        toast({
+          title: 'Load failed',
+          description: 'Unable to load feedback forms from the database.',
+          variant: 'destructive',
+        });
+      }
+
+      setDepartments(deptData || []);
+      setDesignations(desigData || []);
+    } catch (error) {
+      console.error('Load failed:', error);
+      setForms([]);
+      toast({
+        title: 'Load failed',
+        description: 'Unable to load data from the server.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, []);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [filteredForms]);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [deptData, desigData] = await Promise.all([
-          departmentAPI.getAllDepartments(),
-          designationAPI.getAllDesignations(),
-        ]);
-        
-        // Load forms only from the database
-        try {
-          const formsData = await feedbackQuestionsAPI.getAll();
-          setForms(Array.isArray(formsData) ? formsData : []);
-        } catch (formError) {
-          console.error('Could not load feedback forms:', formError);
-          setForms([]);
-          toast({
-            title: 'Load failed',
-            description: 'Unable to load feedback forms from the database.',
-            variant: 'destructive',
-          });
-        }
-        
-        setDepartments(deptData || []);
-        setDesignations(desigData || []);
-      } catch (error) {
-        console.error('Load failed:', error);
-        setForms([]);
-        toast({
-          title: 'Load failed',
-          description: 'Unable to load data from the server.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  useEffect(() => {
     let result = [...forms];
+
+    if (statusFilter === 'active') {
+      result = result.filter((form) => form.isActive !== false);
+    }
+
+    if (statusFilter === 'inactive') {
+      result = result.filter((form) => form.isActive === false);
+    }
 
     if (filters.searchTerm) {
       const term = filters.searchTerm.toLowerCase();
@@ -110,27 +118,27 @@ const FeedbackFormsPage = () => {
     }
 
     setFilteredForms(result);
-  }, [forms, filters]);
+  }, [forms, filters, statusFilter]);
 
-  const handleDelete = async (formId) => {
-    if (!window.confirm('Are you sure you want to delete this form?')) return;
-
+  const handleStatusToggle = async (form, nextActive) => {
     try {
-      setDeleting(formId);
-      await feedbackQuestionsAPI.delete(formId);
-      setForms((prev) => prev.filter((f) => f.id !== formId));
-      toast({ title: 'Deleted', description: 'Form deleted successfully.' });
-      setPreviewOpen(false);
-      // Navigate to feedback forms page after successful delete
-      setTimeout(() => navigate('/admin/feedback-forms'), 500);
+      setStatusUpdatingId(form.id);
+      await feedbackQuestionsAPI.setActive(form.id, nextActive);
+      await refreshData();
+      toast({
+        title: nextActive ? 'Form activated' : 'Form deactivated',
+        description: nextActive
+          ? 'This version is now active for interviewer use.'
+          : 'This version has been hidden from interviewer selection.',
+      });
     } catch (error) {
       toast({
-        title: 'Delete failed',
-        description: error.response?.data?.message || 'Unable to delete form.',
+        title: 'Status update failed',
+        description: error.response?.data?.message || 'Unable to update form status.',
         variant: 'destructive',
       });
     } finally {
-      setDeleting(null);
+      setStatusUpdatingId(null);
     }
   };
 
@@ -161,7 +169,7 @@ const FeedbackFormsPage = () => {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="flex h-[calc(100vh-7rem)] flex-col gap-6 overflow-hidden">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold text-foreground">Feedback Forms</h1>
@@ -170,16 +178,40 @@ const FeedbackFormsPage = () => {
             </p>
           </div>
 
-          <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
-            <Plus className="w-4 h-4" /> New Form
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
+              <Plus className="w-4 h-4" /> New Form
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  const createdForms = await feedbackQuestionsAPI.seedMock({ totalForms: 5 });
+                  toast({
+                    title: 'Seeded',
+                    description: `${createdForms.length} mock feedback forms created from the template questions.`,
+                  });
+                  await refreshData();
+                } catch (err) {
+                  console.error('Seed failed', err);
+                  toast({ title: 'Seed failed', description: err.response?.data?.message || err.message || 'Unable to seed mock form', variant: 'destructive' });
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="gap-2 w-fit"
+            >
+              Seed 5 Mock Forms
+            </Button>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3">
+          <CardContent className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label>Search</Label>
               <div className="relative">
@@ -232,6 +264,20 @@ const FeedbackFormsPage = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All forms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All forms</SelectItem>
+                  <SelectItem value="active">Active only</SelectItem>
+                  <SelectItem value="inactive">Inactive only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
 
@@ -245,14 +291,14 @@ const FeedbackFormsPage = () => {
         />
 
         {loading ? (
-          <div className="flex h-64 items-center justify-center rounded-lg border">
+          <div className="flex flex-1 items-center justify-center rounded-lg border">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" />
               <p>Loading forms...</p>
             </div>
           </div>
         ) : filteredForms.length === 0 ? (
-          <div className="flex h-64 items-center justify-center rounded-lg border">
+          <div className="flex flex-1 items-center justify-center rounded-lg border">
             <div className="flex flex-col items-center gap-3 text-center">
               <p className="text-muted-foreground">
                 {forms.length === 0 ? 'No feedback forms yet.' : 'No forms match your filters.'}
@@ -265,96 +311,116 @@ const FeedbackFormsPage = () => {
             </div>
           </div>
         ) : (
-          <div className="grid gap-4">
-            <AnimatePresence initial={false}>
-              {paginatedForms.map((form) => (
-                <motion.div
-                  key={form.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                >
-                  <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setPreviewForm(form); setPreviewOpen(true); }}>
-                    <CardContent className="pt-6">
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-lg font-semibold text-foreground">{form.name}</h3>
-                            {form.description && (
-                              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{form.description}</p>
-                            )}
-                            <div className="mt-3 text-xs text-muted-foreground">
-                              {getFormStats(form)}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="grid gap-4 pb-2">
+              <AnimatePresence initial={false}>
+                {paginatedForms.map((form) => (
+                  <motion.div
+                    key={form.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setPreviewForm(form); setPreviewOpen(true); }}>
+                      <CardContent className="pt-6">
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-lg font-semibold text-foreground">{form.name}</h3>
+                                <Badge variant="outline">Version {form.versionNumber || 1}</Badge>
+                              </div>
+                              {form.description && (
+                                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{form.description}</p>
+                              )}
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className={form.isActive
+                                    ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                    : 'border-transparent bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-200'}
+                                >
+                                  {form.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                                <span>{getFormStats(form)}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/admin/feedback-questions?id=${form.id}`)}
+                                className="gap-2"
+                              >
+                                <Edit className="w-4 h-4" /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={form.isActive ? 'destructive' : 'default'}
+                                onClick={() => handleStatusToggle(form, !form.isActive)}
+                                disabled={statusUpdatingId === form.id}
+                                className="gap-2"
+                              >
+                                {statusUpdatingId === form.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Updating
+                                  </>
+                                ) : form.isActive ? (
+                                  'Deactivate'
+                                ) : (
+                                  'Activate'
+                                )}
+                              </Button>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => navigate(`/admin/feedback-questions?id=${form.id}`)}
-                              className="gap-2"
-                            >
-                              <Edit className="w-4 h-4" /> Edit
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(form.id)}
-                              disabled={deleting === form.id}
-                              className="gap-2"
-                            >
-                              {deleting === form.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
+                          {form.scopes && (
+                            <div className="flex flex-wrap gap-2">
+                              {form.scopes.departmentIds?.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {form.scopes.departmentIds.map((deptId) => (
+                                    <Badge key={`dept-${deptId}`} variant="secondary">
+                                      {getDepartmentName(deptId)}
+                                    </Badge>
+                                  ))}
+                                </div>
                               )}
-                            </Button>
-                          </div>
+                              {form.scopes.designationIds?.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {form.scopes.designationIds.map((desigId) => (
+                                    <Badge key={`desig-${desigId}`} variant="outline">
+                                      {getDesignationName(desigId)}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-
-                        {form.scopes && (
-                          <div className="flex flex-wrap gap-2">
-                            {form.scopes.departmentIds?.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {form.scopes.departmentIds.map((deptId) => (
-                                  <Badge key={`dept-${deptId}`} variant="secondary">
-                                    {getDepartmentName(deptId)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                            {form.scopes.designationIds?.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {form.scopes.designationIds.map((desigId) => (
-                                  <Badge key={`desig-${desigId}`} variant="outline">
-                                    {getDesignationName(desigId)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 border-t bg-background pt-4">
           <div className="text-xs text-muted-foreground">
-            {filteredForms.length > 0 ? `Showing ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, filteredForms.length)} of ${filteredForms.length} form(s)` : 'No forms to display'}
+            {filteredForms.length > 0
+              ? `Showing ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, filteredForms.length)} of ${filteredForms.length} form(s)`
+              : 'No forms to display'}
           </div>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -375,7 +441,7 @@ const FeedbackFormsPage = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={currentPage === totalPages}
               >
                 <ChevronRight className="w-4 h-4" />

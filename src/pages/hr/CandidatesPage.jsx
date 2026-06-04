@@ -28,6 +28,7 @@ import {
   CalendarClockIcon,
   Eye,
 } from 'lucide-react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -36,34 +37,10 @@ import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
-
-const CANDIDATE_STATUSES = [
-  'APPLIED',
-  'SCREENING',
-  'SCHEDULED',
-  'INTERVIEWED',
-  'TECHNICAL_ROUND',
-  'HR_ROUND',
-  'SELECTED',
-  'REJECTED',
-  'WITHDRAWN',
-  'ON_HOLD',
-];
+import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { getCandidateStatusBadgeClass, getCandidateStatusLabel } from '@/lib/candidateSteps';
 
 const CANDIDATES_PER_PAGE = 10;
-
-const STATUS_COLORS = {
-  APPLIED: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  SCREENING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  SCHEDULED: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  INTERVIEWED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
-  TECHNICAL_ROUND: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
-  HR_ROUND: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
-  SELECTED: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  WITHDRAWN: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-  ON_HOLD: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-};
 
 const getCandidateSubtitle = (candidate) => {
   return candidate.departmentName || candidate.email || '-';
@@ -73,9 +50,24 @@ const getTargetDesignation = (candidate) => {
   return candidate.targetDesignationName || '-';
 };
 
+const getRowTooltip = (candidate) => {
+  if (!candidate) return '';
+  const parts = [
+    candidate.name || '-',
+    candidate.email || '-',
+    candidate.phone || '-',
+    `RR: ${candidate.resourceRequestNumber || '-'}`,
+    `Exp: ${candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y` : '-'}`,
+    `Target: ${candidate.targetDesignationName || '-'}`,
+    `Status: ${candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}`,
+  ];
+  return parts.join(' • ');
+};
+
 const CandidatesPage = () => {
   const navigate = useNavigate();
   const { formatDate } = useFormattedDateTime();
+  const { candidateSteps } = useCandidateSteps();
   const [candidates, setCandidates] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -234,8 +226,8 @@ const CandidatesPage = () => {
                 <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
-                  {CANDIDATE_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                  {candidateSteps.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -272,50 +264,85 @@ const CandidatesPage = () => {
                       {candidates.map((candidate) => (
                         <TableRow key={candidate.id} className="cursor-pointer" onClick={() => handleOpenView(candidate)}>
                           <TableCell>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Avatar className="h-9 w-9 border border-border shrink-0">
-                                <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                  {getInitial(candidate.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <p className="font-semibold truncate">{candidate.name}</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <Avatar className="h-9 w-9 border border-border shrink-0">
+                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                                      {getInitial(candidate.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="font-semibold truncate">{candidate.name}</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {getCandidateSubtitle(candidate)}
+                                    </p>
+                                  </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {getCandidateSubtitle(candidate)}
-                                </p>
-                              </div>
-                            </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.name || getCandidateSubtitle(candidate)}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.email}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Mail className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.email}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.email || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Phone className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.phone || '-'}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Phone className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.phone || '-'}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.phone || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Hash className="w-4 h-4 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{candidate.resourceRequestNumber || '-'}</span>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Hash className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{candidate.resourceRequestNumber || '-'}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.resourceRequestNumber || '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <span className="truncate">{candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y exp` : '-'}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y exp` : '-'}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.yearsOfExperience ? `${candidate.yearsOfExperience} years experience` : '-'}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <span className="truncate">{getTargetDesignation(candidate)}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{getTargetDesignation(candidate)}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{getTargetDesignation(candidate)}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs shrink-0`}>
-                              {candidate.status.replace(/_/g, ' ')}
-                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, candidate.status)} text-xs shrink-0`}>
+                                  {getCandidateStatusLabel(candidateSteps, candidate.status)}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>{getCandidateStatusLabel(candidateSteps, candidate.status)}</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5">
@@ -368,20 +395,27 @@ const CandidatesPage = () => {
                       <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenView(candidate)}>
                         <CardContent className="p-3">
                           <div className="flex items-center gap-1 min-w-0 w-full">
-                            <Avatar className="h-9 w-9 border border-border shrink-0">
-                              <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                {getInitial(candidate.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col min-w-0 flex-1">
-                              <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {getCandidateSubtitle(candidate)}
-                              </p>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 min-w-0 w-full">
+                                  <Avatar className="h-9 w-9 border border-border shrink-0">
+                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
+                                      {getInitial(candidate.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {getCandidateSubtitle(candidate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.name || getCandidateSubtitle(candidate)}</TooltipContent>
+                            </Tooltip>
                             <div className="shrink-0 ml-2">
-                              <Badge className={`${STATUS_COLORS[candidate.status] || 'bg-gray-100 text-gray-800'} text-xs`}>
-                                {candidate.status.replace(/_/g, ' ')}
+                              <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, candidate.status)} text-xs`}> 
+                                {getCandidateStatusLabel(candidateSteps, candidate.status)}
                               </Badge>
                             </div>
                           </div>
@@ -451,6 +485,7 @@ const CandidatesPage = () => {
           open={isAddOpen}
           candidate={null}
           departments={departments}
+          candidateSteps={candidateSteps}
           onOpenChange={setIsAddOpen}
           onSaveSuccess={applyFilters}
           onSchedule={setIsInterviewSchedulePageOpen}
@@ -461,6 +496,7 @@ const CandidatesPage = () => {
           open={isEditOpen}
           candidate={selectedCandidate}
           departments={departments}
+          candidateSteps={candidateSteps}
           onOpenChange={setIsEditOpen}
           onSaveSuccess={applyFilters}
           readOnly={isReadOnly}

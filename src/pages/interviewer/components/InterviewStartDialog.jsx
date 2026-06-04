@@ -19,9 +19,23 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const [candidate, setCandidate] = useState(null);
   const [interviewDetails, setInterviewDetails] = useState(null);
   const [error, setError] = useState('');
+  const displayCandidateName = candidate?.name || interviewDetails?.candidateName || 'Candidate details unavailable';
 
   useEffect(() => {
-    if (!open || !interviewScheduleId) return;
+    if (!open) {
+      setLoading(true);
+      setCandidate(null);
+      setInterviewDetails(null);
+      setError('');
+      return;
+    }
+
+    if (!interviewScheduleId) {
+      setLoading(false);
+      setError('Missing interview schedule ID.');
+      return;
+    }
+
     loadInterviewData();
   }, [open, interviewScheduleId]);
 
@@ -62,7 +76,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
   const handleStartInterview = () => {
     onOpenChange(false);
-    // navigate(`/interviewer/feedback/${interviewScheduleId}`);
+    navigate(`/interviewer/feedback/${interviewScheduleId}`);
   };
 
   return (
@@ -88,21 +102,25 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           </div>
         ) : (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      
+            
+
             {/* Candidate Profile Section */}
-            {candidate && (
-              <div className="space-y-4 p-4 ">
-                {/* Candidate Header */}
+            {candidate || interviewDetails?.candidateName ? (
+              <div className="space-y-4 p-4">
                 <div className="flex items-start gap-4 pb-4 border-b">
                   <Avatar className="h-16 w-16 border-2 border-primary">
                     <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
-                      {getInitial(candidate.name)}
+                      {getInitial(displayCandidateName)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-gray-900">{candidate.name}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
-                    {candidate.phone && (
+                    <h3 className="text-lg font-bold text-gray-900">{displayCandidateName}</h3>
+                    {candidate?.email ? (
+                      <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
+                    ) : interviewDetails?.candidateName ? (
+                      <p className="text-sm text-gray-600 mb-2">Booked candidate</p>
+                    ) : null}
+                    {candidate?.phone && (
                       <div className="flex items-center gap-1 text-sm text-gray-600">
                         <Phone className="w-4 h-4" />
                         <span>{candidate.phone}</span>
@@ -111,8 +129,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   </div>
                 </div>
 
-                 {/* Schedule Section - Top Priority */}
-            {interviewDetails && (
+
+                {interviewDetails && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-blue-900 mb-3">Interview Schedule</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -147,9 +165,10 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               </div>
             )}
 
-                {/* Professional Details Grid */}
+            
+
                 <div className="grid grid-cols-2 gap-4">
-                  {candidate.targetDesignationName && (
+                  {candidate?.targetDesignationName && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <Award className="w-4 h-4  text-blue-600 mt-1 shrink-0" />
@@ -161,7 +180,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
 
-                  {candidate.departmentName && (
+                  {candidate?.departmentName && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <Briefcase className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
@@ -173,7 +192,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
 
-                  {candidate.tierName && (
+                  {candidate?.tierName && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <TrendingUp className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
@@ -185,7 +204,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
 
-                  {candidate.yearsOfExperience && (
+                  {candidate?.yearsOfExperience !== undefined && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <Hash className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
@@ -197,7 +216,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
 
-                  {candidate.location && (
+                  {candidate?.location && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2">
                       <div className="flex items-start gap-2">
                         <MapPin className="w-4 h-4 text-blue-600 mt-1 shrink-0" />
@@ -210,6 +229,10 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   )}
                 </div>
               </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-600">
+                Candidate details are unavailable, but the interview schedule is still loaded.
+              </div>
             )}
           </motion.div>
         )}
@@ -218,7 +241,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={handleStartInterview} disabled={loading || !candidate} className="gap-2">
+          <Button onClick={handleStartInterview} disabled={loading || !interviewScheduleId} className="gap-2">
             <User className="w-4 h-4" />
             Start Interview
           </Button>

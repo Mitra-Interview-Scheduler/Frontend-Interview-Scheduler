@@ -43,6 +43,11 @@ import '@/styles/AvailabilityCalendar.css';
 
 const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
 const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
+const CALENDAR_PAGE_SIZES = {
+  month: 500,
+  week: 200,
+  day: 100,
+};
 
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -79,6 +84,7 @@ const AvailabilityViewPage = () => {
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -137,9 +143,16 @@ const AvailabilityViewPage = () => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
+        const { start, end } = computeRangeForView(currentView, calendarDate);
+        const initialAvailabilityFilters = {
+          startDateTime: formatLocalDateTime(start),
+          endDateTime: formatLocalDateTime(end),
+          page: 0,
+          size: getCalendarPageSize(currentView),
+        };
         const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
           // Load initial availability for visible range
-          hrAvailabilityAPI.getAllAvailability(),
+          hrAvailabilityAPI.getAllAvailability(initialAvailabilityFilters),
           departmentAPI.getAllDepartments(),
           technologyAPI.getAllTechnologies(),
           designationAPI.getAllDesignations(),
@@ -271,6 +284,22 @@ const AvailabilityViewPage = () => {
     }
   };
 
+  const getCalendarPageSize = (view) => CALENDAR_PAGE_SIZES[view] || CALENDAR_PAGE_SIZES.week;
+
+  const buildCalendarAvailabilityFilters = (view, date, overrides = {}) => {
+    const { start, end } = computeRangeForView(view, date || calendarDate);
+    return {
+      startDateTime: formatLocalDateTime(start),
+      endDateTime: formatLocalDateTime(end),
+      departmentIds: filterDept.length > 0 ? filterDept : null,
+      technologyIds: filterTech.length > 0 ? filterTech : null,
+      minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
+      page: 0,
+      size: getCalendarPageSize(view),
+      ...overrides,
+    };
+  };
+
   // Simple toolbar with loading indicator
   const HRCalendarToolbar = ({ label, onNavigate, onView, view, views, loading }) => {
     const viewList = Array.isArray(views) ? views : Object.keys(views || {});
@@ -295,17 +324,7 @@ const AvailabilityViewPage = () => {
   const fetchAvailabilityForView = async (view, date) => {
     try {
       setLoading(true);
-      const { start, end } = computeRangeForView(view, date || calendarDate);
-      const filters = {
-        startDateTime: formatLocalDateTime(start),
-        endDateTime: formatLocalDateTime(end),
-        departmentIds: filterDept.length > 0 ? filterDept : null,
-        technologyIds: filterTech.length > 0 ? filterTech : null,
-        minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
-        // For month view, request server-side pagination to avoid huge payloads
-        page: view === 'month' ? 0 : null,
-        size: view === 'month' ? 500 : null,
-      };
+      const filters = buildCalendarAvailabilityFilters(view, date || calendarDate);
       const data = await hrAvailabilityAPI.getAllAvailability(filters);
       const colorMap = buildColorMap(data);
       setRawSlots(data);
@@ -325,7 +344,7 @@ const AvailabilityViewPage = () => {
       const { minLevelOrder } = pendingFilter;      
       if (minLevelOrder != null) {
         // Find the designation with matching levelOrder
-        const matchingDesignation = designationsForSelectedTier.find(d => d.id === minLevelOrder);
+        const matchingDesignation = designationsForSelectedTier.find(d => d.levelOrder === minLevelOrder);
         if (matchingDesignation) {
           setMinDesignationLevel(matchingDesignation.levelOrder.toString());
         }
@@ -400,12 +419,11 @@ const AvailabilityViewPage = () => {
         levelOrderToSend = d ? d.levelOrder : null;
       }
 
+      const visibleRange = computeRangeForView(currentView, calendarDate);
       const filters = {
-        departmentIds: filterDept.length > 0 ? filterDept : null,
-        technologyIds: filterTech.length > 0 ? filterTech : null,
-        minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
-        startDateTime: dateRange.start ? formatLocalDateTime(dateRange.start) : null,
-        endDateTime: dateRange.end ? formatLocalDateTime(dateRange.end) : null,
+        ...buildCalendarAvailabilityFilters(currentView, calendarDate),
+        startDateTime: formatLocalDateTime(dateRange.start || visibleRange.start),
+        endDateTime: formatLocalDateTime(dateRange.end || visibleRange.end),
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
         minDesignationLevelInDepartment: levelOrderToSend,
@@ -427,7 +445,9 @@ const AvailabilityViewPage = () => {
   };
 
   const refreshCalendar = async () => {
-    const data = await hrAvailabilityAPI.getAllAvailability();
+    const data = await hrAvailabilityAPI.getAllAvailability(
+      buildCalendarAvailabilityFilters(currentView, calendarDate)
+    );
     const colorMap = buildColorMap(data);
     setRawSlots(data);
     setEvents(formatSlots(data, colorMap));
@@ -619,6 +639,16 @@ const AvailabilityViewPage = () => {
   }, [panelSlots.length]);
 
   // ── Tech filter helpers ───────────────────────────────────────────────────
+  const handleDepartmentChange = (value) => {
+    const departmentId = value && value !== 'ALL' && value !== 'ANY' ? value.toString() : '';
+    setFilterDept(departmentId ? [parseInt(departmentId, 10)] : []);
+    setSelectedDeptForDesignation(departmentId);
+    setSelectedTierInDept('');
+    setMinDesignationLevel('');
+    setDesignationsForSelectedTier([]);
+    if (!departmentId) setTiersForSelectedDept([]);
+  };
+
   const handleTechSelect = (id) =>
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
@@ -869,17 +899,29 @@ const calendarSlotPropGetter = useCallback((date) => {
 
         {/* Filters */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5" /> Filters
             </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFiltersCollapsed((value) => !value)}
+              className="h-9 gap-2"
+              aria-expanded={!isFiltersCollapsed}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
+              {isFiltersCollapsed ? 'Show' : 'Hide'}
+            </Button>
           </CardHeader>
+          {!isFiltersCollapsed && (
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Department</Label>
                 <Select value={filterDept.length > 0 ? filterDept[0].toString() : 'ALL'}
-                  onValueChange={(v) => setFilterDept(v === 'ALL' ? [] : [parseInt(v)])}>
+                  onValueChange={handleDepartmentChange}>
                   <SelectTrigger><SelectValue placeholder="All Departments" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Departments</SelectItem>
@@ -978,17 +1020,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                   onChange={(e) => setMinExperience(e.target.value)} />
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label>Department (Tier/Level Filter)</Label>
                 <Select value={selectedDeptForDesignation || 'ANY'}
-                  onValueChange={(v) => setSelectedDeptForDesignation(v === 'ANY' ? '' : v)}>
+                  onValueChange={handleDepartmentChange}>
                   <SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ANY">Any</SelectItem>
                     {departments.map((d) => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
+              </div> */}
 
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
@@ -1038,7 +1080,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <span className="text-sm font-semibold text-muted-foreground">Slots Shown</span>
+                <span className="text-sm font-semibold text-muted-foreground">Slots Shown </span>
                 <div className="flex gap-6">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-indigo-500" />
@@ -1061,79 +1103,84 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
             </div>
           </CardContent>
-        </Card>
-
-        {/* Panel mode banner */}
-        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : '' }>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4">
-                <Switch checked={panelMode} onCheckedChange={(v) => { setPanelMode(v); setPanelSlots([]); }} />
-                <div>
-                  <p className="font-semibold text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-sky-600" /> Panel Interview Mode
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {panelMode
-                      ? 'Click AVAILABLE slots to add interviewers. Selected slots show a ✓ badge. Overlap window calculated automatically.'
-                      : 'Enable to schedule one candidate with multiple interviewers at the same time.'}
-                  </p>
-                </div>
-              </div>
-
-              {panelMode && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  {panelSlots.length > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {panelSlots.map((ps) => (
-                        <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {ps.slot.resource.interviewer}
-                          <button onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
-                            className="ml-1 hover:text-red-600"><X className="w-3 h-3" /></button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {panelSlots.length > 0 ? (
-                    <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white gap-2"
-                      disabled={panelTimeOptions.length === 0}
-                      onClick={() => {
-                        setPanelBookStartOverride(''); setPanelBookEndOverride('');
-                        setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
-                        setCandidateSearchTerm('');
-                        setPanelDialogOpen(true);
-                      }}>
-                      <Send className="w-4 h-4" />
-                      Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
-                  )}
-                  {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
-                    <p className="text-xs text-red-600 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> No overlapping time
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
+          )}
         </Card>
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5" /> Availability Calendar
-              {panelMode && <Badge className="ml-2 bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
-            </CardTitle>
-            <CardDescription>
-              {panelMode
-                ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
-                : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" /> Availability Calendar
+                {panelMode && <Badge className="bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
+              </CardTitle>
+              <CardDescription>
+                {panelMode
+                  ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
+                  : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+              </CardDescription>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={panelMode ? 'default' : 'outline'}
+              className="gap-2 lg:self-start"
+              onClick={() => {
+                setPanelMode((value) => !value);
+                setPanelSlots([]);
+              }}
+            >
+              <Users className="w-4 h-4" />
+              {panelMode ? 'Exit Panel Mode' : 'Panel Interview Mode'}
+            </Button>
           </CardHeader>
+          {panelMode && (
+            <CardContent className="pt-0 pb-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-sky-300 bg-sky-50 p-3 dark:bg-sky-950/20">
+                {panelSlots.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {panelSlots.map((ps) => (
+                      <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {ps.slot.resource.interviewer}
+                        <button
+                          onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
+                          className="ml-1 hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {panelSlots.length > 0 ? (
+                  <Button
+                    size="sm"
+                    className="bg-sky-600 hover:bg-sky-700 text-white gap-2 self-start"
+                    disabled={panelTimeOptions.length === 0}
+                    onClick={() => {
+                      setPanelBookStartOverride('');
+                      setPanelBookEndOverride('');
+                      setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
+                      setCandidateSearchTerm('');
+                      setPanelDialogOpen(true);
+                    }}
+                  >
+                    <Send className="w-4 h-4" />
+                    Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
+                )}
+                {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
+                  <p className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> No overlapping time
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          )}
           <CardContent>
             <AnimatePresence mode="wait">
               {loading ? (

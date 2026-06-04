@@ -36,6 +36,12 @@ const FeedbackFormPreview = ({
         <DialogBody className="space-y-4 pr-2">
           <div>
             <p className="text-sm text-muted-foreground mb-2">{form.description || 'No description provided.'}</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Badge variant={form.isActive ? 'default' : 'secondary'}>
+                {form.isActive ? 'Active' : 'Inactive'}
+              </Badge>
+              <Badge variant="outline">Version {form.versionNumber || 1}</Badge>
+            </div>
             <div className="flex flex-wrap gap-2 mt-3">
               {form.scopes?.departmentIds?.length > 0 && (
                 <div className="flex flex-wrap gap-1">

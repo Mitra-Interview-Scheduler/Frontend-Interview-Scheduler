@@ -7,11 +7,7 @@ const feedbackAPI = {
    * Falls back to mock data if the API is unavailable or returns no data.
    */
   async getFeedbackQuestions() {
-    // TEMPORARILY USING MOCK DATA - Remove this line to use API
-    console.warn('Using mock feedback questions for testing');
-    return mockFeedbackQuestions;
     
-    /* Original API code - commented for testing
     try {
       const response = await api.get('/feedback/questions');
       if (response.data && response.data.questions && response.data.questions.length > 0) {
@@ -24,17 +20,18 @@ const feedbackAPI = {
       console.warn('Failed to fetch feedback questions from API, using mock data:', error.message);
       return mockFeedbackQuestions;
     }
-    */
+    
   },
 
   /**
    * Submit feedback for an interview.
    * POST to /feedback/responses with interviewScheduleId and responses JSON.
    */
-  async submitFeedback(interviewScheduleId, responses) {
+  async submitFeedback(interviewScheduleId, responses, feedbackFormId = null) {
     try {
       const payload = {
         interviewScheduleId,
+        feedbackFormId,
         responses,
         submittedAt: new Date().toISOString(),
       };
@@ -47,6 +44,7 @@ const feedbackAPI = {
       return {
         id: Date.now(),
         interviewScheduleId,
+        feedbackFormId,
         responses,
         submittedAt: new Date().toISOString(),
         message: 'Feedback logged (no persistence without backend)',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,18 @@ const QUESTION_CATEGORIES = [
   'Communication Skills',
 ];
 
-const createQuestion = () => ({
+const DEFAULT_DROPDOWN_OPTIONS = [
+  'N/A',
+  '1 - Poor',
+  '2 - Fair',
+  '3 - Good',
+  '4 - Very Good',
+  '5 - Excellent',
+];
+
+const getDefaultOptionsForType = (type) => (type === 'dropdown' ? [...DEFAULT_DROPDOWN_OPTIONS] : ['']);
+
+const createQuestion = (overrides = {}) => ({
   id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
   label: '',
   category: QUESTION_CATEGORIES[0],
@@ -48,6 +59,7 @@ const createQuestion = () => ({
   placeholder: '',
   helpText: '',
   options: [''],
+  ...overrides,
 });
 
 const normalizeMultiLine = (value) =>
@@ -83,6 +95,8 @@ const FeedbackQuestionsPage = () => {
   const [formDescription, setFormDescription] = useState('');
   const [questions, setQuestions] = useState([createQuestion()]);
   const [initialData, setInitialData] = useState(null);
+  const questionRefs = useRef({});
+  const [scrollToQuestionId, setScrollToQuestionId] = useState(null);
 
   const hasChanges = useMemo(() => {
     if (!initialData) return true;
@@ -161,7 +175,15 @@ const FeedbackQuestionsPage = () => {
       for (const deptId of selectedDepartmentIds) {
         try {
           const desigs = await designationAPI.getDesignationsByDepartment(Number(deptId));
-          result[deptId] = desigs || [];
+          // Sort designations by tierOrder (ascending). Null/undefined tierOrder go last,
+          // then fallback to name for deterministic ordering.
+          const sorted = (desigs || []).slice().sort((a, b) => {
+            const ta = a?.tierOrder ?? Number.MAX_SAFE_INTEGER;
+            const tb = b?.tierOrder ?? Number.MAX_SAFE_INTEGER;
+            if (ta !== tb) return ta - tb;
+            return String(a?.name || '').localeCompare(String(b?.name || ''));
+          });
+          result[deptId] = sorted;
         } catch (error) {
           console.error(`Failed to load designations for department ${deptId}:`, error);
           result[deptId] = [];
@@ -171,6 +193,15 @@ const FeedbackQuestionsPage = () => {
     };
     loadDesignations();
   }, [selectedDepartmentIds]);
+
+  useEffect(() => {
+    if (!scrollToQuestionId) return;
+    const element = questionRefs.current[scrollToQuestionId];
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setScrollToQuestionId(null);
+    }
+  }, [scrollToQuestionId, questions.length]);
 
   const toggleDepartment = (departmentId) => {
     const id = departmentId.toString();
@@ -204,10 +235,30 @@ const FeedbackQuestionsPage = () => {
   };
 
   const updateQuestion = (questionId, patch) => {
-    setQuestions((current) => current.map((question) => (question.id === questionId ? { ...question, ...patch } : question)));
+    setQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId) return question;
+
+        const nextQuestion = { ...question, ...patch };
+
+        if (patch.type === 'dropdown' && question.type !== 'dropdown') {
+          nextQuestion.options = getDefaultOptionsForType('dropdown');
+        }
+
+        if (patch.type === 'text' && question.type === 'dropdown') {
+          nextQuestion.options = [''];
+        }
+
+        return nextQuestion;
+      })
+    );
   };
 
-  const addQuestion = () => setQuestions((current) => [...current, createQuestion()]);
+  const addQuestion = () => {
+    const newQuestion = createQuestion();
+    setQuestions((current) => [...current, newQuestion]);
+    setScrollToQuestionId(newQuestion.id);
+  };
 
   const duplicateQuestion = (question) => {
     const clone = {
@@ -278,6 +329,8 @@ const FeedbackQuestionsPage = () => {
 
   const validate = () => {
     if (!formName.trim()) return 'Form name is required';
+    if (selectedDepartmentIds.length === 0) return 'Select at least one department';
+    if (selectedDesignationIds.length === 0) return 'Select at least one designation from the selected department';
     if (!questions.length) return 'Add at least one question';
     if (questions.some((question) => !question.label.trim())) return 'Every question needs a label';
     if (questions.some((question) => question.type === 'dropdown' && normalizeMultiLine(question.options.join('\n')).length === 0)) {
@@ -448,7 +501,7 @@ const FeedbackQuestionsPage = () => {
                               {desigs.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">No designations available for this department</p>
                               ) : (
-                                <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="grid gap-2 sm:grid-cols-3">
                                   {desigs.map((designation) => (
                                     <label
                                       key={designation.id}
@@ -460,8 +513,8 @@ const FeedbackQuestionsPage = () => {
                                       />
                                       <span className="flex-1">
                                         {designation.name}
-                                        {designation.levelOrder != null && (
-                                          <span className="ml-1 text-xs text-muted-foreground">(L{designation.levelOrder})</span>
+                                        {designation.tierOrder != null && (
+                                          <span className="ml-1 text-xs text-muted-foreground"> (Tier - {designation.tierOrder})</span>
                                         )}
                                       </span>
                                     </label>
@@ -516,6 +569,13 @@ const FeedbackQuestionsPage = () => {
               {questions.map((question, index) => (
                 <motion.div
                   key={question.id}
+                  ref={(element) => {
+                    if (element) {
+                      questionRefs.current[question.id] = element;
+                    } else {
+                      delete questionRefs.current[question.id];
+                    }
+                  }}
                   layout
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
