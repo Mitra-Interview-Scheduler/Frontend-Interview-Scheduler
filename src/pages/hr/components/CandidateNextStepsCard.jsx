@@ -122,7 +122,6 @@ function CandidateNextStepsCard({
                   disabled={saving || !candidate?.id}
                   title={action.label}
                 >
-                  <ArrowRight className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{action.label}</span>
                 </Button>
               ))}
