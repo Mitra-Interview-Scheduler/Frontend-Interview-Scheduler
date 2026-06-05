@@ -33,6 +33,7 @@ function InterviewFeedbackPage() {
   
   // Questions and form state
   const [questions, setQuestions] = useState([]);
+  const [obligatoryQuestions, setObligatoryQuestions] = useState([]);
   const [formResponses, setFormResponses] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -80,6 +81,7 @@ function InterviewFeedbackPage() {
   useEffect(() => {
     if (!selectedForm) {
       setQuestions([]);
+      setObligatoryQuestions([]);
       setFormResponses({});
       setValidationErrors({});
       return;
@@ -87,6 +89,7 @@ function InterviewFeedbackPage() {
 
     const selectedQuestions = selectedForm.questions || [];
     setQuestions(selectedQuestions);
+    setObligatoryQuestions(selectedForm.obligatoryQuestions || []);
 
     const initialResponses = {};
     selectedQuestions.forEach((question) => {
@@ -171,6 +174,12 @@ function InterviewFeedbackPage() {
   const validateForm = () => {
     const errors = {};
     questions.forEach((q) => {
+      if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
+        errors[q.order] = `${q.label} is required`;
+      }
+    });
+    
+    obligatoryQuestions.forEach((q) => {
       if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
         errors[q.order] = `${q.label} is required`;
       }
@@ -556,15 +565,15 @@ function InterviewFeedbackPage() {
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-600">Progress</span>
                     <span className="font-semibold text-blue-600">
-                      {completedCount} / {questions.length}
+                      {completedCount} / {questions.length + obligatoryQuestions.length} completed
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{
-                        width: questions.length > 0 
-                          ? `${(completedCount / questions.length) * 100}%`
+                        width: (questions.length + obligatoryQuestions.length) > 0 
+                          ? `${(completedCount / (questions.length + obligatoryQuestions.length)) * 100}%`
                           : '0%'
                       }}
                     />
@@ -619,8 +628,44 @@ function InterviewFeedbackPage() {
                   )}
 
                   {/* Questions */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 p-4">
                     {questions.map((question, index) => (
+                      <motion.div
+                        key={question.order}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="bg-blue-100 rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-blue-600">{index + 1}</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <Label className="text-sm font-bold text-gray-900">
+                                {question.label}
+                                {question.required && <span className="text-red-500 ml-1">*</span>}
+                              </Label>
+                            </div>
+                            {question.helpText && (
+                              <p className="text-xs text-gray-600 mt-1 italic">{question.helpText}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3  bg-slate-100 border  rounded-lg py-3" >
+                        {renderFormField(question)}
+                        </div>
+                        
+                      </motion.div>
+                    ))}
+                  </div>
+
+
+                  {/* Obligatory Questions */}
+                  <div className="space-y-4 bg-gradient-to-br from-blue-200 to-indigo-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 uppercase font-semibold mb-3">Obligatory Questions</p>
+                    {obligatoryQuestions.map((question, index) => (
                       <motion.div
                         key={question.order}
                         initial={{ opacity: 0, y: 10 }}
