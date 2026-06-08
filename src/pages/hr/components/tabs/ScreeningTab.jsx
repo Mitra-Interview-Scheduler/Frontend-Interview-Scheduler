@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,126 +12,169 @@ import { Loader2, Save } from 'lucide-react';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI'; 
 import { designationAPI } from '@/services/designationAPI'; 
+import { candidateAPI } from '@/services/candidateAPI'; 
 
 import COUNTRIES from '/src/data/countries.json';
 
+const DEFAULT_STATE = {
+  isProjectSpecific: 'no',
+  projectName: '',
+  region: '',
+  engagementType: 'FULL_TIME',
+  duration: '',
+  targetStartDate: '',
+  profileSource: 'Direct Applicant',
+  referrerName: '',
+  screenedBy: '', 
+  feedback: '',
+  natureOfRecruitment: '',
+  roleStretch: '',
+  specialNotes: '',
+  departmentId: '',
+  tierId: '',
+  designationId: '', 
+  modifiedAt: '',
+};
+
 const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData, currentUser }) => {
-  const loggedInUser = currentUser?.name ;
+  const loggedInUser = currentUser?.name || '';
 
-  const defaultState = {
-    isProjectSpecific: '',
-    projectName: '',
-    region: '',
-    engagementType: '',
-    duration: '',
-    targetStartDate: '',
-    profileSource: 'Direct Applicant',
-    referrerName: '',
-    screenedBy: loggedInUser, 
-    feedback: '',
-    natureOfRecruitment: '',
-    roleStretch: '',
-    specialNotes: '',
-    departmentId: '',
-    tierId: '',
-    designationId: '', 
-    modifiedAt: '',
-  };
-
-  const [localFormData, setLocalFormData] = useState(formData || defaultState);
-  const [pristineData, setPristineData] = useState(formData || defaultState);
+  const [localFormData, setLocalFormData] = useState(() => ({
+    ...DEFAULT_STATE,
+    screenedBy: loggedInUser
+  }));
+  const [pristineData, setPristineData] = useState(() => ({
+    ...DEFAULT_STATE,
+    screenedBy: loggedInUser
+  }));
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Track validation error flags for fields
   const [errors, setErrors] = useState({});
-
-  const activeData = formData || localFormData;
-  
-  const isDirty = JSON.stringify(activeData) !== JSON.stringify(pristineData);
 
   const [departments, setDepartments] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [desigs, setDesigs] = useState([]);
 
-  const isProjectRequired = activeData.isProjectSpecific === 'yes';
-  const isDurationRequired = activeData.engagementType && activeData.engagementType !== 'fulltime';
-
-  useEffect(() => {
-    if (formData) {
-      setLocalFormData(formData);
-      setPristineData(formData);
-    }
-  }, [formData]);
-
-  useEffect(() => {
-    if (currentUser?.name && !formData) {
-      updateField('screenedBy', currentUser.name);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const data = await departmentAPI.getAllDepartments();
-        setDepartments(data || []);
-      } catch (e) {
-        console.error("Failed fetching live departments:", e);
-        toast({
-          variant: "destructive",
-          title: "Connection Error",
-          description: "Could not retrieve the department layout matrix from server."
-        });
-        setDepartments([]);
-      }
+  // Normalize incoming backend data shapes to match localized UI format requirements
+  const normalizeData = useCallback((rawData) => {
+    if (!rawData) return { ...DEFAULT_STATE, screenedBy: loggedInUser };
+    return {
+      ...DEFAULT_STATE,
+      ...rawData,
+      isProjectSpecific: rawData.isProjectSpecific === true || rawData.isProjectSpecific === 'yes' ? 'yes' : 'no',
+      engagementType: rawData.engagementType ? rawData.engagementType.toUpperCase() : 'FULL_TIME',
+      departmentId: rawData.departmentId?.toString() || '',
+      tierId: rawData.tierId?.toString() || '',
+      designationId: rawData.designationId?.toString() || '',
+      duration: rawData.duration?.toString() || '',
     };
-    fetchInitialData();
+  }, [loggedInUser]);
+
+  // Derived tracking variables
+  const isDirty = useMemo(() => JSON.stringify(localFormData) !== JSON.stringify(pristineData), [localFormData, pristineData]);
+  const isProjectRequired = localFormData.isProjectSpecific === 'yes';
+  const isDurationRequired = localFormData.engagementType && localFormData.engagementType !== 'FULL_TIME';
+
+  // Dynamic structural dependancy triggers
+  const loadTiersForDept = useCallback(async (deptId) => {
+    if (!deptId) { setTiers([]); setDesigs([]); return; }
+    try {
+      const data = await tierAPI.getTiersByDepartment(parseInt(deptId, 10));
+      setTiers((data || []).sort((a, b) => a.tierOrder - b.tierOrder));
+    } catch (e) { 
+      console.error("Failed loading tiers:", e); 
+      setTiers([]); 
+    }
   }, []);
 
-  const updateField = (field, value) => {
-    if (!readOnly && !isSubmitting) {
-      // Clear the error indicator for this field as soon as the user starts typing/selecting
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: false }));
-      }
+  const loadDesignsForTier = useCallback(async (tierId) => {
+    if (!tierId) { setDesigs([]); return; }
+    try {
+      const data = await designationAPI.getDesignationsByTier(parseInt(tierId, 10));
+      setDesigs((data || []).sort((a, b) => a.levelOrder - b.levelOrder));
+    } catch (e) { 
+      console.error("Failed loading designations:", e); 
+      setDesigs([]); 
+    }
+  }, []);
 
-      if (handleInputChange) {
-        handleInputChange(field, value);
-      } else {
-        setLocalFormData(prev => ({ 
-          ...prev, 
-          [field]: value 
-        }));
+  // Sync structural updates when parents inject an exterior form schema downstream
+  useEffect(() => {
+    if (formData) {
+      const normalizedForm = normalizeData(formData);
+      setLocalFormData(normalizedForm);
+      setPristineData(normalizedForm);
+      if (normalizedForm.departmentId) loadTiersForDept(normalizedForm.departmentId);
+      if (normalizedForm.tierId) loadDesignsForTier(normalizedForm.tierId);
+    }
+  }, [formData, normalizeData, loadTiersForDept, loadDesignsForTier]);
+
+  // Initial lookup execution context
+  useEffect(() => {
+    const fetchScreeningAndMetadata = async () => {
+      if (!candidate?.id || formData) return;
+      setIsLoading(true);
+      try {
+        // Fetch baseline drop data
+        const deptData = await departmentAPI.getAllDepartments();
+        setDepartments(deptData || []);
+
+        // Fetch candidate data
+        const response = await candidateAPI.getCandidateScreeningFile(candidate.id);
+        const loadedData = normalizeData(response);
+        
+        setLocalFormData(loadedData);
+        setPristineData(loadedData);
+
+        if (loadedData.departmentId) loadTiersForDept(loadedData.departmentId);
+        if (loadedData.tierId) loadDesignsForTier(loadedData.tierId);
+      } catch (e) {
+        if (e.response?.status === 404) {
+          const freshState = { ...DEFAULT_STATE, screenedBy: loggedInUser };
+          setLocalFormData(freshState);
+          setPristineData(freshState);
+        } else {
+          console.error("Failed to fetch candidate metadata registers:", e);
+          toast({
+            variant: "destructive",
+            title: "Data Retrieval Error",
+            description: "Could not load existing screening setups for this workflow assignment."
+          });
+        }
+      } finally {
+        setIsLoading(false);
       }
+    };
+
+    fetchScreeningAndMetadata();
+  }, [candidate?.id, formData, loggedInUser, normalizeData, loadTiersForDept, loadDesignsForTier]);
+
+  // Sync session metrics
+  useEffect(() => {
+    if (loggedInUser && !localFormData.screenedBy) {
+      setLocalFormData(prev => ({ ...prev, screenedBy: loggedInUser }));
+    }
+  }, [loggedInUser, localFormData.screenedBy]);
+
+  const updateField = (field, value) => {
+    if (readOnly || isSubmitting || isLoading) return;
+
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: false }));
+    }
+
+    setLocalFormData(prev => ({ ...prev, [field]: value }));
+    if (handleInputChange) {
+      handleInputChange(field, value);
     }
   };
 
   const handleEngagementTypeChange = (value) => {
     updateField('engagementType', value);
-    if (value === 'fulltime' || !value) {
+    if (value === 'FULL_TIME' || !value) {
       updateField('duration', '');
       setErrors(prev => ({ ...prev, duration: false }));
-    }
-  };
-
-  const loadTiersForDept = async (deptId) => {
-    if (!deptId) { setTiers([]); setDesigs([]); return; }
-    try {
-      const data = await tierAPI.getTiersByDepartment(parseInt(deptId));
-      setTiers((data || []).sort((a, b) => a.tierOrder - b.tierOrder));
-    } catch (e) { 
-      console.error("Failed loading tiers for department:", e); 
-      setTiers([]); 
-    }
-  };
-
-  const loadDesignsForTier = async (tierId) => {
-    if (!tierId) { setDesigs([]); return; }
-    try {
-      const data = await designationAPI.getDesignationsByTier(parseInt(tierId));
-      setDesigs((data || []).sort((a, b) => a.levelOrder - b.levelOrder));
-    } catch (e) { 
-      console.error("Failed loading designations for tier:", e); 
-      setDesigs([]); 
     }
   };
 
@@ -154,25 +197,21 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
   const handleSubmitData = async () => {
     const newErrors = {};
 
-    // Validate Project Specific requirements
     if (isProjectRequired) {
-      if (!activeData.departmentId) newErrors.departmentId = true;
-      if (!activeData.tierId) newErrors.tierId = true;
-      if (!activeData.designationId) newErrors.designationId = true;
-      if (!activeData.projectName?.trim()) newErrors.projectName = true;
+      if (!localFormData.departmentId) newErrors.departmentId = true;
+      if (!localFormData.tierId) newErrors.tierId = true;
+      if (!localFormData.designationId) newErrors.designationId = true;
+      if (!localFormData.projectName?.trim()) newErrors.projectName = true;
     }
 
-    // Validate Duration requirement
-    if (isDurationRequired && !activeData.duration) {
+    if (isDurationRequired && !localFormData.duration) {
       newErrors.duration = true;
     }
 
-    // Validate Referral requirement
-    if (activeData.profileSource === 'Referral' && !activeData.referrerName?.trim()) {
+    if (localFormData.profileSource === 'Referral' && !localFormData.referrerName?.trim()) {
       newErrors.referrerName = true;
     }
 
-    // If there are errors, map them to state and halt processing
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       toast({
@@ -186,30 +225,47 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
     setIsSubmitting(true);
     try {
       const payload = {
-        ...activeData,
-        modifiedAt: new Date().toISOString()
+        ...localFormData,
+        isProjectSpecific: localFormData.isProjectSpecific === 'yes',
+        departmentId: localFormData.isProjectSpecific === 'yes' ? (parseInt(localFormData.departmentId, 10) || null) : null,
+        tierId: localFormData.isProjectSpecific === 'yes' ? (parseInt(localFormData.tierId, 10) || null) : null,
+        designationId: localFormData.isProjectSpecific === 'yes' ? (parseInt(localFormData.designationId, 10) || null) : null,
+        duration: isDurationRequired ? (parseInt(localFormData.duration, 10) || null) : null,
+        modifiedAt: new Date().toISOString(),
+        screenedBy: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).firstName + ' ' + JSON.parse(localStorage.getItem('user')).lastName : 'Unknown User',
+
       };
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      setPristineData(payload);
-      if (!formData) setLocalFormData(payload);
+      const savedData = await candidateAPI.saveCandidateScreeningFile(candidate.id, payload);
+      const updatedPristineState = normalizeData(savedData);
+      
+      setPristineData(updatedPristineState);
+      setLocalFormData(updatedPristineState);
 
       toast({
         title: "Changes Captured Successfully",
         description: "Screening requirements have updated across target business registries.",
       });
     } catch (err) {
-      console.error("Transmission breakdown during validation syncing:", err);
+      console.error("Transmission breakdown during update syncing:", err);
       toast({
         variant: "destructive",
         title: "Transmission Breakdown",
-        description: "An unexpected database synchronization fault was triggered while processing changes."
+        description: err.response?.data?.message || "An unexpected error occurred while saving configuration variables."
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center pt-20 pb-10 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-xs text-gray-500 font-medium">Loading Candidate Screening Profiles...</p>
+      </div>
+    );
+  }
 
   return (
     <motion.div 
@@ -227,7 +283,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-medium text-gray-600">Is this project specific interview?</Label>
-              <Select value={activeData.isProjectSpecific} onValueChange={(value) => updateField('isProjectSpecific', value)} disabled={readOnly || isSubmitting}>
+              <Select value={localFormData.isProjectSpecific} onValueChange={(value) => updateField('isProjectSpecific', value)} disabled={readOnly || isSubmitting}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="yes">Yes</SelectItem>
@@ -246,9 +302,9 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.departmentId ? 'text-red-600' : 'text-gray-600'}`}>
-                    Department {isProjectRequired && <span className="text-red-500">*</span>}
+                    Department <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={activeData.departmentId?.toString()} onValueChange={handleDepartmentChange} disabled={readOnly || isSubmitting}>
+                  <Select value={localFormData.departmentId} onValueChange={handleDepartmentChange} disabled={readOnly || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.departmentId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Department" />
                     </SelectTrigger>
@@ -262,9 +318,9 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.tierId ? 'text-red-600' : 'text-gray-600'}`}>
-                    Tier {isProjectRequired && <span className="text-red-500">*</span>}
+                    Tier <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={activeData.tierId?.toString()} onValueChange={handleTierChange} disabled={readOnly || !activeData.departmentId || isSubmitting}>
+                  <Select value={localFormData.tierId} onValueChange={handleTierChange} disabled={readOnly || !localFormData.departmentId || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.tierId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Tier" />
                     </SelectTrigger>
@@ -278,9 +334,9 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.designationId ? 'text-red-600' : 'text-gray-600'}`}>
-                    Project Role {isProjectRequired && <span className="text-red-500">*</span>}
+                    Project Role <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={activeData.designationId?.toString()} onValueChange={(value) => updateField('designationId', value)} disabled={readOnly || !activeData.tierId || isSubmitting}>
+                  <Select value={localFormData.designationId} onValueChange={(value) => updateField('designationId', value)} disabled={readOnly || !localFormData.tierId || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.designationId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Project Role" />
                     </SelectTrigger>
@@ -296,11 +352,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.projectName ? 'text-red-600' : 'text-gray-600'}`}>
-                    Project Name {isProjectRequired && <span className="text-red-500">*</span>}
+                    Project Name <span className="text-red-500">*</span>
                   </Label>
                   <Input 
                     placeholder="Enter project name" 
-                    value={activeData.projectName} 
+                    value={localFormData.projectName || ''} 
                     onChange={(e) => updateField('projectName', e.target.value)} 
                     className={`h-9 transition-colors ${errors.projectName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                     readOnly={readOnly || isSubmitting} 
@@ -309,7 +365,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
                 <div className="space-y-2">
                   <Label className="text-xs font-medium text-gray-600">Region / Country</Label>
-                  <Select value={activeData.region} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
+                  <Select value={localFormData.region} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
                     <SelectTrigger className="h-9"><SelectValue placeholder="Select a country" /></SelectTrigger>
                     <SelectContent>
                       {COUNTRIES.map((country) => (
@@ -325,12 +381,12 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-2">
               <Label className="text-xs font-medium text-gray-600">Engagement Type</Label>
-              <Select value={activeData.engagementType} onValueChange={handleEngagementTypeChange} disabled={readOnly || isSubmitting}>
+              <Select value={localFormData.engagementType} onValueChange={handleEngagementTypeChange} disabled={readOnly || isSubmitting}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fulltime">Full Time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="parttime">Part Time</SelectItem>
+                  <SelectItem value="FULL_TIME">Full Time</SelectItem>
+                  <SelectItem value="CONTRACT">Contract</SelectItem>
+                  <SelectItem value="PART_TIME">Part Time</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -354,7 +410,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                       if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault();
                     }}
                     placeholder="Enter duration (Required)"
-                    value={activeData.duration} 
+                    value={localFormData.duration || ''} 
                     onChange={(e) => {
                       const val = e.target.value;
                       if (val === '' || Number(val) >= 0) updateField('duration', val);
@@ -369,7 +425,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Target Start Date</Label>
-            <Input type="date" value={activeData.targetStartDate} onChange={(e) => updateField('targetStartDate', e.target.value)} className="h-9" readOnly={readOnly || isSubmitting} />
+            <Input type="date" value={localFormData.targetStartDate || ''} onChange={(e) => updateField('targetStartDate', e.target.value)} className="h-9" readOnly={readOnly || isSubmitting} />
           </div>
         </CardContent>
       </Card>
@@ -382,7 +438,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">How did Mitra get the candidate profile?</Label>
-            <Select value={activeData.profileSource} onValueChange={(value) => updateField('profileSource', value)} disabled={readOnly || isSubmitting}>
+            <Select value={localFormData.profileSource} onValueChange={(value) => updateField('profileSource', value)} disabled={readOnly || isSubmitting}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Direct Applicant">Direct Applicant</SelectItem>
@@ -394,7 +450,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
             </Select>
           </div>
 
-          {activeData.profileSource === 'Referral' && (
+          {localFormData.profileSource === 'Referral' && (
             <motion.div 
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
@@ -405,7 +461,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
               </Label>
               <Input 
                 placeholder="Enter referrer name" 
-                value={activeData.referrerName} 
+                value={localFormData.referrerName || ''} 
                 onChange={(e) => updateField('referrerName', e.target.value)} 
                 className={`h-9 transition-colors ${errors.referrerName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                 readOnly={readOnly || isSubmitting} 
@@ -423,7 +479,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Nature of Recruitment</Label>
-            <Select value={activeData.natureOfRecruitment} onValueChange={(value) => updateField('natureOfRecruitment', value)} disabled={readOnly || isSubmitting}>
+            <Select value={localFormData.natureOfRecruitment} onValueChange={(value) => updateField('natureOfRecruitment', value)} disabled={readOnly || isSubmitting}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="New Position">New Position</SelectItem>
@@ -435,7 +491,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Role Stretch / De-stretch Acceptable?</Label>
-            <Select value={activeData.roleStretch} onValueChange={(value) => updateField('roleStretch', value)} disabled={readOnly || isSubmitting}>
+            <Select value={localFormData.roleStretch} onValueChange={(value) => updateField('roleStretch', value)} disabled={readOnly || isSubmitting}>
               <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Yes">Yes</SelectItem>
@@ -447,7 +503,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Special Notes by delivery/pre-sales team</Label>
-            <Textarea placeholder="Enter special notes" value={activeData.specialNotes} onChange={(e) => updateField('specialNotes', e.target.value)} className="min-h-20 resize-none" readOnly={readOnly || isSubmitting} />
+            <Textarea placeholder="Enter special notes" value={localFormData.specialNotes || ''} onChange={(e) => updateField('specialNotes', e.target.value)} className="min-h-20 resize-none" readOnly={readOnly || isSubmitting} />
           </div>
         </CardContent>
       </Card>
@@ -462,25 +518,25 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
             <div className="space-y-2">
               <Label className="text-xs font-medium text-gray-600">Screened By</Label>
               <Input 
-                value={activeData.screenedBy || loggedInUser} 
+                value={localFormData.screenedBy} 
                 className="h-9 bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200 select-none font-medium" 
-                readOnly={true} 
+                readOnly 
               />
             </div>
 
             <div className="text-xs text-gray-400 font-medium px-1 pb-2.5">
-              <span>Last Saved State: {activeData.modifiedAt ? new Date(activeData.modifiedAt).toLocaleString() : "Not modified yet"}</span>
+              <span>Last Saved State: {localFormData.modifiedAt ? new Date(localFormData.modifiedAt).toLocaleString() : "Not modified yet"}</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Feedback / Remarks</Label>
-            <Textarea placeholder="Enter feedback or remarks" value={activeData.feedback} onChange={(e) => updateField('feedback', e.target.value)} className="min-h-20 resize-none" readOnly={readOnly || isSubmitting} />
+            <Textarea placeholder="Enter feedback or remarks" value={localFormData.feedback || ''} onChange={(e) => updateField('feedback', e.target.value)} className="min-h-20 resize-none" readOnly={readOnly || isSubmitting} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Floating Active Save Controls */}
+      {/* Floating Save Controls */}
       <AnimatePresence>
         {isDirty && !readOnly && (
           <motion.div
@@ -500,12 +556,8 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                   variant="outline" 
                   size="sm" 
                   onClick={() => {
-                    if (formData) {
-                      toast({ description: "Please revert manually or reload data context." });
-                    } else {
-                      setLocalFormData(pristineData);
-                      setErrors({}); // Reset error highlights on discard
-                    }
+                    setLocalFormData(pristineData);
+                    setErrors({});
                   }}
                   disabled={isSubmitting}
                   className="h-9 text-xs border-gray-200 text-gray-500 hover:bg-gray-50 font-medium"
