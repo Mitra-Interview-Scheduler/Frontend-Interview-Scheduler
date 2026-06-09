@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, CheckCircle2 } from 'lucide-react';
 
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI'; 
@@ -76,7 +76,46 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
   const isProjectRequired = localFormData.isProjectSpecific === 'yes';
   const isDurationRequired = localFormData.engagementType && localFormData.engagementType !== 'FULL_TIME';
 
-  // Dynamic structural dependancy triggers
+  // Dynamic Progress Bar Calculations
+  const screeningProgress = useMemo(() => {
+    // 1. Core mandatory fields added here based on your requirements
+    const baseRequiredFields = [
+      'isProjectSpecific', 
+      'engagementType', 
+      'region', 
+      'profileSource', 
+      'natureOfRecruitment', 
+      'roleStretch'
+    ];
+    
+    // 2. Conditionally append required fields based on layout triggers
+    if (isProjectRequired) {
+      baseRequiredFields.push('departmentId', 'tierId', 'designationId', 'projectName');
+    }
+    if (isDurationRequired) {
+      baseRequiredFields.push('duration');
+    }
+    if (localFormData.profileSource === 'Referral') {
+      baseRequiredFields.push('referrerName');
+    }
+
+    // 3. Count completed tracking points
+    const completedFieldsCount = baseRequiredFields.filter(field => {
+      const val = localFormData[field];
+      return val !== undefined && val !== null && String(val).trim() !== '';
+    }).length;
+
+    const totalFieldsCount = baseRequiredFields.length;
+    const percentage = totalFieldsCount > 0 ? Math.round((completedFieldsCount / totalFieldsCount) * 100) : 0;
+
+    return {
+      percentage,
+      completed: completedFieldsCount,
+      total: totalFieldsCount
+    };
+  }, [localFormData, isProjectRequired, isDurationRequired]);
+
+  // Dynamic structural dependency triggers
   const loadTiersForDept = useCallback(async (deptId) => {
     if (!deptId) { setTiers([]); setDesigs([]); return; }
     try {
@@ -105,7 +144,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
       const normalizedForm = normalizeData(formData);
       setLocalFormData(normalizedForm);
       setPristineData(normalizedForm);
-      if (normalizedForm.departmentId) loadTiersForDept(normalizedForm.departmentId);
+      if (normalizedForm.departmentId) loadTiersForDept(normalizedForm.departmentForm.departmentId);
       if (normalizedForm.tierId) loadDesignsForTier(normalizedForm.tierId);
     }
   }, [formData, normalizeData, loadTiersForDept, loadDesignsForTier]);
@@ -116,11 +155,9 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
       if (!candidate?.id || formData) return;
       setIsLoading(true);
       try {
-        // Fetch baseline drop data
         const deptData = await departmentAPI.getAllDepartments();
         setDepartments(deptData || []);
 
-        // Fetch candidate data
         const response = await candidateAPI.getCandidateScreeningFile(candidate.id);
         const loadedData = normalizeData(response);
         
@@ -197,6 +234,14 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
   const handleSubmitData = async () => {
     const newErrors = {};
 
+    // Validate global base required fields
+    if (!localFormData.engagementType) newErrors.engagementType = true;
+    if (!localFormData.region) newErrors.region = true;
+    if (!localFormData.profileSource) newErrors.profileSource = true;
+    if (!localFormData.natureOfRecruitment) newErrors.natureOfRecruitment = true;
+    if (!localFormData.roleStretch) newErrors.roleStretch = true;
+
+    // Validate project specific conditional logic
     if (isProjectRequired) {
       if (!localFormData.departmentId) newErrors.departmentId = true;
       if (!localFormData.tierId) newErrors.tierId = true;
@@ -233,7 +278,6 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         duration: isDurationRequired ? (parseInt(localFormData.duration, 10) || null) : null,
         modifiedAt: new Date().toISOString(),
         screenedBy: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).firstName + ' ' + JSON.parse(localStorage.getItem('user')).lastName : 'Unknown User',
-
       };
 
       const savedData = await candidateAPI.saveCandidateScreeningFile(candidate.id, payload);
@@ -274,6 +318,49 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
       transition={{ duration: 0.3 }}
       className="space-y-6 pb-10"
     >
+      {/* SCREENING PROGRESS BAR HEADER */}
+      <Card className="border border-blue-100 bg-gradient-to-r from-blue-50/30 to-indigo-50/30 shadow-none">
+        <CardContent className="p-4">
+          <div className="flex flex-col space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-700 tracking-wide uppercase">
+                  Mandatory Screening Progress
+                </span>
+                {screeningProgress.percentage === 100 && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 fill-emerald-50" />
+                  </motion.div>
+                )}
+              </div>
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                {screeningProgress.percentage}% Complete
+              </span>
+            </div>
+            
+            {/* Track Background */}
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200/40">
+              {/* Dynamic Animated Status Gauge */}
+              <motion.div 
+                className={`h-full rounded-full ${
+                  screeningProgress.percentage === 100 
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
+                    : 'bg-gradient-to-r from-blue-500 to-indigo-500'
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${screeningProgress.percentage}%` }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              />
+            </div>
+            
+            <div className="flex justify-between items-center text-[10px] text-gray-400 font-medium pt-0.5">
+              <span>Required structural data points complete</span>
+              <span>{screeningProgress.completed} of {screeningProgress.total} fields filled</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* SECTION 1: Basic Information */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 pb-4">
@@ -362,27 +449,17 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                     readOnly={readOnly || isSubmitting} 
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-gray-600">Region / Country</Label>
-                  <Select value={localFormData.region} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Select a country" /></SelectTrigger>
-                    <SelectContent>
-                      {COUNTRIES.map((country) => (
-                        <SelectItem key={country.value} value={country.value}>{country.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </motion.div>
           )}
 
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600">Engagement Type</Label>
+              <Label className={`text-xs font-medium transition-colors ${errors.engagementType ? 'text-red-600' : 'text-gray-600'}`}>
+                Engagement Type <span className="text-red-500">*</span>
+              </Label>
               <Select value={localFormData.engagementType} onValueChange={handleEngagementTypeChange} disabled={readOnly || isSubmitting}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectTrigger className={`h-9 transition-colors ${errors.engagementType ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FULL_TIME">Full Time</SelectItem>
                   <SelectItem value="CONTRACT">Contract</SelectItem>
@@ -391,6 +468,22 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label className={`text-xs font-medium transition-colors ${errors.region ? 'text-red-600' : 'text-gray-600'}`}>
+                Region / Country <span className="text-red-500">*</span>
+              </Label>
+              <Select value={localFormData.region} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
+                <SelectTrigger className={`h-9 transition-colors ${errors.region ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select a country" /></SelectTrigger>
+                <SelectContent>
+                  {COUNTRIES.map((country) => (
+                    <SelectItem key={country.value} value={country.value}>{country.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <AnimatePresence>
               {isDurationRequired && (
                 <motion.div 
@@ -421,11 +514,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium text-gray-600">Target Start Date</Label>
-            <Input type="date" value={localFormData.targetStartDate || ''} onChange={(e) => updateField('targetStartDate', e.target.value)} className="h-9" readOnly={readOnly || isSubmitting} />
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-gray-600">Target Start Date</Label>
+              <Input type="date" value={localFormData.targetStartDate || ''} onChange={(e) => updateField('targetStartDate', e.target.value)} className="h-9" readOnly={readOnly || isSubmitting} />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -437,9 +530,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-2">
-            <Label className="text-xs font-medium text-gray-600">How did Mitra get the candidate profile?</Label>
+            <Label className={`text-xs font-medium transition-colors ${errors.profileSource ? 'text-red-600' : 'text-gray-600'}`}>
+              How did Mitra get the candidate profile? <span className="text-red-500">*</span>
+            </Label>
             <Select value={localFormData.profileSource} onValueChange={(value) => updateField('profileSource', value)} disabled={readOnly || isSubmitting}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={`h-9 transition-colors ${errors.profileSource ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Direct Applicant">Direct Applicant</SelectItem>
                 <SelectItem value="Referral">Referral</SelectItem>
@@ -478,9 +573,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-2">
-            <Label className="text-xs font-medium text-gray-600">Nature of Recruitment</Label>
+            <Label className={`text-xs font-medium transition-colors ${errors.natureOfRecruitment ? 'text-red-600' : 'text-gray-600'}`}>
+              Nature of Recruitment <span className="text-red-500">*</span>
+            </Label>
             <Select value={localFormData.natureOfRecruitment} onValueChange={(value) => updateField('natureOfRecruitment', value)} disabled={readOnly || isSubmitting}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className={`h-9 transition-colors ${errors.natureOfRecruitment ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="New Position">New Position</SelectItem>
                 <SelectItem value="Replacement">Replacement</SelectItem>
@@ -490,9 +587,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs font-medium text-gray-600">Role Stretch / De-stretch Acceptable?</Label>
+            <Label className={`text-xs font-medium transition-colors ${errors.roleStretch ? 'text-red-600' : 'text-gray-600'}`}>
+              Role Stretch / De-stretch Acceptable? <span className="text-red-500">*</span>
+            </Label>
             <Select value={localFormData.roleStretch} onValueChange={(value) => updateField('roleStretch', value)} disabled={readOnly || isSubmitting}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger className={`h-9 transition-colors ${errors.roleStretch ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Yes">Yes</SelectItem>
                 <SelectItem value="No">No</SelectItem>

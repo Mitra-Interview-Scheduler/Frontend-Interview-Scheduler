@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ArrowRight, MessageSquareText, ChevronDown } from 'lucide-react';
+import { MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
@@ -45,7 +45,7 @@ function CandidateNextStepsCard({
     }
   };
 
-  const handleReject = async () => {
+  const handleReject = () => {
     if (!candidate?.id || saving) return;
     setShowRejectDialog(true);
   };
@@ -76,75 +76,77 @@ function CandidateNextStepsCard({
 
   return (
     <>
-      <Card className="border border-slate-200 shadow-sm overflow-hidden">
+      <Card className="border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
         <CardContent className="p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <MessageSquareText className="h-4 w-4 text-blue-600 shrink-0" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next Steps</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageSquareText className="h-4 w-4 text-blue-600 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next Steps</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+                className="ml-2 p-1 rounded hover:bg-slate-100"
+                title={open ? 'Collapse' : 'Expand'}
+              >
+                <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() => setOpen((v) => !v)}
-              className="ml-2 p-1 rounded hover:bg-slate-100"
-              title={open ? 'Collapse' : 'Expand'}
-            >
-              <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-        </div>
+          {open && (
+            <div className="mt-2 space-y-2">
+              {prompt ? (
+                <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 border border-slate-200 line-clamp-3">
+                  {prompt}
+                </p>
+              ) : (
+                <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500 border border-dashed border-slate-200">
+                  No prompt provided.
+                </p>
+              )}
 
-        {open && (
-          <div className="mt-2 space-y-2">
-            {prompt ? (
-              <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 border border-slate-200 line-clamp-3">
-                {prompt}
-              </p>
-            ) : (
-              <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500 border border-dashed border-slate-200">
-                No prompt provided.
-              </p>
-            )}
+              {/* Dynamic Actions for moving the candidate forward */}
+              <div className="flex flex-wrap items-center gap-2">
+                {actions.map((action) => (
+                  <Button
+                    key={action.label}
+                    type="button"
+                    variant={action.variant || "outline"}
+                    size="sm"
+                    className={`h-8 gap-2 ${action.className || ''}`}
+                    onClick={() => handleSetStatus(action.status)}
+                    disabled={saving || !candidate?.id}
+                    title={action.label}
+                  >
+                    <span className="truncate">{action.label}</span>
+                  </Button>
+                ))}
+              </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {actions.map((action) => (
+              {/* Fixed Reject / Close Button */}
+              <div className="mt-3">
                 <Button
-                  key={action.label}
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2"
-                  onClick={() => handleSetStatus(action.status)}
+                  className="w-full h-8 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
+                  onClick={handleReject}
                   disabled={saving || !candidate?.id}
-                  title={action.label}
+                  title="Reject This Application"
                 >
-                  <span className="truncate">{action.label}</span>
+                  Close This Application
                 </Button>
-              ))}
+              </div>
             </div>
-
-            <div className="mt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full h-8 bg-red-50 text-red-700 hover:bg-red-100"
-                onClick={handleReject}
-                disabled={saving || !candidate?.id}
-                title="Reject This Application"
-              >
-                Close This Application
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
         </CardContent>
       </Card>
 
+      {/* Reject / Close Dialog Implementation */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent className="max-w-xl w-full">
           <DialogHeader>
@@ -170,7 +172,11 @@ function CandidateNextStepsCard({
                             key={statusOption.key}
                             type="button"
                             onClick={() => setCloseStatus(statusOption.key)}
-                            className={`rounded-lg border px-3 py-2 text-left transition ${active ? 'ring-2 ring-blue-500 ' + statusOption.badgeClass : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                            className={`rounded-lg border px-3 py-2 text-left transition ${
+                              active
+                                ? 'ring-2 ring-blue-500 ' + statusOption.badgeClass
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
                           >
                             <div className="text-sm font-semibold">{statusOption.label}</div>
                             <div className="text-xs text-slate-500">{statusOption.key.replace(/_/g, ' ')}</div>
@@ -203,8 +209,16 @@ function CandidateNextStepsCard({
           </DialogBody>
 
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
-            <Button onClick={confirmReject} disabled={saving || !candidate?.id} className="bg-red-600 text-white">Apply Status</Button>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReject}
+              disabled={saving || !candidate?.id}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Apply Status
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
