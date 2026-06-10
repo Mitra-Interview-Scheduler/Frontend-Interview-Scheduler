@@ -3,8 +3,7 @@ export const getNextStepsConfig = (status) => {
     NEW: {
       prompt: "Review the applicant's profile and documents. Start the screening process if they meet the minimum requirements.",
       actions: [
-        { label: "Start Screening", actionType: "MOVE_TO_SCREENING", variant: "default" },
-        { label: "Reject Candidate", actionType: "REJECT", variant: "destructive" },
+        { label: "Start Screening", actionType: "SCREENING", variant: "outline" ,className: "w-full bg-green-50 text-blue-700 hover:bg-blue-100 border-blue-200" },
       ]
     },
     SCREENING: {
@@ -12,7 +11,6 @@ export const getNextStepsConfig = (status) => {
       actions: [
         { label: "Schedule Interview", actionType: "SCHEDULE", variant: "default" },
         { label: "Put on Hold", actionType: "HOLD", variant: "outline" },
-        { label: "Reject Candidate", actionType: "REJECT", variant: "destructive" }
       ]
     },
     SCHEDULED: {
@@ -20,7 +18,6 @@ export const getNextStepsConfig = (status) => {
       actions: [
         { label: "Make Offer", actionType: "OFFER", variant: "default" },
         { label: "Reschedule", actionType: "RESCHEDULE", variant: "secondary" },
-        { label: "Reject Candidate", actionType: "REJECT", variant: "destructive" }
       ]
     },
     OFFERED: {

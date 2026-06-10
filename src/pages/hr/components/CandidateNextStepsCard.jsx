@@ -28,6 +28,7 @@ function CandidateNextStepsCard({
     if (!candidate?.id) return;
 
     setSaving(true);
+    console.log('Updating candidate status to:', status);
     try {
       await candidateAPI.updateCandidate(candidate.id, {
         status,
@@ -118,7 +119,7 @@ function CandidateNextStepsCard({
                     variant={action.variant || "outline"}
                     size="sm"
                     className={`h-8 gap-2 ${action.className || ''}`}
-                    onClick={() => handleSetStatus(action.status)}
+                    onClick={() => handleSetStatus( action.actionType)}
                     disabled={saving || !candidate?.id}
                     title={action.label}
                   >

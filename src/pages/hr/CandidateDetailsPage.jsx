@@ -59,6 +59,16 @@ function CandidateDetailsPage() {
     }
   };
 
+  const refreshCandidateData = async () => {
+    if (!candidateId) return;
+    try {
+      const data = await candidateAPI.getCandidateById(candidateId);
+      setCandidate(data); // Swapping out data triggers an instant live re-render
+    } catch (err) {
+      console.error('Failed to background refresh candidate records:', err);
+    }
+  };
+
   const loadCandidateDocuments = async (id) => {
     if (!id) return;
     setDocumentsLoading(true);
@@ -286,6 +296,8 @@ function CandidateDetailsPage() {
               documentsLoading={documentsLoading}
               onPreviewDocument={handlePreviewDocument}
               onDownloadDocument={handleDownloadDocument}
+              onDocumentUploaded={() => loadCandidateDocuments(candidateId)}
+              onCandidateUpdated={refreshCandidateData}
             />
           </motion.div>
         </div>

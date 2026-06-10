@@ -8,6 +8,8 @@ const CandidateDetailsTabs = ({
   documentsLoading = false,
   onPreviewDocument = () => {},
   onDownloadDocument = () => {},
+  onDocumentUploaded = () => {},
+  onCandidateUpdated = () => {},
 }) => {
   const visibleTabs = getVisibleTabs(candidate?.status);
   const [activeTab, setActiveTab] = useState(visibleTabs[0]?.value || '');
@@ -45,7 +47,8 @@ const CandidateDetailsTabs = ({
               documentsLoading={documentsLoading}
               onPreviewDocument={onPreviewDocument}
               onDownloadDocument={onDownloadDocument}
-            />
+              onDocumentUploaded={onDocumentUploaded} 
+              onCandidateUpdated={onCandidateUpdated}             />
           </TabsContent>
         );
       })}
