@@ -9,8 +9,7 @@ export const getNextStepsConfig = (status) => {
     SCREENING: {
       prompt: "Screening is in progress. Once you've evaluated the screening results, determine the next step.",
       actions: [
-        { label: "Schedule Interview", actionType: "SCHEDULE", variant: "default" },
-        { label: "Put on Hold", actionType: "HOLD", variant: "outline" },
+        { label: "Schedule Interview", actionType: "SCHEDULE", variant: "default",className: "w-full " },
       ]
     },
     SCHEDULED: {

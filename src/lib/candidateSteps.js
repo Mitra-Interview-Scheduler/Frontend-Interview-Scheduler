@@ -1,7 +1,6 @@
 export const FALLBACK_CANDIDATE_STEPS = [
   { key: 'NEW', label: 'New', step: 1, displayOrder: 10, bgColor: '#3b82f6', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', lightClass: 'bg-blue-100', isClosingStep: false },
   { key: 'SCREENING', label: 'Screening', step: 2, displayOrder: 20, bgColor: '#eab308', badgeClass: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200', lightClass: 'bg-yellow-100', isClosingStep: false },
-  { key: 'SCHEDULED', label: 'Scheduled', step: 3, displayOrder: 30, bgColor: '#a855f7', badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', lightClass: 'bg-purple-100', isClosingStep: false },
   { key: 'INTERVIEWED', label: 'Interviewed', step: 4, displayOrder: 40, bgColor: '#6366f1', badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200', lightClass: 'bg-indigo-100', isClosingStep: false },
   { key: 'TECHNICAL_ROUND', label: 'Technical', step: 5, displayOrder: 50, bgColor: '#06b6d4', badgeClass: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200', lightClass: 'bg-cyan-100', isClosingStep: false },
   { key: 'HR_ROUND', label: 'HR Round', step: 6, displayOrder: 60, bgColor: '#ec4899', badgeClass: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200', lightClass: 'bg-pink-100', isClosingStep: false },
