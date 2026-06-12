@@ -39,7 +39,6 @@ const feedbackAPI = {
       return response.data;
     } catch (error) {
       console.error('Failed to submit feedback:', error);
-      // Fallback: log to console and return mock success
       console.warn('Feedback submission failed (no backend), logging responses:', responses);
       return {
         id: Date.now(),

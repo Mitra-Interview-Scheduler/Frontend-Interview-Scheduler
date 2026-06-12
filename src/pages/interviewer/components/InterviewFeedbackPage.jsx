@@ -23,14 +23,17 @@ import { getInitial } from '@/lib/personUtils';
 function InterviewFeedbackPage() {
   const navigate = useNavigate();
   const { interviewScheduleId } = useParams();
+  
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
   const [forms, setForms] = useState([]);
   const [selectedFormId, setSelectedFormId] = useState(null);
   
   // Questions and form state
   const [questions, setQuestions] = useState([]);
+  const [obligatoryQuestions, setObligatoryQuestions] = useState([]);
   const [formResponses, setFormResponses] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -45,36 +48,10 @@ function InterviewFeedbackPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const candidateDepartmentId = candidate?.departmentId ?? interviewDetails?.departmentId ?? null;
-  const candidateDesignationId = candidate?.targetDesignationId ?? interviewDetails?.candidateDesignationId ?? null;
-  const candidateScopeReady = !interviewDetails?.candidateId || candidate !== null;
-
-  const availableForms = useMemo(() => {
-    if (!forms.length || !candidateScopeReady) return [];
-
-    const activeForms = forms.filter((form) => form.isActive !== false);
-
-    const normalizedDepartmentId = candidateDepartmentId != null ? Number(candidateDepartmentId) : null;
-    const normalizedDesignationId = candidateDesignationId != null ? Number(candidateDesignationId) : null;
-
-    const departmentMatches = normalizedDepartmentId
-      ? activeForms.filter((form) => (form.scopes?.departmentIds || []).map(Number).includes(normalizedDepartmentId))
-      : activeForms;
-
-    if (!normalizedDesignationId) {
-      return departmentMatches;
-    }
-
-    const designationMatches = departmentMatches.filter((form) =>
-      (form.scopes?.designationIds || []).map(Number).includes(normalizedDesignationId)
-    );
-
-    return designationMatches.length > 0 ? designationMatches : departmentMatches;
-  }, [forms, candidateDepartmentId, candidateDesignationId, candidateScopeReady]);
-
+  // Derive the selected form from the backend-filtered list
   const selectedForm = useMemo(
-    () => availableForms.find((form) => form.id === selectedFormId) || availableForms[0] || null,
-    [availableForms, selectedFormId]
+    () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
+    [forms, selectedFormId]
   );
 
   const completedCount = useMemo(
@@ -88,20 +65,23 @@ function InterviewFeedbackPage() {
     loadFeedbackPage();
   }, [interviewScheduleId]);
 
+  // Set default selected form when forms load
   useEffect(() => {
-    if (!availableForms.length) {
+    if (!forms.length) {
       setSelectedFormId(null);
       return;
     }
 
-    if (!selectedFormId || !availableForms.some((form) => form.id === selectedFormId)) {
-      setSelectedFormId(availableForms[0].id);
+    if (!selectedFormId || !forms.some((form) => form.id === selectedFormId)) {
+      setSelectedFormId(forms[0].id);
     }
-  }, [availableForms, selectedFormId]);
+  }, [forms, selectedFormId]);
 
+  // Load questions when form changes
   useEffect(() => {
     if (!selectedForm) {
       setQuestions([]);
+      setObligatoryQuestions([]);
       setFormResponses({});
       setValidationErrors({});
       return;
@@ -109,6 +89,7 @@ function InterviewFeedbackPage() {
 
     const selectedQuestions = selectedForm.questions || [];
     setQuestions(selectedQuestions);
+    setObligatoryQuestions(selectedForm.obligatoryQuestions || []);
 
     const initialResponses = {};
     selectedQuestions.forEach((question) => {
@@ -127,28 +108,36 @@ function InterviewFeedbackPage() {
       setLoading(true);
       setError('');
 
-      // Fetch interview details first so we can scope the forms.
+      // 1. Fetch Interview Details
       const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
       const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
       setInterviewDetails(interview);
 
-      const formsPromise = feedbackQuestionsAPI.getAll();
-      const candidatePromise = interview?.candidateId ? candidateAPI.getCandidateById(interview.candidateId) : Promise.resolve(null);
-      const [formsData, candidateData] = await Promise.all([formsPromise, candidatePromise]);
+      // 2. Fetch Candidate Details
+      let currentCandidate = null;
+      if (interview?.candidateId) {
+        currentCandidate = await candidateAPI.getCandidateById(interview.candidateId);
+        setCandidate(currentCandidate);
+        
+        // Kick off document loading in the background
+        loadCandidateDocuments(interview.candidateId);
+      }
 
+      // 3. Extract Department and Role IDs (Prioritize candidate data)
+      const deptId = currentCandidate?.departmentId ?? interview?.departmentId ?? null;
+      // Handle potential naming variations depending on your candidate object shape
+      const roleId = currentCandidate?.targetDesignationId ?? interview?.targetDesignationId ?? null; 
+
+      // 4. Fetch Forms using the extracted IDs
+      const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId);
+      console.log ('Fetched feedback forms:', formsData);
       const formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
+      
       setForms(formList);
 
-      if (candidateData) {
-        setCandidate(candidateData);
-      }
-
-      if (interview?.candidateId) {
-        await loadCandidateDocuments(interview.candidateId);
-      }
     } catch (err) {
       console.error('Failed to load feedback page:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to load feedback form');
+      setError(err.response?.data?.message || err.message || 'Failed to load feedback data');
     } finally {
       setLoading(false);
     }
@@ -159,7 +148,6 @@ function InterviewFeedbackPage() {
     setDocumentsLoading(true);
     try {
       const data = await candidateAPI.getCandidateDocuments(candidateId);
-      console.log('Loaded documents:', data);
       setDocuments(data || []);
     } catch (err) {
       console.error('Failed to load documents:', err);
@@ -174,7 +162,6 @@ function InterviewFeedbackPage() {
       ...prev,
       [questionOrder]: value,
     }));
-    // Clear validation error for this field if it exists
     if (validationErrors[questionOrder]) {
       setValidationErrors((prev) => {
         const newErrors = { ...prev };
@@ -187,6 +174,12 @@ function InterviewFeedbackPage() {
   const validateForm = () => {
     const errors = {};
     questions.forEach((q) => {
+      if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
+        errors[q.order] = `${q.label} is required`;
+      }
+    });
+    
+    obligatoryQuestions.forEach((q) => {
       if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
         errors[q.order] = `${q.label} is required`;
       }
@@ -244,14 +237,10 @@ function InterviewFeedbackPage() {
     setSelectedDocument(document);
     setPreviewLoading(true);
     try {
-      console.log('Fetching preview for document:', document.fileName);
       const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      console.log('Document response:', response, 'Content Type:', document.contentType);
       const url = createDocumentObjectUrl(response, document);
-      console.log('Preview URL created:', url);
       setPreviewUrl(url);
     } catch (err) {
-      console.error('Preview error:', err);
       toast({
         title: 'Preview Error',
         description: err.message || 'Failed to load document preview',
@@ -279,11 +268,6 @@ function InterviewFeedbackPage() {
       case 'text':
         return (
           <div key={question.order} className="space-y-2 mt-4 px-4 ">
-            {/* <Label htmlFor={`q-${question.order}`}>
-              {question.label}
-              {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label> */}
-            {/* {question.helpText && <p className="text-xs text-muted-foreground ">{question.helpText}</p>} */}
             <Input
               id={`q-${question.order}`}
               type="text"
@@ -300,11 +284,6 @@ function InterviewFeedbackPage() {
       case 'textarea':
         return (
           <div key={question.order} className="space-y-2 mt-4 px-4 ">
-            {/* <Label htmlFor={`q-${question.order}`}>
-              {question.label}
-              {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <Textarea
               id={`q-${question.order}`}
               placeholder={question.placeholder}
@@ -322,11 +301,6 @@ function InterviewFeedbackPage() {
       case 'select':
         return (
           <div key={question.order} className="space-y-2 mt-4 px-4 ">
-            {/* <Label htmlFor={`q-${question.order}`}>
-              {question.label}
-              {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label> */}
-            {/* {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <Select value={value} onValueChange={(v) => handleFormChange(question.order, v)} disabled={submitting}>
               <SelectTrigger className={error ? 'border-red-500' : ''}>
                 <SelectValue placeholder={question.placeholder || 'Select an option'} />
@@ -346,11 +320,6 @@ function InterviewFeedbackPage() {
       case 'rating':
         return (
           <div key={question.order} className="space-y-3 mt-4 px-4 ">
-            {/* <Label>
-              {question.label}
-              {question.required && <span className="text-red-500 ml-1">*</span>}
-            </Label> */}
-            {/* {question.helpText && <p className="text-xs text-muted-foreground">{question.helpText}</p>} */}
             <div className="flex gap-2">
               {question.options?.map((opt) => (
                 <Button
@@ -410,15 +379,6 @@ function InterviewFeedbackPage() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {/* <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate(-1)}
-                className="gap-2 bg-blue-100 border-blue-300 text-blue-600 hover:bg-blue-200"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button> */}
               <div>
                 <h1 className="text-4xl font-bold text-foreground mb-2">Interview Feedback</h1>
                 <p className="text-muted-foreground text-sm mt-1">Evaluate candidate's interview performance</p>
@@ -438,6 +398,7 @@ function InterviewFeedbackPage() {
           </div>
         ) : (
           <div className="flex-1 flex overflow-hidden gap-4 rounded-lg p-1 border  border-gray-200 ">
+            
             {/* Left Sidebar - Fixed */}
             <motion.div 
               initial={{ opacity: 0, x: -20 }} 
@@ -479,7 +440,6 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-
                         {candidate.departmentName && (
                           <div className="flex items-start gap-2">
                             <Network className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -489,7 +449,6 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-
                         {candidate.targetDesignationName && (
                           <div className="flex items-start gap-2">
                             <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -499,7 +458,6 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-
                         {candidate.tierName && (
                           <div className="flex items-start gap-2">
                             <Layers3 className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -509,7 +467,6 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-
                         {candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined && (
                           <div className="flex items-start gap-2">
                             <Hourglass className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -519,7 +476,6 @@ function InterviewFeedbackPage() {
                             </div>
                           </div>
                         )}
-
                         {candidate.location && (
                           <div className="flex items-start gap-2">
                             <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
@@ -609,15 +565,15 @@ function InterviewFeedbackPage() {
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-600">Progress</span>
                     <span className="font-semibold text-blue-600">
-                      {completedCount} / {questions.length}
+                      {completedCount} / {questions.length + obligatoryQuestions.length} completed
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{
-                        width: questions.length > 0 
-                          ? `${(completedCount / questions.length) * 100}%`
+                        width: (questions.length + obligatoryQuestions.length) > 0 
+                          ? `${(completedCount / (questions.length + obligatoryQuestions.length)) * 100}%`
                           : '0%'
                       }}
                     />
@@ -632,19 +588,9 @@ function InterviewFeedbackPage() {
                 className="flex-1 overflow-y-auto"
               >
                 <div className="p-4 space-y-4">
-                  {availableForms.length > 0 && (
+                  {forms.length > 0 && (
                     <div className="space-y-3">
-                      {/* <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-900">Available Feedback Forms</h3>
-                          <p className="text-xs text-gray-600">
-                            These forms match the candidate's department{candidateDesignationId ? ' and designation preference' : ''}.
-                          </p>
-                        </div>
-                        <Badge variant="outline">{availableForms.length} forms</Badge>
-                      </div> */}
-
-                      {availableForms.length > 1 && (
+                      {forms.length > 1 && (
                         <div className="space-y-2">
                           <Label htmlFor="feedback-form-select" className="text-xs text-gray-700">
                             Select feedback form
@@ -658,7 +604,7 @@ function InterviewFeedbackPage() {
                               <SelectValue placeholder="Choose a feedback form" />
                             </SelectTrigger>
                             <SelectContent>
-                              {availableForms.map((form) => (
+                              {forms.map((form) => (
                                 <SelectItem key={form.id} value={form.id.toString()}>
                                   {form.name} {form.versionNumber ? `(v${form.versionNumber})` : ''}
                                 </SelectItem>
@@ -671,26 +617,55 @@ function InterviewFeedbackPage() {
                             </p>
                           )}
                         </div>
-                      ) }
+                      )}
                     </div>
                   )}
 
-                  {availableForms.length === 0 && (
-                    // If there are no active forms at all, give a different UX message
-                    !forms.some((f) => f.isActive !== false) ? (
-                      <div className="rounded-xl border border-dashed border-red-300 bg-red-50 px-4 py-6 text-sm text-red-700">
-                        No active feedback forms are available. Please contact your administrator to create or activate a form.
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
-                        No feedback forms matched this candidate's department{candidateDesignationId ? ' or designation' : ''}.
-                      </div>
-                    )
+                  {forms.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
+                      No feedback forms matched this candidate's department or role.
+                    </div>
                   )}
 
                   {/* Questions */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 p-4">
                     {questions.map((question, index) => (
+                      <motion.div
+                        key={question.order}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="bg-blue-100 rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-blue-600">{index + 1}</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <Label className="text-sm font-bold text-gray-900">
+                                {question.label}
+                                {question.required && <span className="text-red-500 ml-1">*</span>}
+                              </Label>
+                            </div>
+                            {question.helpText && (
+                              <p className="text-xs text-gray-600 mt-1 italic">{question.helpText}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3  bg-slate-100 border  rounded-lg py-3" >
+                        {renderFormField(question)}
+                        </div>
+                        
+                      </motion.div>
+                    ))}
+                  </div>
+
+
+                  {/* Obligatory Questions */}
+                  <div className="space-y-4 bg-gradient-to-br from-blue-200 to-indigo-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 uppercase font-semibold mb-3">Obligatory Questions</p>
+                    {obligatoryQuestions.map((question, index) => (
                       <motion.div
                         key={question.order}
                         initial={{ opacity: 0, y: 10 }}

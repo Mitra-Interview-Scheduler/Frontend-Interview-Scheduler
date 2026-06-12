@@ -120,19 +120,19 @@ const HRDashboard = () => {
   const [cancelling, setCancelling]           = useState(false);
   const [expandedItems, setExpandedItems]     = useState(new Set());
   // Locally dismissed items — persisted so they survive refresh
-  const [dismissed, setDismissed]             = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('hr_dismissed_items') || '[]')); }
-    catch { return new Set(); }
-  });
+  // const [dismissed, setDismissed]             = useState(() => {
+  //   try { return new Set(JSON.parse(localStorage.getItem('hr_dismissed_items') || '[]')); }
+  //   catch { return new Set(); }
+  // });
 
-  const dismissItem = (itemId) => {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(itemId);
-      localStorage.setItem('hr_dismissed_items', JSON.stringify([...next]));
-      return next;
-    });
-  };
+  // const dismissItem = (itemId) => {
+  //   setDismissed((prev) => {
+  //     const next = new Set(prev);
+  //     next.add(itemId);
+  //     localStorage.setItem('hr_dismissed_items', JSON.stringify([...next]));
+  //     return next;
+  //   });
+  // };
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -352,7 +352,7 @@ const HRDashboard = () => {
 
   const scheduleItems    = buildScheduleItems(requests, panels);
   const upcomingSchedule = scheduleItems.filter((item) => {
-    if (dismissed.has(item.id)) return false;
+    // if (dismissed.has(item.id)) return false;
     // Use endDateTime so past interviews don't show; fall back to start + 1h
     const end = item.endDateTime
       ? new Date(item.endDateTime)

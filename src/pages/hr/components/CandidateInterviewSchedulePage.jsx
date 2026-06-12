@@ -4,14 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,DialogBody,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
-import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import DepartmentAPI from '@/services/departmentAPI';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
-
   const getTodayDate = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -19,157 +22,200 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  
-  const [availabilityDate, setAvailabilityDate] = useState(getTodayDate());
 
-  // Reset state on close
+  const [availabilityDate, setAvailabilityDate] = useState(getTodayDate());
+  const [interviewType, setInterviewType] = useState('TECHNICAL'); 
+  const [hrDepartmentId, setHrDepartmentId] = useState(null);
+
+
+  const getHrDepartmentId = () => {
+    DepartmentAPI.getDepartmentByName('Human Resources')
+      .then((data) => {
+        setHrDepartmentId(data.id);
+      })
+      .catch((error) => {
+        console.error('Error fetching HR department:', error);
+      });
+  };
+
+  
   useEffect(() => {
     if (!open) {
-      setAvailabilityDate(getTodayDate()); // Reset to current date-time
+
+      getHrDepartmentId();
+      setAvailabilityDate(getTodayDate());
+      setInterviewType('TECHNICAL');
     }
   }, [open]);
 
   if (!candidate) return null;
 
-  // Lock past dates
-  const getMinDateTime = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-
-
-  
-
   const handleGoToAvailability = () => {
     if (!availabilityDate) return;
 
-    navigate('/hr/availability', {
-      state: {
-        filterData: {
-          startDateTime: availabilityDate,
+     let filteredData = {
+      startDateTime: availabilityDate,
           departmentId: candidate.departmentId,
           minTierOrder: candidate.tierOrder,
           minLevelOrder: candidate.levelOrder,
           candidateId: candidate.id,
-          candidateName: candidate.name
-        }
+          candidateName: candidate.name,
+    };
+
+    if (interviewType === 'HR') {
+      filteredData.departmentId = hrDepartmentId;
+      filteredData.minLevelOrder = null; 
+    } else {
+      filteredData.departmentId = candidate.departmentId;
+      filteredData.minLevelOrder = candidate.levelOrder;
+    }
+    
+
+    navigate('/hr/availability', {
+      state: {
+        filterData: filteredData
       }
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>     
-      <DialogContent >
-          <DialogHeader>
-            <DialogTitle >
-              Schedule Interview
-            </DialogTitle>
-            <DialogDescription>
-              Select a date for candidate availability and find matching interviewers.
-            </DialogDescription>
-          </DialogHeader>
-        <DialogBody>
-          <div className="space-y-8 flex-grow">
-            {/* Candidate Identity Card - Enhanced Spacing */}
-            <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          
-          
-
-              <div className="p-6 grid grid-cols-2 gap-6 bg-white">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-slate-400 font-bold">Name</Label>
-                  <p className="text-base font-semibold flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-slate-400" />
-                    {candidate.name || 'N/A'}
-                  </p>
-                </div>
-
-
-
-              <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-slate-400 font-bold">Email</Label>
-                  <p className="text-base font-semibold flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-slate-400" />
-                    {candidate.email || 'N/A'}
-                  </p>
-                </div>
-
-                
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-slate-400 font-bold">Department</Label>
-                  <p className="text-base font-semibold flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-slate-400" />
-                    {candidate.departmentName || 'N/A'}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-slate-400 font-bold">
-                    Seniority Tier
-                  </Label>
-                  <p className="text-base font-semibold flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-indigo-500" />
-                    {/* Try both potential property names from your DTO */}
-                    {candidate.tierId?.toString()  ? (
-                      `Tier ${candidate.tierOrder} - ${ candidate.tierName }`
-                    ) : (
-                      <span className="text-slate-400 font-normal italic">Not Assigned</span>
-                    )}
-                  </p>
-                </div>
-                <div className="col-span-2 space-y-2 pt-4 border-t border-slate-50">
-                  <Label className="text-xs uppercase tracking-widest text-slate-400 font-bold">Target Designation</Label>
-                  <p className="text-base font-semibold flex items-center gap-2">
-                    <Award className="w-5 h-5 text-amber-500" />
-                    {candidate.targetDesignationName} <span className="text-slate-400 font-normal">(Level {candidate.levelOrder})</span>
-                  </p>
-                </div>
-              </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[650px] p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <CalendarClock className="w-6 h-6" />
             </div>
+            <div>
+              <DialogTitle className="text-xl">Schedule Interview</DialogTitle>
+              <DialogDescription className="mt-1.5">
+                Select a date and interview type to find matching interviewers.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="availability" className="text-lg font-bold text-slate-800">
-                  Candidate Availability Window
-                </Label>
+        <DialogBody className="px-6 py-4 space-y-6">
+          {/* Candidate Identity Card - Refined UI */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
+            <div className="p-5 grid grid-cols-2 gap-y-5 gap-x-6">
+              
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Candidate Name</Label>
+                <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <User className="w-4 h-4 text-slate-400" />
+                  <span className="truncate">{candidate.name || 'N/A'}</span>
+                </p>
               </div>
-              
-              <Input
-                id="availability"
-                type="date"
-                min={getTodayDate()}
-                value={availabilityDate}
-                onChange={(e) => setAvailabilityDate(e.target.value)}
-                className="h-14 text-lg border-2 border-slate-200 focus:border-primary focus:ring-primary shadow-sm px-4"
-              />
-              
-              <div className="flex items-start gap-3 text-sm text-blue-600 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-                <p>
-                  Matching interviewers must be from <strong>{candidate.departmentName || 'the same department'}</strong> and hold a <strong>Tier {candidate.tierOrder}</strong> seniority or higher.
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Email Address</Label>
+                <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-slate-400" />
+                  <span className="truncate">{candidate.email || 'N/A'}</span>
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Department</Label>
+                <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-slate-400" />
+                  <span className="truncate">{candidate.departmentName || 'N/A'}</span>
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Seniority Tier</Label>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-indigo-500" />
+                  {candidate.tierId?.toString() ? (
+                    <span className="text-slate-900">Tier {candidate.tierOrder} - {candidate.tierName}</span>
+                  ) : (
+                    <span className="text-slate-400 italic">Not Assigned</span>
+                  )}
+                </p>
+              </div>
+
+              <div className="col-span-2 space-y-1.5 pt-4 border-t border-slate-200">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Target Designation</Label>
+                <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-500" />
+                  {candidate.targetDesignationName} <span className="text-slate-400 font-normal ml-1">(Level {candidate.levelOrder})</span>
                 </p>
               </div>
             </div>
           </div>
+
+          <Separator />
+
+          {/* Scheduling Form Controls */}
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Date Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="availability" className="text-sm font-semibold text-slate-800">
+                  Availability Date
+                </Label>
+                <Input
+                  id="availability"
+                  type="date"
+                  min={getTodayDate()}
+                  value={availabilityDate}
+                  onChange={(e) => setAvailabilityDate(e.target.value)}
+                  className="h-11 text-sm border-slate-200 focus-visible:ring-blue-500 px-3"
+                />
+              </div>
+
+              {/* Interview Type Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="interview-type" className="text-sm font-semibold text-slate-800">
+                  Interview Type
+                </Label>
+                <Select value={interviewType} onValueChange={setInterviewType}>
+                  <SelectTrigger className="h-11 text-sm border-slate-200 focus:ring-blue-500 bg-white">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="HR">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-emerald-500" />
+                        HR Interview
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="TECHNICAL">
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="w-4 h-4 text-blue-500" />
+                        Technical Interview
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Warning / Rule Banner */}
+            <div className="flex items-start gap-3 text-sm text-blue-700 bg-blue-50/80 p-4 rounded-xl border border-blue-100">
+              <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
+              <p className="leading-relaxed">
+                Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.
+              </p>
+            </div>
+          </div>
         </DialogBody>
 
-
-        {/* Action Footer - Larger Buttons */}
-        <DialogFooter className="bg-slate-50 p-8 flex items-center  sm:justify-between gap-6 border-t mt-auto">
-          <Button 
-            variant="ghost" 
+        {/* Action Footer */}
+        <DialogFooter className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t">
+          <Button
+            variant="outline"
             onClick={() => onOpenChange(false)}
-            className="text-base font-medium text-black  border  shadow-primary/20 transition-all hover:text-slate-800 h-12 px-6  "
+            className="text-sm font-medium border-slate-200 hover:bg-slate-100 h-10 px-5"
           >
             Cancel
           </Button>
-          <Button 
-            onClick={handleGoToAvailability} 
-            disabled={!availabilityDate}
-            className="h-12 px-10 text-base font-bold shadow-xl  shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
+          <Button
+            onClick={handleGoToAvailability}
+            disabled={!availabilityDate || !interviewType}
+            className="h-10 px-5 text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all active:scale-95"
           >
             Find Matching Interviewers
           </Button>

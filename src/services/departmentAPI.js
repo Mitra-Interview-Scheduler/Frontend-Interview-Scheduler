@@ -5,6 +5,13 @@ export const departmentAPI = {
     const response = await api.get('/departments');
     return response.data;
   },
+
+
+
+  getDepartmentByName: async (name) => {
+    const response = await api.get(`/department/${name}`);
+    return response.data;
+  }
 };
 
 export default departmentAPI;

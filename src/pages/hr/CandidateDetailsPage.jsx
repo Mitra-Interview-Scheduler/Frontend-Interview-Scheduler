@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
 import { getCandidateNextActions } from '@/lib/candidateSteps';
-
+import  { getNextStepsConfig } from '@/lib/nextStepsConfig'; // 
 function CandidateDetailsPage() {
   const navigate = useNavigate();
   const { candidateId } = useParams();
@@ -29,9 +29,10 @@ function CandidateDetailsPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const { candidateSteps } = useCandidateSteps();
-
-  const nextStepsPrompt = 'Review the candidate and choose the next stage to move the process forward.';
-  const nextStepsActions = getCandidateNextActions(candidateSteps, candidate?.status);
+  const { prompt: nextStepsPrompt, actions: nextStepsActions } = useMemo(() => {
+    if (!candidate?.status) return { prompt: '', actions: [] };
+    return getNextStepsConfig(candidate.status);
+  }, [candidate?.status]);
 
   useEffect(() => {
     if (!candidateId) return;
@@ -55,6 +56,16 @@ function CandidateDetailsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshCandidateData = async () => {
+    if (!candidateId) return;
+    try {
+      const data = await candidateAPI.getCandidateById(candidateId);
+      setCandidate(data); // Swapping out data triggers an instant live re-render
+    } catch (err) {
+      console.error('Failed to background refresh candidate records:', err);
     }
   };
 
@@ -172,7 +183,7 @@ function CandidateDetailsPage() {
             <CandidateNextStepsCard
               candidate={candidate}
               prompt={nextStepsPrompt}
-              actions={nextStepsActions}
+              actions={nextStepsActions} 
               steps={candidateSteps}
               onUpdated={loadCandidateDetails}
             />
@@ -285,6 +296,8 @@ function CandidateDetailsPage() {
               documentsLoading={documentsLoading}
               onPreviewDocument={handlePreviewDocument}
               onDownloadDocument={handleDownloadDocument}
+              onDocumentUploaded={() => loadCandidateDocuments(candidateId)}
+              onCandidateUpdated={refreshCandidateData}
             />
           </motion.div>
         </div>

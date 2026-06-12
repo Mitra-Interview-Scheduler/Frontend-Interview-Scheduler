@@ -95,6 +95,20 @@ export const candidateAPI = {
   deleteCandidateDocument: async (candidateId, documentId) => {
     await api.delete(`/candidates/${candidateId}/documents/${documentId}`);
   },
+
+  // Fetch a candidate's screening tracker file mapping context
+  getCandidateScreeningFile: async (candidateId) => {
+    const response = await api.get(`/candidateScreening/${candidateId}/screening`);
+    return response.data;
+  },
+
+  // Save or modify standard candidate screening metrics evaluation state
+  saveCandidateScreeningFile: async (candidateId, screeningPayload) => {
+    const response = await api.post(`/candidateScreening/${candidateId}/screening`, screeningPayload);
+    return response.data;
+  },
+
+
 };
 
 export default candidateAPI;
