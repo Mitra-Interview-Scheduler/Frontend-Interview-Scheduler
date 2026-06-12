@@ -9,6 +9,8 @@ import { MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
+import CandidateInterviewSchedulePage from './CandidateInterviewSchedulePage';
+
 
 function CandidateNextStepsCard({
   candidate,
@@ -23,6 +25,8 @@ function CandidateNextStepsCard({
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [closeStatus, setCloseStatus] = useState('REJECTED');
   const [closeReason, setCloseReason] = useState('');
+  const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
+  
 
   const handleSetStatus = async (status) => {
     if (!candidate?.id) return;
@@ -119,13 +123,20 @@ function CandidateNextStepsCard({
                     variant={action.variant || "outline"}
                     size="sm"
                     className={`h-8 gap-2 ${action.className || ''}`}
-                    onClick={() => handleSetStatus( action.actionType)}
+                    onClick={() => {
+                      if (action.label === "Schedule Interview") {
+                        setIsInterviewSchedulePageOpen(true);
+                      } else {
+                        handleSetStatus(action.actionType);
+                      }
+                    }}
                     disabled={saving || !candidate?.id}
                     title={action.label}
                   >
                     <span className="truncate">{action.label}</span>
                   </Button>
                 ))}
+                 
               </div>
 
               {/* Fixed Reject / Close Button */}
@@ -223,6 +234,14 @@ function CandidateNextStepsCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CandidateInterviewSchedulePage
+          open={isInterviewSchedulePageOpen}
+          candidate={candidate}
+          onOpenChange={setIsInterviewSchedulePageOpen}
+        />
+
+
     </>
   );
 }
