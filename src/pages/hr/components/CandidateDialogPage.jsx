@@ -12,12 +12,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { 
-  Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, Upload, CalendarClock, Pencil, ExternalLink 
+  Download, FileText, Hash, Link, Loader2, MapPin, Plus,Award, Trash2, TrendingUp, Upload, CalendarClock, Pencil, ExternalLink 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { tierAPI } from '@/services/tierAPI';
+import { designationAPI } from '@/services/designationAPI';
 import { downloadBlobResponse } from '@/lib/documentUtils';
 import { FALLBACK_CANDIDATE_STEPS } from '@/lib/candidateSteps';
 
@@ -60,6 +61,8 @@ function CandidateDialogPage({
   const [resourceLinks, setResourceLinks] = useState([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkIndexToEdit, setLinkIndexToEdit] = useState(null);
+  const [desigs, setDesigs] = useState([]);
+
 
   const parseResourceLinks = (rawValue) => {
     if (!rawValue || !String(rawValue).trim()) return [];
@@ -150,6 +153,7 @@ function CandidateDialogPage({
     });
     
     setTiers([]);
+    setDesigs([]);
     setError('');
     setSaving(false);
     setDocuments([]);
@@ -161,6 +165,9 @@ function CandidateDialogPage({
     if (candidate.departmentId) {
       loadTiersForDept(candidate.departmentId);
     }
+    if (candidate.tierId) {
+        loadDesignsForTier(candidate.tierId);
+      }
   }, [open, candidate, isCreate]);
 
   const loadTiersForDept = async (deptId) => {
@@ -171,6 +178,18 @@ function CandidateDialogPage({
     } catch (e) { 
       console.error(e); 
       setTiers([]); 
+    }
+  };
+
+
+    const loadDesignsForTier = async (tierId) => {
+    if (!tierId) { setDesigs([]); return; }
+    try {
+      const data = await designationAPI.getDesignationsByTier(parseInt(tierId));
+      setDesigs(data.sort((a, b) => a.levelOrder - b.levelOrder));
+    } catch (e) { 
+      console.error(e); 
+      setDesigs([]); 
     }
   };
 
@@ -246,13 +265,15 @@ function CandidateDialogPage({
 
   const handleDeptChange = async (val) => {
     setForm((f) => ({ ...f, departmentId: val, tierId: '', targetDesignationId: '' }));
+    setDesigs([]);
     await loadTiersForDept(val);
   };
 
-  const handleTierChange = async (val) => {
-    setForm((f) => ({ ...f, tierId: val, targetDesignationId: '' }));
-  };
 
+   const handleTierChange = async (val) => {
+    setForm((f) => ({ ...f, tierId: val, targetDesignationId: '' }));
+    await loadDesignsForTier(val);
+  };
   const handleSave = async () => {
     if (!form.name.trim() || !form.email.trim()) {
       setError('Name and email are required');
@@ -486,6 +507,30 @@ function CandidateDialogPage({
                 </SelectContent>
               </Select>
             </div>
+
+
+               <div className="space-y-2 md:col-span-2">
+            <Label className="flex items-center gap-1">
+              <Award className="w-3.5 h-3.5" /> Target Designation
+            </Label>
+            <Select 
+              value={form.targetDesignationId || 'NONE'}
+              onValueChange={(v) => setForm({ ...form, targetDesignationId: v === 'NONE' ? '' : v })}
+              disabled={saving || !form.tierId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={form.tierId ? 'Select designation' : 'Select tier first'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">None</SelectItem>
+                {desigs.map((d) => (
+                  <SelectItem key={d.id} value={d.id.toString()}>
+                    Level {d.levelOrder} – {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
             {/* Resource Links Block */}
             <div className="space-y-3 md:col-span-2">
