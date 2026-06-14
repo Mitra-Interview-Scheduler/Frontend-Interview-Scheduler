@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import { FALLBACK_CANDIDATE_STEPS, normalizeCandidateSteps } from '@/lib/candidateSteps';
 
-const StepProgressIndicator = ({ currentStatus, steps = FALLBACK_CANDIDATE_STEPS }) => {
+const StepProgressIndicator = ({ currentStatus, steps  }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const statusSteps = normalizeCandidateSteps(steps);
   const currentStatusObj = statusSteps.find((s) => s.key === currentStatus);

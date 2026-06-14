@@ -15,7 +15,6 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
-import { getCandidateNextActions } from '@/lib/candidateSteps';
 import  { getNextStepsConfig } from '@/lib/nextStepsConfig'; // 
 function CandidateDetailsPage() {
   const navigate = useNavigate();
@@ -28,7 +27,7 @@ function CandidateDetailsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const { candidateSteps } = useCandidateSteps();
+  const { candidateSteps } = useCandidateSteps(candidate);
   const { prompt: nextStepsPrompt, actions: nextStepsActions } = useMemo(() => {
     if (!candidate?.status) return { prompt: '', actions: [] };
     return getNextStepsConfig(candidate.status);
@@ -175,7 +174,7 @@ function CandidateDetailsPage() {
         </motion.div>
 
         <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
-          <StepProgressIndicator currentStatus={candidate.status} steps={candidateSteps} />
+          <StepProgressIndicator currentStatus={candidate.status} steps={candidateSteps}  />
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-0">

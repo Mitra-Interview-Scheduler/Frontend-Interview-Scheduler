@@ -1,44 +1,51 @@
 import { useEffect, useState } from 'react';
-import { candidateStepAPI } from '@/services/candidateStepAPI';
-import { FALLBACK_CANDIDATE_STEPS, normalizeCandidateSteps } from '@/lib/candidateSteps';
+import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
+import {
+  FALLBACK_CANDIDATE_STEPS,
+  normalizeCandidateSteps,
+} from '@/lib/candidateSteps';
 
-let cachedCandidateSteps = null;
-
-export const useCandidateSteps = () => {
-  const [candidateSteps, setCandidateSteps] = useState(() => cachedCandidateSteps || FALLBACK_CANDIDATE_STEPS);
-  const [loading, setLoading] = useState(!cachedCandidateSteps);
+export const useCandidateSteps = (candidate) => {
+  const [candidateSteps, setCandidateSteps] = useState(FALLBACK_CANDIDATE_STEPS);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let active = true;
-
-    if (cachedCandidateSteps) {
+    if (!candidate?.id) {
+      setCandidateSteps(FALLBACK_CANDIDATE_STEPS);
       setLoading(false);
-      return () => {
-        active = false;
-      };
+      return;
     }
 
-    candidateStepAPI.getCandidateSteps()
-      .then((steps) => {
-        if (!active) return;
-        cachedCandidateSteps = normalizeCandidateSteps(steps);
-        setCandidateSteps(cachedCandidateSteps);
-      })
-      .catch(() => {
-        if (!active) return;
-        cachedCandidateSteps = FALLBACK_CANDIDATE_STEPS;
-        setCandidateSteps(FALLBACK_CANDIDATE_STEPS);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    let active = true;
+    setLoading(true);
 
-    return () => {
-      active = false;
-    };
-  }, []);
+    candidatePipelineAPI.getCandidatePipeline(candidate.id)
+      .then((steps) => active && setCandidateSteps(steps))
+      .catch((error) => {
+        console.error(`Failed to load pipeline for candidate ${candidate.id}:`, error);
+        if (active) setCandidateSteps(FALLBACK_CANDIDATE_STEPS);
+      })
+      .finally(() => active && setLoading(false));
 
-  return { candidateSteps: normalizeCandidateSteps(candidateSteps), loading };
+    return () => { active = false; };
+  }, [candidate?.id]);
+
+  return {
+    candidateSteps: normalizeCandidateSteps(candidateSteps),
+    loading,
+  };
 };
 
-export default useCandidateSteps;
+// export const getCandidateClosingSteps = (candidate) => {
+
+//   useEffect(() => {
+//     if (!candidate?.id) return;
+    
+//     let active = true;
+//     setLoading(true);
+
+    
+ 
+// }
+
+// export default useCandidateSteps;
