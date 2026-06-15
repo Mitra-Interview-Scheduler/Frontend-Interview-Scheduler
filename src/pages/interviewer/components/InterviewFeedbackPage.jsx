@@ -17,6 +17,7 @@ import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
+import CompleteInterviewDialog from '@/components/CompleteInterviewDialog';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 
@@ -47,6 +48,11 @@ function InterviewFeedbackPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const [loadedResponses, setLoadedResponses] = useState(null);
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   // Derive the selected form from the backend-filtered list
   const selectedForm = useMemo(
@@ -92,16 +98,19 @@ function InterviewFeedbackPage() {
     setObligatoryQuestions(selectedForm.obligatoryQuestions || []);
 
     const initialResponses = {};
-    selectedQuestions.forEach((question) => {
-      initialResponses[question.order] = '';
+    const allQuestions = [...selectedQuestions, ...(selectedForm.obligatoryQuestions || [])];
+    allQuestions.forEach((question) => {
+      const savedValue = loadedResponses?.[question.order];
+      initialResponses[question.order] = savedValue != null ? String(savedValue) : '';
       if (question.commentsEnabled) {
-        initialResponses[`${question.order}_comment`] = '';
+        const savedComment = loadedResponses?.[`${question.order}_comment`];
+        initialResponses[`${question.order}_comment`] = savedComment != null ? String(savedComment) : '';
       }
     });
 
     setFormResponses(initialResponses);
     setValidationErrors({});
-  }, [selectedForm]);
+  }, [selectedForm, loadedResponses]);
 
   const loadFeedbackPage = async () => {
     try {
@@ -112,6 +121,7 @@ function InterviewFeedbackPage() {
       const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
       const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
       setInterviewDetails(interview);
+      setInterviewCompleted(interview?.interviewStatus === 'COMPLETED');
 
       // 2. Fetch Candidate Details
       let currentCandidate = null;
@@ -130,9 +140,31 @@ function InterviewFeedbackPage() {
 
       // 4. Fetch Forms using the extracted IDs
       const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId);
-      console.log ('Fetched feedback forms:', formsData);
-      const formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
-      
+      let formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
+
+      const existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
+      if (existingFeedback?.responses) {
+        setFeedbackSubmitted(true);
+        setLoadedResponses(existingFeedback.responses);
+        if (existingFeedback.feedbackFormId) {
+          const matchedForm = formList.find((form) => form.id === existingFeedback.feedbackFormId);
+          if (matchedForm) {
+            setSelectedFormId(matchedForm.id);
+          } else {
+            try {
+              const savedForm = await feedbackQuestionsAPI.getById(existingFeedback.feedbackFormId);
+              formList = [savedForm, ...formList];
+              setSelectedFormId(savedForm.id);
+            } catch (formError) {
+              console.warn('Could not load saved feedback form:', formError);
+            }
+          }
+        }
+      } else {
+        setFeedbackSubmitted(false);
+        setLoadedResponses(null);
+      }
+
       setForms(formList);
 
     } catch (err) {
@@ -211,9 +243,11 @@ function InterviewFeedbackPage() {
     setError('');
     try {
       await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
+      setFeedbackSubmitted(true);
+      setLoadedResponses({ ...formResponses });
       toast({
         title: 'Success',
-        description: 'Feedback submitted successfully',
+        description: feedbackSubmitted ? 'Feedback updated successfully' : 'Feedback submitted successfully',
       });
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to submit feedback');
@@ -221,6 +255,26 @@ function InterviewFeedbackPage() {
       setSubmitting(false);
     }
   };
+
+  const handleCompleteInterview = async () => {
+    setCompleting(true);
+    setError('');
+    try {
+      await availabilityAPI.completeInterview(interviewScheduleId);
+      setInterviewCompleted(true);
+      setCompleteDialogOpen(false);
+      toast({
+        title: 'Interview completed',
+        description: 'Feedback is now locked and visible on the candidate profile.',
+      });
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to complete interview');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const isFormLocked = submitting || interviewCompleted;
 
   const handleDownloadDocument = async (document) => {
     if (!candidate?.id || !document?.id) return;
@@ -274,7 +328,7 @@ function InterviewFeedbackPage() {
               placeholder={question.placeholder}
               value={value}
               onChange={(e) => handleFormChange(question.order, e.target.value)}
-              disabled={submitting}
+              disabled={isFormLocked}
               className={error ? 'border-red-500' : ''}
             /> 
             {error && <p className="text-xs text-red-500">{error}</p>}
@@ -289,7 +343,7 @@ function InterviewFeedbackPage() {
               placeholder={question.placeholder}
               value={value}
               onChange={(e) => handleFormChange(question.order, e.target.value)}
-              disabled={submitting}
+              disabled={isFormLocked}
               rows={4}
               className={error ? 'border-red-500' : ''}
             />
@@ -301,7 +355,7 @@ function InterviewFeedbackPage() {
       case 'select':
         return (
           <div key={question.order} className="space-y-2 mt-4 px-4 ">
-            <Select value={value} onValueChange={(v) => handleFormChange(question.order, v)} disabled={submitting}>
+            <Select value={value} onValueChange={(v) => handleFormChange(question.order, v)} disabled={isFormLocked}>
               <SelectTrigger className={error ? 'border-red-500' : ''}>
                 <SelectValue placeholder={question.placeholder || 'Select an option'} />
               </SelectTrigger>
@@ -328,7 +382,7 @@ function InterviewFeedbackPage() {
                   variant={value === opt.value.toString() ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleFormChange(question.order, opt.value.toString())}
-                  disabled={submitting}
+                  disabled={isFormLocked}
                   className={error ? 'border-red-500' : ''}
                 >
                   {opt.label}
@@ -357,7 +411,7 @@ function InterviewFeedbackPage() {
               placeholder="Add any additional comments about this response..."
               value={commentValue}
               onChange={(e) => handleFormChange(`${question.order}_comment`, e.target.value)}
-              disabled={submitting}
+              disabled={isFormLocked}
               rows={3}
               className="mt-2 text-sm"
             />
@@ -510,7 +564,7 @@ function InterviewFeedbackPage() {
                         <button
                           type="button"
                           onClick={() => handlePreviewDocument(document)}
-                          disabled={submitting}
+                          disabled={isFormLocked}
                           className="min-w-0 flex-1 text-left hover:text-blue-600 transition-colors "
                         >
                           <p className="text-xs font-medium text-gray-900 truncate">{document.fileName}</p>
@@ -525,7 +579,7 @@ function InterviewFeedbackPage() {
                             size="sm"
                             className="h-8 w-8 p-0"
                             onClick={() => handlePreviewDocument(document)}
-                            disabled={submitting}
+                            disabled={isFormLocked}
                             title="Preview"
                           >
                             <Eye className="w-4 h-4 text-blue-600" />
@@ -536,7 +590,7 @@ function InterviewFeedbackPage() {
                             size="sm"
                             className="h-8 w-8 p-0"
                             onClick={() => handleDownloadDocument(document)}
-                            disabled={submitting}
+                            disabled={isFormLocked}
                             title="Download"
                           >
                             <Download className="w-4 h-4" />
@@ -554,7 +608,14 @@ function InterviewFeedbackPage() {
               
               {/* Fixed Header with Progress */}
               <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
-                <h2 className="text-lg font-bold text-gray-900 mb-2">Feedback Questions</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <h2 className="text-lg font-bold text-gray-900">Feedback Questions</h2>
+                  {interviewCompleted && (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                      Interview completed
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {selectedForm
                     ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
@@ -598,7 +659,7 @@ function InterviewFeedbackPage() {
                           <Select
                             value={selectedFormId?.toString() || ''}
                             onValueChange={(value) => setSelectedFormId(Number(value))}
-                            disabled={submitting}
+                            disabled={isFormLocked}
                           >
                             <SelectTrigger id="feedback-form-select" className="bg-white">
                               <SelectValue placeholder="Choose a feedback form" />
@@ -716,32 +777,43 @@ function InterviewFeedbackPage() {
 
               {/* Fixed Footer - Action Buttons */}
               <div className=" bg-white px-8 py-2 flex gap-3 flex-shrink-0 shadow-lg">
-                <Button 
-                  variant="outline" 
-                  onClick={() => navigate(-1)} 
-                  disabled={submitting}
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                  disabled={submitting || completing}
                   className="gap-2"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Cancel
+                  Back
                 </Button>
-                <Button 
-                  onClick={handleSubmit} 
-                  disabled={submitting || !selectedForm || questions.length === 0}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[44px]"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Submitting…
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4" />
-                      Submit Feedback
-                    </>
-                  )}
-                </Button>
+                {!interviewCompleted && (
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={submitting || completing || !selectedForm || questions.length === 0}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[44px]"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {feedbackSubmitted ? 'Updating…' : 'Submitting…'}
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4" />
+                        {feedbackSubmitted ? 'Edit Feedback' : 'Submit Feedback'}
+                      </>
+                    )}
+                  </Button>
+                )}
+                {feedbackSubmitted && !interviewCompleted && (
+                  <Button
+                    onClick={() => setCompleteDialogOpen(true)}
+                    disabled={submitting || completing}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-h-[44px]"
+                  >
+                    Complete Interview
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -755,6 +827,13 @@ function InterviewFeedbackPage() {
         previewLoading={previewLoading}
         onClose={closePreview}
         onDownload={handleDownloadDocument}
+      />
+
+      <CompleteInterviewDialog
+        open={completeDialogOpen}
+        onOpenChange={setCompleteDialogOpen}
+        onConfirm={handleCompleteInterview}
+        loading={completing}
       />
     </Layout>
   );

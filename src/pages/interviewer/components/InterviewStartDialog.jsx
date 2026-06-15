@@ -39,6 +39,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     loadInterviewData();
   }, [open, interviewScheduleId]);
 
+  const isCompleted = interviewDetails?.interviewStatus === 'COMPLETED';
+
   const loadInterviewData = async () => {
     try {
       setLoading(true);
@@ -79,13 +81,18 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     navigate(`/interviewer/feedback/${interviewScheduleId}`);
   };
 
+  const dialogTitle = isCompleted ? 'Completed Interview' : 'Interview Session';
+  const dialogDescription = isCompleted
+    ? 'This interview is finished. View the submitted feedback.'
+    : 'Review candidate information before starting the interview';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Interview Session</DialogTitle>
+          <DialogTitle className="text-2xl">{dialogTitle}</DialogTitle>
           <DialogDescription>
-            Review candidate information before starting the interview
+            {dialogDescription}
           </DialogDescription>
         </DialogHeader>
 
@@ -243,7 +250,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           </Button>
           <Button onClick={handleStartInterview} disabled={loading || !interviewScheduleId} className="gap-2">
             <User className="w-4 h-4" />
-            Start Interview
+            {isCompleted ? 'View Feedback' : 'Start Interview'}
           </Button>
         </DialogFooter>
       </DialogContent>
