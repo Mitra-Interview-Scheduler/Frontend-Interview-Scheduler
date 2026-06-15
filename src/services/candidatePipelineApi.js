@@ -3,7 +3,6 @@ import api from './api';
 export const candidatePipelineAPI = {
     getCandidatePipeline: async (candidateId) => {
         const response = await api.get(`/candidatePipeline/${candidateId}`);
-        console.log('Pipeline data for candidate', candidateId, response.data);
         return response.data;
     },
 
