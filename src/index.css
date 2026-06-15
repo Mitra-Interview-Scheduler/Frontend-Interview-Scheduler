@@ -230,6 +230,28 @@ All colors MUST be HSL.
     display: none;
   }
 
+  .candidate-tabs-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.45) transparent;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.55);
+  }
+
   .animate-fade-in {
     animation: fadeIn 0.5s ease-in-out;
   }

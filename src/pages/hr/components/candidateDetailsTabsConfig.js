@@ -1,48 +1,69 @@
-import React from 'react';
 import ProfileSummaryTab from './tabs/ProfileSummaryTab';
 import ScreeningTab from './tabs/ScreeningTab';
-import InterviewSummaryTab from './tabs/InterviewSummaryTab';
+import ProfileActivityTab from './tabs/ProfileActivityTab';
+import InterviewDetailTab from './tabs/InterviewDetailTab';
+import { formatInterviewTypeLabel } from '@/lib/candidateSteps';
 
-/**
- * Configuration for the tabs shown on the Candidate Details page.
- *
- * Each object in the array represents a tab and has the following properties:
- * - value: A unique identifier for the tab.
- * - label: The text displayed on the tab trigger.
- * - component: The React component to render for the tab's content.
- * - allowedStages: An array of candidate status keys. The tab will only be visible if the candidate's status is one of these.
- * - editableStages: An array of candidate status keys. The tab content will be editable if the candidate's status is one of these.
- */
+const ALL_STATUSES = [
+  'NEW', 'SCREENING', 'TECHNICAL_ROUND', 'HR_ROUND', 'DISPOSITION',
+  'SELECTED', 'REJECTED', 'WITHDRAWN', 'ON_HOLD', 'SCHEDULED', 'OFFERED', 'HIRED',
+];
+
+const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== 'NEW');
+const INTERVIEW_STAGES = ['TECHNICAL_ROUND', 'HR_ROUND'];
+
 export const TABS_CONFIG = [
   {
     value: 'profile',
     label: 'Profile Summary',
     component: ProfileSummaryTab,
-    allowedStages: ['NEW', 'SCREENING', 'SCHEDULED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
-    editableStages: [], // Profile is edited via the main dialog, so this is read-only here.
+    allowedStages: ALL_STATUSES,
+    editableStages: [],
   },
   {
     value: 'screening',
     label: 'Screening',
     component: ScreeningTab,
-    allowedStages: ['SCREENING', 'SCHEDULED', 'OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
+    allowedStages: POST_SCREENING_STATUSES,
     editableStages: ['SCREENING'],
   },
   {
-    value: 'summary',
-    label: 'Interview Summary',
-    component: InterviewSummaryTab,
-    allowedStages: ['OFFERED', 'HIRED', 'REJECTED', 'ON_HOLD'],
-    editableStages: [], // Summary is read-only for now.
+    value: 'activity',
+    label: 'Profile Activity',
+    component: ProfileActivityTab,
+    allowedStages: ALL_STATUSES,
+    editableStages: [],
   },
 ];
 
-/**
- * Gets the visible tabs for a given candidate status.
- * @param {string} candidateStatus - The current status of the candidate.
- * @returns {Array} An array of tab configuration objects.
- */
-export const getVisibleTabs = (candidateStatus) => {
+const getInterviewTabLabel = (interview) => {
+  const type = formatInterviewTypeLabel(interview?.interviewType);
+  const name = interview?.assignedInterviewerName || 'Interviewer';
+  return `${type} - ${name}`;
+};
+
+/** Static tabs + interview tabs (middle) + Profile Activity last. */
+export const getCandidateDetailTabs = (candidateStatus, interviewRequests = []) => {
   if (!candidateStatus) return [];
-  return TABS_CONFIG.filter(tab => tab.allowedStages.includes(candidateStatus));
+
+  const staticTabs = TABS_CONFIG.filter((tab) => tab.allowedStages.includes(candidateStatus));
+  const activityTab = staticTabs.find((tab) => tab.value === 'activity');
+  const leadingTabs = staticTabs.filter((tab) => tab.value !== 'activity');
+
+  const showInterviews = interviewRequests.length > 0 && (
+    INTERVIEW_STAGES.includes(candidateStatus)
+    || interviewRequests.some((request) => request.interviewStatus === 'COMPLETED')
+  );
+
+  const interviewTabs = showInterviews
+    ? interviewRequests.map((interview) => ({
+        value: `interview-${interview.interviewScheduleId}`,
+        label: getInterviewTabLabel(interview),
+        component: InterviewDetailTab,
+        editableStages: [],
+        interview,
+      }))
+    : [];
+
+  return [...leadingTabs, ...interviewTabs, ...(activityTab ? [activityTab] : [])];
 };
