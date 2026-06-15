@@ -1,4 +1,4 @@
-import React, { useState, useEffect,useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,6 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
-import  { getNextStepsConfig } from '@/lib/nextStepsConfig'; // 
 function CandidateDetailsPage() {
   const navigate = useNavigate();
   const { candidateId } = useParams();
@@ -27,11 +26,7 @@ function CandidateDetailsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const { candidateSteps, closingSteps } = useCandidateSteps(candidate);
-  const { prompt: nextStepsPrompt, actions: nextStepsActions } = useMemo(() => {
-    if (!candidate?.status) return { prompt: '', actions: [] };
-    return getNextStepsConfig(candidate.status);
-  }, [candidate?.status]);
+  const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
 
   useEffect(() => {
     if (!candidateId) return;
@@ -56,6 +51,11 @@ function CandidateDetailsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCandidateUpdated = async () => {
+    await refreshCandidateData();
+    refreshSteps();
   };
 
   const refreshCandidateData = async () => {
@@ -173,19 +173,17 @@ function CandidateDetailsPage() {
           </div>
         </motion.div>
 
-        <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
-          <StepProgressIndicator currentStatus={candidate.status} steps={candidateSteps}  />
+        <div className="px-4 py-3 flex-shrink-0">
+          <StepProgressIndicator currentStatus={candidate.status} steps={candidateSteps} />
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-0">
           <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-2 min-h-0">
             <CandidateNextStepsCard
               candidate={candidate}
-              prompt={nextStepsPrompt}
-              actions={nextStepsActions} 
               steps={candidateSteps}
               closingSteps={closingSteps}
-              onUpdated={loadCandidateDetails}
+              onUpdated={handleCandidateUpdated}
             />
 
             <motion.div
@@ -292,6 +290,8 @@ function CandidateDetailsPage() {
           >
             <CandidateDetailsTabs
               candidate={candidate}
+              steps={candidateSteps}
+              stepsLoading={stepsLoading}
               documents={documents}
               documentsLoading={documentsLoading}
               onPreviewDocument={handlePreviewDocument}

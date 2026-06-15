@@ -9,34 +9,34 @@ import { MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
+import { getNextStepsConfig } from '@/lib/nextStepsConfig';
 import CandidateInterviewSchedulePage from './CandidateInterviewSchedulePage';
+import { cn } from '@/lib/utils';
 
 
 function CandidateNextStepsCard({
   candidate,
-  prompt = '',
-  actions = [],
   steps = [],
   closingSteps = [],
   onUpdated,
   initiallyOpen = true,
 }) {
+  const { prompt, actions } = getNextStepsConfig(candidate?.status, steps);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(initiallyOpen);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [closeStatus, setCloseStatus] = useState('REJECTED');
   const [closeReason, setCloseReason] = useState('');
   const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
-  
 
-  const handleSetStatus = async (status) => {
+  const handleSetStatus = async (status, addPipelineRound = false) => {
     if (!candidate?.id) return;
 
     setSaving(true);
-    console.log('Updating candidate status to:', status);
     try {
       await candidateAPI.updateCandidate(candidate.id, {
         status,
+        addPipelineRound,
       });
       toast({ title: 'Status updated', description: `Candidate moved to ${getCandidateStatusLabel(steps, status)}.` });
       onUpdated?.();
@@ -49,6 +49,14 @@ function CandidateNextStepsCard({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleActionClick = (action) => {
+    if (action.actionType === 'SCHEDULE') {
+      setIsInterviewSchedulePageOpen(true);
+      return;
+    }
+    handleSetStatus(action.actionType, Boolean(action.addPipelineRound));
   };
 
   const handleReject = () => {
@@ -123,16 +131,10 @@ function CandidateNextStepsCard({
                   <Button
                     key={action.label}
                     type="button"
-                    variant={action.variant || "outline"}
+                    variant={action.variant || 'default'}
                     size="sm"
-                    className={`h-8 gap-2 ${action.className || ''}`}
-                    onClick={() => {
-                      if (action.label === "Schedule Interview") {
-                        setIsInterviewSchedulePageOpen(true);
-                      } else {
-                        handleSetStatus(action.actionType);
-                      }
-                    }}
+                    className={cn('h-8', action.className)}
+                    onClick={() => handleActionClick(action)}
                     disabled={saving || !candidate?.id}
                     title={action.label}
                   >
