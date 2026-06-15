@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import { masterStepAPI } from '@/services/masterStepApi';
@@ -9,6 +9,11 @@ export const useCandidateSteps = (candidate) => {
   const [candidateSteps, setCandidateSteps] = useState([]);
   const [closingSteps, setClosingSteps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const refreshSteps = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) {
@@ -65,11 +70,12 @@ export const useCandidateSteps = (candidate) => {
     }).finally(() => active && setLoading(false));
 
     return () => { active = false; };
-  }, [candidate?.id, authLoading, isAuthenticated]);
+  }, [candidate?.id, authLoading, isAuthenticated, reloadToken]);
 
   return {
     candidateSteps: normalizeCandidateSteps(candidateSteps),
     closingSteps: normalizeCandidateSteps(closingSteps),
     loading,
+    refreshSteps,
   };
 };
