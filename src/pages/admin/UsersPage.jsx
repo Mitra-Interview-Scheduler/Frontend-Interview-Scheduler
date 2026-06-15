@@ -109,7 +109,7 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
 
 // ─── Register dialog ──────────────────────────────────────────────────────────
 
-const EMPTY = { firstName: '', lastName: '', email: '', password: '', roles: [],auth_provider: 'LOCAL' };
+const EMPTY = { firstName: '', lastName: '', email: '', password: '', role: '' };
 
 function RegisterDialog({ open, onOpenChange, onSuccess }) {
   const [form, setForm]         = useState(EMPTY);
@@ -130,7 +130,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
 
     setSubmit(true);
     try {
-      await authAPI.register({ email, password, firstName, lastName, role });
+      await authAPI.register({ email, password, firstName, lastName, roles: [role] });
       toast({ title: 'User registered', description: `${firstName} ${lastName} added successfully.` });
       handleClose();
       onSuccess();
@@ -227,7 +227,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Role <span className="text-red-400 normal-case">*</span>
             </Label>
-            <Select value={form.role} onValueChange={set('roles')}>
+            <Select value={form.role} onValueChange={set('role')}>
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select a role…" />
               </SelectTrigger>
