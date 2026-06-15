@@ -1,4 +1,4 @@
-import { BOOKED_OVERLAY, INTERVIEWER_PALETTES } from './AvailabilityViewPageUiUtils';
+import { INTERVIEWER_PALETTES } from './AvailabilityViewPageUiUtils';
 
 export {
   calendarLocalizer as localizer,
@@ -47,11 +47,17 @@ export const checkPanelPrivilege = (panelSlots, candidate) => {
     .filter(Boolean);
 };
 
+export const formatInterviewTypeLabel = (interviewType) => {
+  if (interviewType === 'HR') return 'HR Interview';
+  if (interviewType === 'TECHNICAL') return 'Technical Interview';
+  return null;
+};
+
 export const formatSlots = (data, colorMap) =>
   data.map((slot) => {
     const isBooked = slot.status === 'BOOKED';
     const paletteIdx = colorMap[slot.interviewerId] ?? 0;
-    const palette = isBooked ? BOOKED_OVERLAY : INTERVIEWER_PALETTES[paletteIdx];
+    const palette = INTERVIEWER_PALETTES[paletteIdx];
     const skills = slot.technologies || [];
     const skillLabel = skills.length
       ? ` - ${skills.slice(0, 2).join(', ')}${skills.length > 2 ? ' +' + (skills.length - 2) : ''}`
@@ -62,7 +68,7 @@ export const formatSlots = (data, colorMap) =>
       interviewerId: slot.interviewerId,
       paletteIdx,
       title: isBooked
-        ? `Booked ${slot.interviewerName}${slot.candidateName ? ' -> ' + slot.candidateName : ''}`
+        ? (slot.candidateName || slot.interviewerName)
         : `${slot.interviewerName}${skillLabel}`,
       start: new Date(slot.startDateTime),
       end: new Date(slot.endDateTime),
@@ -76,6 +82,9 @@ export const formatSlots = (data, colorMap) =>
         status: slot.status,
         candidateName: slot.candidateName,
         requestId: slot.requestId ?? null,
+        interviewType: slot.interviewType ?? null,
+        interviewScheduleId: slot.interviewScheduleId ?? null,
+        interviewStatus: slot.interviewStatus ?? null,
         palette,
         interviewerTierOrder: slot.interviewerTierOrder ?? null,
         interviewerLevelOrder: slot.interviewerLevelOrder ?? null,

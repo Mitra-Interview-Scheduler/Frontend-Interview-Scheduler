@@ -47,6 +47,11 @@ export const availabilityAPI = {
     }
   },
 
+  completeInterview: async (interviewScheduleId) => {
+    const response = await api.patch(`interviewer/interviews/schedules/${interviewScheduleId}/complete`);
+    return response.data;
+  },
+
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a single availability slot */
