@@ -1,51 +1,75 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
-import {
-  FALLBACK_CANDIDATE_STEPS,
-  normalizeCandidateSteps,
-} from '@/lib/candidateSteps';
+import { masterStepAPI } from '@/services/masterStepApi';
+import { normalizeCandidateSteps } from '@/lib/candidateSteps';
 
 export const useCandidateSteps = (candidate) => {
-  const [candidateSteps, setCandidateSteps] = useState(FALLBACK_CANDIDATE_STEPS);
-  const [loading, setLoading] = useState(false);
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const [candidateSteps, setCandidateSteps] = useState([]);
+  const [closingSteps, setClosingSteps] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!candidate?.id) {
-      setCandidateSteps(FALLBACK_CANDIDATE_STEPS);
-      setLoading(false);
+    if (authLoading || !isAuthenticated) {
+      setLoading(authLoading);
+      if (!authLoading && !isAuthenticated) {
+        setCandidateSteps([]);
+        setClosingSteps([]);
+      }
       return;
     }
 
     let active = true;
     setLoading(true);
 
-    candidatePipelineAPI.getCandidatePipeline(candidate.id)
-      .then((steps) => active && setCandidateSteps(steps))
+    const loadMasterSteps = masterStepAPI.getCandidateSteps()
+      .then((steps) => (Array.isArray(steps) ? steps : []))
       .catch((error) => {
+        console.error('Failed to load master candidate steps:', error);
+        return [];
+      });
+
+    const loadClosingSteps = masterStepAPI.getClosingSteps()
+      .then((steps) => (Array.isArray(steps) ? steps : []))
+      .catch((error) => {
+        console.error('Failed to load closing candidate steps:', error);
+        return [];
+      });
+
+    if (!candidate?.id) {
+      Promise.all([loadMasterSteps, loadClosingSteps])
+        .then(([masterSteps, closing]) => {
+          if (!active) return;
+          setCandidateSteps(masterSteps);
+          setClosingSteps(closing);
+        })
+        .finally(() => active && setLoading(false));
+      return () => { active = false; };
+    }
+
+    Promise.all([
+      loadMasterSteps,
+      loadClosingSteps,
+      candidatePipelineAPI.getCandidatePipeline(candidate.id).catch((error) => {
         console.error(`Failed to load pipeline for candidate ${candidate.id}:`, error);
-        if (active) setCandidateSteps(FALLBACK_CANDIDATE_STEPS);
-      })
-      .finally(() => active && setLoading(false));
+        return [];
+      }),
+    ]).then(([masterSteps, closing, pipelineSteps]) => {
+      if (!active) return;
+      const steps = Array.isArray(pipelineSteps) && pipelineSteps.length > 0
+        ? pipelineSteps
+        : masterSteps;
+      setCandidateSteps(steps);
+      setClosingSteps(closing);
+    }).finally(() => active && setLoading(false));
 
     return () => { active = false; };
-  }, [candidate?.id]);
+  }, [candidate?.id, authLoading, isAuthenticated]);
 
   return {
     candidateSteps: normalizeCandidateSteps(candidateSteps),
+    closingSteps: normalizeCandidateSteps(closingSteps),
     loading,
   };
 };
-
-// export const getCandidateClosingSteps = (candidate) => {
-
-//   useEffect(() => {
-//     if (!candidate?.id) return;
-    
-//     let active = true;
-//     setLoading(true);
-
-    
- 
-// }
-
-// export default useCandidateSteps;

@@ -17,6 +17,7 @@ function CandidateNextStepsCard({
   prompt = '',
   actions = [],
   steps = [],
+  closingSteps = [],
   onUpdated,
   initiallyOpen = true,
 }) {
@@ -55,7 +56,9 @@ function CandidateNextStepsCard({
     setShowRejectDialog(true);
   };
 
-  const CLOSE_STATUS_OPTIONS = getCandidateClosingSteps(steps);
+  const CLOSE_STATUS_OPTIONS = closingSteps.length > 0
+    ? closingSteps
+    : getCandidateClosingSteps(steps);
 
   const isCommentStage = CLOSE_STATUS_OPTIONS.some((statusOption) => statusOption.key === closeStatus);
 
@@ -177,7 +180,11 @@ function CandidateNextStepsCard({
                   <div>
                     <p className="text-xs text-slate-500">Select the final status for this application</p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      {CLOSE_STATUS_OPTIONS.map((statusOption) => {
+                      {CLOSE_STATUS_OPTIONS.length === 0 ? (
+                        <p className="col-span-2 text-sm text-slate-500 rounded-md border border-dashed border-slate-200 px-3 py-4">
+                          No closing stages are configured. Check that master steps with closing status exist in the database.
+                        </p>
+                      ) : CLOSE_STATUS_OPTIONS.map((statusOption) => {
                         const active = closeStatus === statusOption.key;
                         return (
                           <button

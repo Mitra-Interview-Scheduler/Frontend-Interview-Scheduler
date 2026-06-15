@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
-import { FALLBACK_CANDIDATE_STEPS, normalizeCandidateSteps } from '@/lib/candidateSteps';
+import { normalizeCandidateSteps } from '@/lib/candidateSteps';
 
 const StepProgressIndicator = ({ currentStatus, steps  }) => {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -102,5 +102,4 @@ const StepProgressIndicator = ({ currentStatus, steps  }) => {
   );
 };
 
-export { FALLBACK_CANDIDATE_STEPS as STATUS_STEPS };
 export default StepProgressIndicator;

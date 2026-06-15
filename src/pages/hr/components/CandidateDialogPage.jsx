@@ -20,7 +20,6 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { downloadBlobResponse } from '@/lib/documentUtils';
-import { FALLBACK_CANDIDATE_STEPS } from '@/lib/candidateSteps';
 
 // Reusable Subcomponents
 import { DocumentDropzone } from './../../../components/DocumentDropzone'; 
@@ -38,7 +37,7 @@ function CandidateDialogPage({
   open, 
   candidate, 
   departments = [],
-  candidateSteps = FALLBACK_CANDIDATE_STEPS,
+  candidateSteps = [],
   onOpenChange, 
   onSaveSuccess,
   readOnly = false,

@@ -27,7 +27,7 @@ function CandidateDetailsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const { candidateSteps } = useCandidateSteps(candidate);
+  const { candidateSteps, closingSteps } = useCandidateSteps(candidate);
   const { prompt: nextStepsPrompt, actions: nextStepsActions } = useMemo(() => {
     if (!candidate?.status) return { prompt: '', actions: [] };
     return getNextStepsConfig(candidate.status);
@@ -184,6 +184,7 @@ function CandidateDetailsPage() {
               prompt={nextStepsPrompt}
               actions={nextStepsActions} 
               steps={candidateSteps}
+              closingSteps={closingSteps}
               onUpdated={loadCandidateDetails}
             />
 
