@@ -1,43 +1,75 @@
+const REPEATABLE_ROUND_KEYS = new Set(['TECHNICAL_ROUND', 'HR_ROUND']);
+
+const baseLabelForStatusKey = (statusKey, fallbackLabel) => {
+  if (statusKey === 'TECHNICAL_ROUND') return 'Technical';
+  if (statusKey === 'HR_ROUND') return 'HR';
+  return fallbackLabel;
+};
+
+const buildPipelineStepLabel = (key, masterLabel, roundIndex, totalRoundsForKey) => {
+  const baseLabel = baseLabelForStatusKey(key, masterLabel);
+  if (!REPEATABLE_ROUND_KEYS.has(key) || totalRoundsForKey <= 1 || roundIndex <= 1) {
+    return baseLabel;
+  }
+  return `${baseLabel} ${roundIndex}`;
+};
+
 export const normalizeCandidateSteps = (steps) => {
   const source = Array.isArray(steps) ? steps : [];
   if (source.length === 0) return [];
-  
-  return source
-    .map((item) => {
-      // 1. Detect if this is the new backend structure with a nested step object
-      const hasNestedStep = item.step && typeof item.step === 'object';
 
-      // 2. Map fields dynamically based on the payload structure
-      const key = hasNestedStep ? item.step.statusKey : item.key;
-      
-      // Smart label: Use custom label if it's uniquely modified, otherwise fall back to master name
-      const label = hasNestedStep 
-        ? (item.customLabel && item.customLabel !== 'defaultLabels' ? item.customLabel : item.step.label) 
-        : item.label;
+  const mapped = source.map((item) => {
+    const hasNestedStep = item.step && typeof item.step === 'object';
+    const key = hasNestedStep ? item.step.statusKey : item.key;
+    const masterLabel = hasNestedStep ? item.step.label : item.label;
+    const stepNumber = Number(item.sequenceOrder ?? (hasNestedStep ? item.step.stepOrder : item.step) ?? 0);
+    const displayOrder = Number((hasNestedStep ? item.step.displayOrder : item.displayOrder) ?? 0);
+    const isClosingStep = hasNestedStep
+      ? Boolean(item.step.isClosingStep ?? item.step.closingStep)
+      : Boolean(item.isClosingStep ?? item.closingStep);
+    const bgColor = (hasNestedStep ? item.step.bgColor : item.bgColor) || '#6b7280';
+    const badgeClass = (hasNestedStep ? item.step.badgeClass : item.badgeClass) || 'bg-gray-100 text-gray-800';
+    const lightClass = (hasNestedStep ? item.step.lightClass : item.lightClass) || 'bg-gray-100';
 
-      const stepNumber = Number(item.sequenceOrder ?? (hasNestedStep ? item.step.stepOrder : item.step) ?? 0);
-      const displayOrder = Number((hasNestedStep ? item.step.displayOrder : item.displayOrder) ?? 0);
-      const isClosingStep = hasNestedStep
-        ? Boolean(item.step.isClosingStep ?? item.step.closingStep)
-        : Boolean(item.isClosingStep ?? item.closingStep);
-      
-      const bgColor = (hasNestedStep ? item.step.bgColor : item.bgColor) || '#6b7280';
-      const badgeClass = (hasNestedStep ? item.step.badgeClass : item.badgeClass) || 'bg-gray-100 text-gray-800';
-      const lightClass = (hasNestedStep ? item.step.lightClass : item.lightClass) || 'bg-gray-100';
+    return {
+      ...item,
+      key,
+      masterLabel,
+      label: masterLabel,
+      step: stepNumber,
+      displayOrder,
+      bgColor,
+      badgeClass,
+      lightClass,
+      isClosingStep,
+    };
+  }).sort((a, b) => (a.step - b.step) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
 
-      return {
-        ...item, // Retains original root variables (createdAt, stepStatus, etc.)
-        key,
-        label,
-        step: stepNumber, 
-        displayOrder,
-        bgColor,
-        badgeClass,
-        lightClass,
-        isClosingStep,
-      };
-    })
-    .sort((a, b) => (a.step - b.step) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
+  const roundCounts = mapped.reduce((counts, step) => {
+    if (REPEATABLE_ROUND_KEYS.has(step.key)) {
+      counts[step.key] = (counts[step.key] || 0) + 1;
+    }
+    return counts;
+  }, {});
+
+  const roundIndexes = {};
+
+  return mapped.map((step) => {
+    if (!REPEATABLE_ROUND_KEYS.has(step.key)) {
+      return step;
+    }
+
+    roundIndexes[step.key] = (roundIndexes[step.key] || 0) + 1;
+    return {
+      ...step,
+      label: buildPipelineStepLabel(
+        step.key,
+        step.masterLabel,
+        roundIndexes[step.key],
+        roundCounts[step.key] || 1,
+      ),
+    };
+  });
 };
 
 // --- Downstream Actions (Remain Unchanged & Now Functional) ---
