@@ -50,32 +50,23 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   if (!candidate) return null;
 
   const handleGoToAvailability = () => {
-    if (!availabilityDate) return;
+    if (!availabilityDate || !interviewType) return;
 
-     let filteredData = {
+    const filteredData = {
       startDateTime: availabilityDate,
-          departmentId: candidate.departmentId,
-          minTierOrder: candidate.tierOrder,
-          minLevelOrder: candidate.levelOrder,
-          candidateId: candidate.id,
-          candidateName: candidate.name,
-          interviewType,
+      departmentId: interviewType === 'HR' ? hrDepartmentId : candidate.departmentId,
+      minTierOrder: candidate.tierOrder,
+      minLevelOrder: interviewType === 'HR' ? null : candidate.levelOrder,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      interviewType,
     };
 
-    if (interviewType === 'HR') {
-      filteredData.departmentId = hrDepartmentId;
-      filteredData.minLevelOrder = null; 
-    } else {
-      filteredData.departmentId = candidate.departmentId;
-      filteredData.minLevelOrder = candidate.levelOrder;
-    }
-    
-
-    navigate('/hr/availability', {
-      state: {
-        filterData: filteredData
-      }
-    });
+    onOpenChange(false);
+    navigate(
+      `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
+      { state: { filterData: filteredData } },
+    );
   };
 
   return (

@@ -37,6 +37,10 @@ const NEXT_STEPS_BY_STATUS = {
     prompt: 'An interview is scheduled. Schedule another interview or continue the process.',
     actions: [SCHEDULE_INTERVIEW],
   },
+  INTERVIEW_SCHEDULES: {
+    prompt: 'Interview schedules are in progress. Schedule another interview or continue the process.',
+    actions: [SCHEDULE_INTERVIEW],
+  },
   DEFAULT: {
     prompt: 'Review the candidate and choose the next stage to move the process forward.',
     actions: [],

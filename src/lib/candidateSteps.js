@@ -280,30 +280,81 @@ const buildInterviewActivityEntries = (interviews = [], panels = []) => {
   return entries;
 };
 
-const attachRoundStagesToInterviews = (pipelineEntries, interviewEntries) => {
-  const deferredRoundStages = pipelineEntries.filter((entry) => ROUND_STAGE_KEYS.has(entry.stepKey));
-  const regularPipelineEntries = pipelineEntries.filter((entry) => !ROUND_STAGE_KEYS.has(entry.stepKey));
-  const positionedRoundStages = [];
+const PIPELINE_SORT_SCALE = 100_000;
 
-  deferredRoundStages.forEach((stage) => {
-    const interviewType = ROUND_STAGE_TO_INTERVIEW_TYPE[stage.stepKey];
-    const firstInterview = interviewEntries.find((entry) => (
-      entry.interviewType === interviewType && entry.kind === 'INTERVIEW_PRELUDE'
+const toPipelineSortKey = (sequenceOrder, subOrder = 0) => (
+  Number(sequenceOrder ?? 0) * PIPELINE_SORT_SCALE + subOrder
+);
+
+const sortInterviewPreludes = (preludes = []) => [...preludes].sort((a, b) => {
+  const timeA = a.sortTimestamp ?? getInterviewRequestTimestamp(a.interviewRequest);
+  const timeB = b.sortTimestamp ?? getInterviewRequestTimestamp(b.interviewRequest);
+  if (timeA !== timeB) return timeA - timeB;
+  return Number(a.interviewRequest?.id ?? 0) - Number(b.interviewRequest?.id ?? 0);
+});
+
+const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => {
+  const sortedPipeline = [...pipelineEntries].sort(
+    (a, b) => Number(a.sequenceOrder ?? 0) - Number(b.sequenceOrder ?? 0),
+  );
+
+  const preludeQueues = {
+    TECHNICAL: sortInterviewPreludes(
+      interviewEntries.filter((entry) => entry.kind === 'INTERVIEW_PRELUDE' && entry.interviewType === 'TECHNICAL'),
+    ),
+    HR: sortInterviewPreludes(
+      interviewEntries.filter((entry) => entry.kind === 'INTERVIEW_PRELUDE' && entry.interviewType === 'HR'),
+    ),
+  };
+
+  const consumedPreludeIds = new Set();
+  const timeline = [];
+
+  const takeNextPrelude = (interviewType) => {
+    const queue = preludeQueues[interviewType] || [];
+    const prelude = queue.find((entry) => !consumedPreludeIds.has(entry.id));
+    if (!prelude) return null;
+    consumedPreludeIds.add(prelude.id);
+    return prelude;
+  };
+
+  sortedPipeline.forEach((entry) => {
+    const sequenceOrder = Number(entry.sequenceOrder ?? 0);
+    timeline.push(withSortMeta(
+      entry,
+      toPipelineSortKey(sequenceOrder, 0),
+      ROUND_STAGE_KEYS.has(entry.stepKey)
+        ? INTERVIEW_GROUP_ORDER.ROUND_STAGE
+        : INTERVIEW_GROUP_ORDER.DEFAULT,
     ));
 
-    if (!firstInterview) {
-      positionedRoundStages.push(withSortMeta(stage, getActivityTimestamp(stage)));
-      return;
-    }
+    if (!ROUND_STAGE_KEYS.has(entry.stepKey)) return;
 
-    positionedRoundStages.push(withSortMeta(
-      stage,
-      firstInterview.sortTimestamp ?? getActivityTimestamp(firstInterview),
-      INTERVIEW_GROUP_ORDER.ROUND_STAGE,
+    const interviewType = ROUND_STAGE_TO_INTERVIEW_TYPE[entry.stepKey];
+    const prelude = takeNextPrelude(interviewType);
+    if (!prelude) return;
+
+    timeline.push(withSortMeta(
+      prelude,
+      toPipelineSortKey(sequenceOrder, 1),
+      INTERVIEW_GROUP_ORDER.PRELUDE,
     ));
   });
 
-  return [...regularPipelineEntries, ...positionedRoundStages];
+  interviewEntries
+    .filter((entry) => !consumedPreludeIds.has(entry.id))
+    .forEach((entry) => {
+      const fallbackSort = getInterviewRequestTimestamp(entry.interviewRequest)
+        || getActivityTimestamp(entry)
+        || Date.now();
+      timeline.push(withSortMeta(
+        entry,
+        fallbackSort + PIPELINE_SORT_SCALE * 1_000,
+        INTERVIEW_GROUP_ORDER.PRELUDE,
+      ));
+    });
+
+  return timeline.sort(compareActivityEntries);
 };
 
 export const buildCandidateActivityHistory = (steps, candidate = null, interviews = [], panels = []) => {
@@ -345,7 +396,5 @@ export const buildCandidateActivityHistory = (steps, candidate = null, interview
   }
 
   const interviewEntries = buildInterviewActivityEntries(interviews, panels);
-  const pipelineWithRoundStages = attachRoundStagesToInterviews(entries, interviewEntries);
-
-  return [...pipelineWithRoundStages, ...interviewEntries].sort(compareActivityEntries);
+  return buildInterleavedActivityTimeline(entries, interviewEntries);
 };

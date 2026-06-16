@@ -6,7 +6,7 @@ import { formatInterviewTypeLabel } from '@/lib/candidateSteps';
 
 const ALL_STATUSES = [
   'NEW', 'SCREENING', 'TECHNICAL_ROUND', 'HR_ROUND', 'DISPOSITION',
-  'SELECTED', 'REJECTED', 'WITHDRAWN', 'ON_HOLD', 'SCHEDULED', 'OFFERED', 'HIRED',
+  'SELECTED', 'REJECTED', 'WITHDRAWN', 'ON_HOLD', 'INTERVIEW_SCHEDULES', 'OFFERED', 'HIRED',
 ];
 
 const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== 'NEW');

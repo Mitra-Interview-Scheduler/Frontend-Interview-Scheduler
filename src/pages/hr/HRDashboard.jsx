@@ -416,7 +416,7 @@ const HRDashboard = () => {
     },
     {
       title: 'Scheduled Interviews',
-      value: candidatesByStatus.SCHEDULED || 0,
+      value: candidatesByStatus.INTERVIEW_SCHEDULES || candidatesByStatus.SCHEDULED || 0,
       subtext: `${todayInterviews.length} today · ${tomorrowInterviews.length} tomorrow`,
       icon: Calendar, color: 'text-green-600', bg: 'bg-green-50',
       onClick: () => navigate('/hr/availability'),

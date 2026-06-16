@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router-dom'; 
+import { useLocation, useSearchParams } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
@@ -51,8 +51,14 @@ const CALENDAR_PAGE_SIZES = {
 
 
 // ── Component ────────────────────────────────────────────────────────────────
+const resolveInterviewType = (...values) => {
+  const match = values.find((value) => value === 'HR' || value === 'TECHNICAL');
+  return match || 'TECHNICAL';
+};
+
 const AvailabilityViewPage = () => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const calendarFormats = useCalendarFormats();
   const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
   const [rawSlots, setRawSlots] = useState([]);
@@ -100,7 +106,7 @@ const AvailabilityViewPage = () => {
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
   const [requestForm, setRequestForm] = useState({
     candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '',
+    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: 'TECHNICAL',
   });
 
   // Cancel booked dialog
@@ -208,35 +214,39 @@ const AvailabilityViewPage = () => {
 
   useEffect(() => {
     const incomingFilter = location.state?.filterData;
-    
+    const paramCandidateId = searchParams.get('candidateId');
+    const paramInterviewType = searchParams.get('interviewType');
+
+    if (!incomingFilter && !paramCandidateId && !paramInterviewType) return;
+
+    const resolvedInterviewType = resolveInterviewType(
+      incomingFilter?.interviewType,
+      paramInterviewType,
+    );
+
     if (incomingFilter) {
-      console.log('Applying incoming filter from navigation state:', incomingFilter);
       setPendingFilter(incomingFilter);
-      
-      // 1. Set the Date Range
-      setDateRange({ 
-        start: new Date(incomingFilter.startDateTime), 
-        end: null 
+
+      setDateRange({
+        start: new Date(incomingFilter.startDateTime),
+        end: null,
       });
 
-      // 2. Set Department
       if (incomingFilter.departmentId) {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
       }
-
-      // 3. Set the pre-selected candidate for the Booking Dialog later
-      setRequestForm(prev => ({
-        ...prev,
-        candidateId: incomingFilter.candidateId,
-        candidateName: incomingFilter.candidateName
-      }));
-
-      if (incomingFilter.interviewType) {
-        setInterviewType(incomingFilter.interviewType);
-      }
     }
-  }, [location.state]);
+
+    setInterviewType(resolvedInterviewType);
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: incomingFilter?.candidateId
+        ?? (paramCandidateId ? parseInt(paramCandidateId, 10) : prev.candidateId),
+      candidateName: incomingFilter?.candidateName ?? prev.candidateName,
+      interviewType: resolvedInterviewType,
+    }));
+  }, [location.state, searchParams]);
 
 
   
@@ -534,14 +544,16 @@ const AvailabilityViewPage = () => {
     setBookStartTime(format(event.start, 'HH:mm'));
     setBookEndTime(format(event.end, 'HH:mm'));
     setRequestForm(prev => ({
-      candidateId: prev.candidateId, 
-      candidateName: prev.candidateName, 
+      candidateId: prev.candidateId,
+      candidateName: prev.candidateName,
       candidateDesignationId: prev.candidateDesignationId,
+      interviewType: resolveInterviewType(prev.interviewType, interviewType),
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
       }).filter(Boolean),
-      isUrgent: false, notes: '',
+      isUrgent: false,
+      notes: '',
     }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
@@ -581,7 +593,7 @@ const AvailabilityViewPage = () => {
         preferredEndDateTime: formatLocalDateTime(bookEnd),
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
-        interviewType,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
       });
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
@@ -627,7 +639,7 @@ const AvailabilityViewPage = () => {
         requiredTechnologyIds: requestForm.requiredTechnologyIds,
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
-        interviewType,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
       });
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
@@ -775,7 +787,13 @@ const calendarSlotPropGetter = useCallback((date) => {
     <Card className="border-slate-200">
       <CardContent className="p-4 space-y-2">
         <Label className="text-sm font-semibold">Interview Type</Label>
-        <Select value={interviewType} onValueChange={setInterviewType}>
+        <Select
+          value={resolveInterviewType(requestForm.interviewType, interviewType)}
+          onValueChange={(value) => {
+            setInterviewType(value);
+            setRequestForm((prev) => ({ ...prev, interviewType: value }));
+          }}
+        >
           <SelectTrigger className="bg-white dark:bg-gray-900">
             <SelectValue placeholder="Select interview type" />
           </SelectTrigger>
@@ -785,7 +803,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {interviewType === 'HR'
+          {resolveInterviewType(requestForm.interviewType, interviewType) === 'HR'
             ? 'Candidate status will move to HR Round when this interview is booked.'
             : 'Candidate status will move to Technical Round when this interview is booked.'}
         </p>
