@@ -52,6 +52,15 @@ export const availabilityAPI = {
     return response.data;
   },
 
+  /**
+   * TODO: Backend — POST /api/interviewer/interviews/schedules/{scheduleId}/propose-time
+   * Payload: { availabilitySlotId, proposedStartDateTime, proposedEndDateTime, notes? }
+   */
+  proposeAlternativeTime: async (payload) => {
+    console.info('[STUB] proposeAlternativeTime', payload);
+    return { status: 'PENDING', ...payload };
+  },
+
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a single availability slot */
