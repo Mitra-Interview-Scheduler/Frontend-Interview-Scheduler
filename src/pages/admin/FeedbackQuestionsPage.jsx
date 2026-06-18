@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,32 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { Plus, Trash2, Eye, Save, Copy, GripVertical, Loader2, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Eye, Save, Copy, GripVertical, Loader2, ChevronDown, Tags } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { departmentAPI } from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
+import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
   { value: 'dropdown', label: 'Dropdown' },
-];
-
-const QUESTION_CATEGORIES = [
-  'Educational Background',
-  'Relevant Experience',
-  'Architecture & Systems Design',
-  'Software Development & Programming',
-  'Methodologies & Tools',
-  'Technical Expertise',
-  'Conceptual Understanding',
-  'Analytical and Problem Solving Skills',
-  'Teamwork',
-  'Leadership',
-  'Growth Potential and Achievements',
-  'Communication Skills',
 ];
 
 const DEFAULT_DROPDOWN_OPTIONS = [
@@ -49,10 +35,10 @@ const DEFAULT_DROPDOWN_OPTIONS = [
 
 const getDefaultOptionsForType = (type) => (type === 'dropdown' ? [...DEFAULT_DROPDOWN_OPTIONS] : ['']);
 
-const createQuestion = (overrides = {}) => ({
+const createQuestion = (categoryId = '', overrides = {}) => ({
   id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
   label: '',
-  category: QUESTION_CATEGORIES[0],
+  categoryId: categoryId ? String(categoryId) : '',
   type: 'text',
   required: true,
   commentsEnabled: false,
@@ -93,7 +79,8 @@ const FeedbackQuestionsPage = () => {
   const [designationsByDepartment, setDesignationsByDepartment] = useState({});
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [questions, setQuestions] = useState([createQuestion()]);
+  const [questionCategories, setQuestionCategories] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [initialData, setInitialData] = useState(null);
   const questionRefs = useRef({});
   const [scrollToQuestionId, setScrollToQuestionId] = useState(null);
@@ -113,12 +100,16 @@ const FeedbackQuestionsPage = () => {
     const loadLookups = async () => {
       try {
         setLoading(true);
-        const [deptData, designationData] = await Promise.all([
+        const [deptData, designationData, categoryData] = await Promise.all([
           departmentAPI.getAllDepartments(),
           designationAPI.getAllDesignations(),
+          questionCategoryAPI.getAll(true),
         ]);
         setDepartments(deptData || []);
         setDesignations(designationData || []);
+        const categories = categoryData || [];
+        setQuestionCategories(categories);
+        const defaultCategoryId = categories[0]?.id;
         // Prefill when editing existing form via ?id=
         const params = new URLSearchParams(window.location.search);
         const editId = params.get('id');
@@ -133,7 +124,7 @@ const FeedbackQuestionsPage = () => {
               const questionsData = (form.questions || []).map((q) => ({
                 id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
                 label: q.label || '',
-                category: q.category || QUESTION_CATEGORIES[0],
+                categoryId: String(q.categoryId || defaultCategoryId || ''),
                 type: q.type || 'text',
                 required: q.required || false,
                 commentsEnabled: q.commentsEnabled || false,
@@ -153,6 +144,8 @@ const FeedbackQuestionsPage = () => {
           } catch (err) {
             console.warn('Failed to load form for editing:', err);
           }
+        } else if (defaultCategoryId) {
+          setQuestions([createQuestion(defaultCategoryId)]);
         }
       } catch (error) {
         toast({
@@ -255,7 +248,8 @@ const FeedbackQuestionsPage = () => {
   };
 
   const addQuestion = () => {
-    const newQuestion = createQuestion();
+    const defaultCategoryId = questionCategories[0]?.id;
+    const newQuestion = createQuestion(defaultCategoryId);
     setQuestions((current) => [...current, newQuestion]);
     setScrollToQuestionId(newQuestion.id);
   };
@@ -312,7 +306,7 @@ const FeedbackQuestionsPage = () => {
     questions: questions.map((question, index) => ({
       order: index + 1,
       label: question.label.trim(),
-      category: question.category,
+      categoryId: Number(question.categoryId),
       type: question.type,
       required: question.required,
       commentsEnabled: question.commentsEnabled,
@@ -333,6 +327,7 @@ const FeedbackQuestionsPage = () => {
     if (selectedDesignationIds.length === 0) return 'Select at least one designation from the selected department';
     if (!questions.length) return 'Add at least one question';
     if (questions.some((question) => !question.label.trim())) return 'Every question needs a label';
+    if (questions.some((question) => !question.categoryId)) return 'Every question needs a category';
     if (questions.some((question) => question.type === 'dropdown' && normalizeMultiLine(question.options.join('\n')).length === 0)) {
       return 'Dropdown questions need at least one option';
     }
@@ -384,6 +379,12 @@ const FeedbackQuestionsPage = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/admin/feedback-forms?tab=categories">
+                <Tags className="w-4 h-4" />
+                Manage Categories
+              </Link>
+            </Button>
             <Button variant="outline" onClick={() => setPreviewOpen(true)} className="gap-2" disabled={loading}>
               <Eye className="w-4 h-4" /> Preview
             </Button>
@@ -601,16 +602,16 @@ const FeedbackQuestionsPage = () => {
                         <div className="space-y-2">
                           <Label>Category</Label>
                           <Select
-                            value={question.category}
-                            onValueChange={(value) => updateQuestion(question.id, { category: value })}
+                            value={question.categoryId}
+                            onValueChange={(value) => updateQuestion(question.id, { categoryId: value })}
                           >
                             <SelectTrigger>
-                              <SelectValue />
+                              <SelectValue placeholder="Select category" />
                             </SelectTrigger>
                             <SelectContent>
-                              {QUESTION_CATEGORIES.map((category) => (
-                                <SelectItem key={category} value={category}>
-                                  {category}
+                              {questionCategories.map((category) => (
+                                <SelectItem key={category.id} value={String(category.id)}>
+                                  {category.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>

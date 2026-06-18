@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
+import { technologyAPI } from '@/services/technologyAPI';
+import { getTechnologyCategoryLabel } from '@/lib/technologyHelpers';
 import { normalizeImageUrl } from '@/lib/imageUrl';
 
 
@@ -27,7 +29,8 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newSkill, setNewSkill] = useState('');
-  const [newSkillCategory, setNewSkillCategory] = useState('Other');
+  const [newSkillCategoryId, setNewSkillCategoryId] = useState('');
+  const [skillCategories, setSkillCategories] = useState([]);
   const [showSkillDropdown, setShowSkillDropdown] = useState(false);
   const [showNewSkillModal, setShowNewSkillModal] = useState(false);
   const [filteredTechnologies, setFilteredTechnologies] = useState([]);
@@ -62,12 +65,13 @@ const ProfilePage = () => {
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, techList, deptList, desList, tierList] = await Promise.all([
+      const [profileData, techList, deptList, desList, tierList, categoryList] = await Promise.all([
         profileAPI.getProfile(),
         profileAPI.getAllTechnologies(),
         profileAPI.getDepartments(),
         profileAPI.getDesignations(),
         profileAPI.getTiers(),
+        technologyAPI.getAllCategories(),
       ]);
 
       setProfile(profileData);
@@ -75,6 +79,9 @@ const ProfilePage = () => {
       setDepartments(deptList);
       setDesignations(desList);
       setTiers(tierList);
+      setSkillCategories(categoryList || []);
+      const defaultCategory = (categoryList || []).find((c) => c.code === 'GENERAL') || categoryList?.[0];
+      setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
 
       if (isInterviewer) {
         try {
@@ -255,12 +262,13 @@ const ProfilePage = () => {
     if (!newSkill.trim()) return;
 
     try {
-      const newTech = await profileAPI.createTechnology(newSkill.trim(), newSkillCategory);
+      const newTech = await profileAPI.createTechnology(newSkill.trim(), Number(newSkillCategoryId));
       setTechnologies([...technologies, newTech]);
       await addSkillById(newTech.id);
 
       setNewSkill('');
-      setNewSkillCategory('Other');
+      const defaultCategory = skillCategories.find((c) => c.code === 'GENERAL') || skillCategories[0];
+      setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
       setShowNewSkillModal(false);
 
       toast.success(`Created and added "${newTech.name}"`);
@@ -678,7 +686,7 @@ const ProfilePage = () => {
                                       >
                                         <span className="font-medium">{tech.name}</span>
                                         <span className="text-xs text-muted-foreground">
-                                          {tech.category}
+                                          {getTechnologyCategoryLabel(tech)}
                                         </span>
                                       </button>
                                     ))}
@@ -728,8 +736,8 @@ const ProfilePage = () => {
                           className="text-sm gap-1 pr-1 bg-success-light text-success border-success/20"
                         >
                           <span>{it.technology.name}</span>
-                          {it.technology.category && (
-                            <span className="text-xs opacity-70">({it.technology.category})</span>
+                          {it.technology?.category && (
+                            <span className="text-xs opacity-70">({getTechnologyCategoryLabel(it.technology)})</span>
                           )}
                           {isEditing && (
                             <button
@@ -799,16 +807,16 @@ const ProfilePage = () => {
                   <div className="space-y-2">
                     <Label htmlFor="skillCategory">Category</Label>
                     <Select
-                      value={newSkillCategory}
-                      onValueChange={setNewSkillCategory}
+                      value={newSkillCategoryId}
+                      onValueChange={setNewSkillCategoryId}
                     >
                       <SelectTrigger id="skillCategory">
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {SKILL_CATEGORIES.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
+                        {skillCategories.map((category) => (
+                          <SelectItem key={category.id} value={String(category.id)}>
+                            {category.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -822,7 +830,8 @@ const ProfilePage = () => {
                       onClick={() => {
                         setShowNewSkillModal(false);
                         setNewSkill('');
-                        setNewSkillCategory('Other');
+                        const defaultCategory = skillCategories.find((c) => c.code === 'GENERAL') || skillCategories[0];
+                        setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
                       }}
                     >
                       Cancel

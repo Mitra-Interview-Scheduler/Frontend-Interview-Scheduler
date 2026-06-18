@@ -32,6 +32,7 @@ import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -746,14 +747,22 @@ const calendarSlotPropGetter = useCallback((date) => {
   return {};
 }, [calendarLockStart]);
   const technologyCategories = useMemo(() => {
-    const categories = Array.from(new Set(technologies.map((tech) => tech.category || 'Other')))
-      .sort((a, b) => a.localeCompare(b));
-    return categories;
+    const byCode = new Map();
+    technologies.forEach((tech) => {
+      const code = getTechnologyCategoryCode(tech) || 'OTHER';
+      const label = getTechnologyCategoryLabel(tech);
+      if (!byCode.has(code)) {
+        byCode.set(code, label);
+      }
+    });
+    return Array.from(byCode.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [technologies]);
 
   const filteredTechnologies = useMemo(() => {
     return technologies
-      .filter((tech) => !selectedTechCategory || (tech.category || 'Other') === selectedTechCategory)
+      .filter((tech) => !selectedTechCategory || getTechnologyCategoryCode(tech) === selectedTechCategory)
       .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
   }, [technologies, selectedTechCategory, techSearchTerm]);
 
@@ -1051,7 +1060,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <SelectContent>
                       <SelectItem value="NONE">All Categories</SelectItem>
                       {technologyCategories.map((category) => (
-                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                        <SelectItem key={category.code} value={category.code}>{category.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1090,7 +1099,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                                 className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
                                 <span className="font-medium">{tech.name}</span>
                                 <span className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">{tech.category || 'Other'}</span>
+                                  <span className="text-xs text-muted-foreground">{getTechnologyCategoryLabel(tech)}</span>
                                   {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
                                 </span>
                               </button>

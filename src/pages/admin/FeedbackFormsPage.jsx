@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,16 +7,26 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
+import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { designationAPI } from '@/services/designationAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
+import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
+import CategoryManager from '@/components/admin/CategoryManager';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'categories' ? 'categories' : 'forms';
+
+  const setActiveTab = (tab) => {
+    setSearchParams(tab === 'categories' ? { tab: 'categories' } : {});
+  };
+
   const [loading, setLoading] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewForm, setPreviewForm] = useState(null);
@@ -26,6 +36,7 @@ const FeedbackFormsPage = () => {
   const [filteredForms, setFilteredForms] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [questionCategories, setQuestionCategories] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
@@ -44,9 +55,10 @@ const FeedbackFormsPage = () => {
   const refreshData = async () => {
     try {
       setLoading(true);
-      const [deptData, desigData] = await Promise.all([
+      const [deptData, desigData, categoryData] = await Promise.all([
         departmentAPI.getAllDepartments(),
         designationAPI.getAllDesignations(),
+        questionCategoryAPI.getAll(false),
       ]);
 
       try {
@@ -64,6 +76,7 @@ const FeedbackFormsPage = () => {
 
       setDepartments(deptData || []);
       setDesignations(desigData || []);
+      setQuestionCategories(categoryData || []);
     } catch (error) {
       console.error('Load failed:', error);
       setForms([]);
@@ -169,15 +182,22 @@ const FeedbackFormsPage = () => {
 
   return (
     <Layout>
-      <div className="flex h-[calc(100vh-7rem)] flex-col gap-6 overflow-hidden">
+      <div
+        className={
+          activeTab === 'forms'
+            ? 'flex h-[calc(100vh-7rem)] flex-col gap-6 overflow-hidden'
+            : 'space-y-6'
+        }
+      >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold text-foreground">Feedback Forms</h1>
             <p className="text-muted-foreground">
-              Manage all feedback forms used across your organization.
+              Manage feedback forms and question categories for your organization.
             </p>
           </div>
 
+          {activeTab === 'forms' && (
           <div className="flex gap-2">
             <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
               <Plus className="w-4 h-4" /> New Form
@@ -205,8 +225,22 @@ const FeedbackFormsPage = () => {
               Seed 5 Mock Forms
             </Button>
           </div>
+          )}
         </div>
 
+        <AdminSectionTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { value: 'forms', label: 'Forms', icon: FileText, count: forms.length },
+            { value: 'categories', label: 'Categories', icon: Tags, count: questionCategories.length },
+          ]}
+        />
+
+        {activeTab === 'categories' ? (
+          <CategoryManager type="question" onCategoriesChange={setQuestionCategories} />
+        ) : (
+          <>
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
@@ -449,6 +483,8 @@ const FeedbackFormsPage = () => {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </Layout>
   );
