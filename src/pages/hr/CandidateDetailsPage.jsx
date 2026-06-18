@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { useCandidateInterviews } from '@/hooks/useCandidateInterviews';
 import { isFinalClosingStage } from '@/lib/nextStepsConfig';
 function CandidateDetailsPage() {
   const navigate = useNavigate();
@@ -27,7 +28,16 @@ function CandidateDetailsPage() {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [interviewRefreshKey, setInterviewRefreshKey] = useState(0);
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
+  const { interviewRequests, loading: interviewsLoading } = useCandidateInterviews(
+    candidate?.id,
+    interviewRefreshKey,
+  );
+
+  const refreshInterviews = useCallback(() => {
+    setInterviewRefreshKey((key) => key + 1);
+  }, []);
 
   useEffect(() => {
     if (!candidateId) return;
@@ -57,6 +67,7 @@ function CandidateDetailsPage() {
   const handleCandidateUpdated = async () => {
     await refreshCandidateData();
     refreshSteps();
+    refreshInterviews();
   };
 
   const refreshCandidateData = async () => {
@@ -175,7 +186,11 @@ function CandidateDetailsPage() {
         </motion.div>
 
         <div className="px-4 py-3 flex-shrink-0">
-          <StepProgressIndicator currentStatus={candidate.status} steps={candidateSteps} />
+          <StepProgressIndicator
+            currentStatus={candidate.status}
+            steps={candidateSteps}
+            interviewRequests={interviewRequests}
+          />
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-0">
@@ -295,12 +310,15 @@ function CandidateDetailsPage() {
               candidate={candidate}
               steps={candidateSteps}
               stepsLoading={stepsLoading}
+              interviewRequests={interviewRequests}
+              interviewsLoading={interviewsLoading}
+              onInterviewsRefresh={refreshInterviews}
               documents={documents}
               documentsLoading={documentsLoading}
               onPreviewDocument={handlePreviewDocument}
               onDownloadDocument={handleDownloadDocument}
               onDocumentUploaded={() => loadCandidateDocuments(candidateId)}
-              onCandidateUpdated={refreshCandidateData}
+              onCandidateUpdated={handleCandidateUpdated}
             />
           </motion.div>
         </div>

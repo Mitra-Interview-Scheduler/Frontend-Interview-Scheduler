@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Calendar, User, Briefcase, Clock } from 'lucide-react';
+import { Loader2, Calendar, User, Briefcase, Clock, AlertCircle } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import FeedbackResponseDisplay from '@/components/FeedbackResponseDisplay';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import {
   formatInterviewTypeLabel,
 } from '@/lib/candidateSteps';
-import { getInterviewStatusMeta } from '@/lib/candidateInterviews';
+import { getInterviewStatusMeta, resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
 
 const InterviewDetailTab = ({ interview, candidate, isActive = true }) => {
   const { formatDateTime, formatDateTimeRange } = useFormattedDateTime();
@@ -17,9 +18,10 @@ const InterviewDetailTab = ({ interview, candidate, isActive = true }) => {
   const [feedbackForm, setFeedbackForm] = useState(null);
   const [feedbackResponse, setFeedbackResponse] = useState(null);
 
-  const interviewStatus = interview?.interviewStatus || 'SCHEDULED';
+  const interviewStatus = resolveInterviewRequestStatus(interview);
   const statusMeta = getInterviewStatusMeta(interviewStatus);
   const isCompleted = interviewStatus === 'COMPLETED';
+  const isCancelled = interviewStatus === 'CANCELLED';
   const scheduleId = interview?.interviewScheduleId;
 
   const loadFeedback = useCallback(async () => {
@@ -58,7 +60,18 @@ const InterviewDetailTab = ({ interview, candidate, isActive = true }) => {
 
   return (
     <div className="space-y-6 pb-6">
-      <Card className="border-blue-100 shadow-sm">
+      {isCancelled && (
+        <Alert className="border-red-200 bg-red-50 text-red-900 [&>svg]:text-red-600">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Interview cancelled</AlertTitle>
+          <AlertDescription className="text-red-800">
+            This interview was cancelled and will not take place. The interviewer&apos;s time slot has been restored
+            to available.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card className={`shadow-sm ${isCancelled ? 'border-red-100 opacity-90' : 'border-blue-100'}`}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-xl text-gray-900">
@@ -115,7 +128,7 @@ const InterviewDetailTab = ({ interview, candidate, isActive = true }) => {
         </CardContent>
       </Card>
 
-      {!isCompleted && (
+      {!isCompleted && !isCancelled && (
         <div className="rounded-lg border border-dashed border-sky-200 bg-sky-50 px-4 py-5 text-sm text-sky-800">
           Interview feedback will appear here once the interviewer completes the interview.
         </div>

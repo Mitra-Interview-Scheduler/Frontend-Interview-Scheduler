@@ -1,10 +1,13 @@
 import React from 'react';
 import { Check, X, Minus } from 'lucide-react';
-import { normalizeCandidateSteps } from '@/lib/candidateSteps';
+import { normalizeCandidateSteps, applyCancelledInterviewOverrides } from '@/lib/candidateSteps';
 import '@/styles/StepProgressIndicator.css';
 
-const StepProgressIndicator = ({ currentStatus, steps }) => {
-  const statusSteps = normalizeCandidateSteps(steps);
+const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] }) => {
+  const statusSteps = applyCancelledInterviewOverrides(
+    normalizeCandidateSteps(steps),
+    interviewRequests,
+  );
   const currentPipelineStep = statusSteps.find((s) => s.stepStatus === 'CURRENT');
   const currentStatusObj = currentPipelineStep
     || statusSteps.find((s) => s.key === currentStatus);
@@ -21,7 +24,12 @@ const StepProgressIndicator = ({ currentStatus, steps }) => {
     return null;
   }
 
-  const getStepColor = (step) => step?.bgColor || '#6366f1';
+  const getStepColor = (step) => {
+    if (step?.cancelledInterview || step?.stepStatus === 'FAILED') {
+      return '#ef4444';
+    }
+    return step?.bgColor || '#6366f1';
+  };
 
   const getStepState = (pipelineStep, index) => {
     const isCurrent = pipelineStep.stepStatus === 'CURRENT'
@@ -65,7 +73,7 @@ const StepProgressIndicator = ({ currentStatus, steps }) => {
   return (
     <div className="step-progress-root w-full">
       <div className="step-progress-card">
-        <div className="step-progress-track">
+        <div className="step-progress-track horizontal-scroll-friendly">
           {displaySteps.map((pipelineStep, index) => {
             const { isCurrent, isFailed, isSkipped, isCompleted, isPending, isActive } = getStepState(pipelineStep, index);
             const accentColor = getStepColor(pipelineStep);
@@ -98,9 +106,9 @@ const StepProgressIndicator = ({ currentStatus, steps }) => {
           })}
         </div>
 
-        <div className="step-progress-labels">
+        <div className="step-progress-labels horizontal-scroll-friendly">
           {displaySteps.map((pipelineStep, index) => {
-            const { isCurrent, isActive } = getStepState(pipelineStep, index);
+            const { isCurrent, isFailed, isActive } = getStepState(pipelineStep, index);
             const accentColor = getStepColor(pipelineStep);
 
             return (
@@ -114,6 +122,7 @@ const StepProgressIndicator = ({ currentStatus, steps }) => {
                       'step-progress-label',
                       isActive && 'is-active',
                       isCurrent && 'is-current',
+                      isFailed && 'is-failed',
                     ].filter(Boolean).join(' ')}
                     style={{ color: isActive ? accentColor : undefined }}
                     title={pipelineStep.label}

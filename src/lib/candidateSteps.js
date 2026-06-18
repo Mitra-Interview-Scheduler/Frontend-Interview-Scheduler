@@ -1,3 +1,5 @@
+import { resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
+
 const REPEATABLE_ROUND_KEYS = new Set(['TECHNICAL_ROUND', 'HR_ROUND']);
 
 const baseLabelForStatusKey = (statusKey, fallbackLabel) => {
@@ -103,6 +105,57 @@ export const getCandidateClosingSteps = (steps) => normalizeCandidateSteps(steps
   (step) => step.isClosingStep && step.isVisible !== false,
 );
 
+const ROUND_KEY_BY_INTERVIEW_TYPE = {
+  TECHNICAL: 'TECHNICAL_ROUND',
+  HR: 'HR_ROUND',
+};
+
+/**
+ * Marks pipeline round steps as FAILED when their linked interview was cancelled,
+ * so the progress bar shows a red cross instead of a completed tick.
+ */
+export const applyCancelledInterviewOverrides = (steps, interviewRequests = []) => {
+  if (!Array.isArray(steps) || steps.length === 0) return steps;
+  if (!Array.isArray(interviewRequests) || interviewRequests.length === 0) return steps;
+
+  const cancelledByRoundKey = {};
+  interviewRequests
+    .filter((request) => resolveInterviewRequestStatus(request) === 'CANCELLED')
+    .forEach((request) => {
+      const roundKey = ROUND_KEY_BY_INTERVIEW_TYPE[request.interviewType] || 'TECHNICAL_ROUND';
+      if (!cancelledByRoundKey[roundKey]) {
+        cancelledByRoundKey[roundKey] = [];
+      }
+      cancelledByRoundKey[roundKey].push(request);
+    });
+
+  const roundStepIndexes = {};
+  steps.forEach((step, index) => {
+    if (step.key === 'TECHNICAL_ROUND' || step.key === 'HR_ROUND') {
+      if (!roundStepIndexes[step.key]) {
+        roundStepIndexes[step.key] = [];
+      }
+      roundStepIndexes[step.key].push(index);
+    }
+  });
+
+  const overrides = [...steps];
+  Object.entries(cancelledByRoundKey).forEach(([roundKey, cancelledRequests]) => {
+    const indexes = roundStepIndexes[roundKey] || [];
+    cancelledRequests.forEach((_, index) => {
+      const stepIndex = indexes[index] ?? indexes[indexes.length - 1];
+      if (stepIndex === undefined) return;
+      overrides[stepIndex] = {
+        ...overrides[stepIndex],
+        stepStatus: 'FAILED',
+        cancelledInterview: true,
+      };
+    });
+  });
+
+  return overrides;
+};
+
 const ACTIVITY_STATUS_META = {
   COMPLETED: {
     action: 'Completed',
@@ -203,19 +256,27 @@ const isScheduledInterviewRequest = (request) => {
   return request.status === 'ACCEPTED' && Boolean(request.preferredStartDateTime);
 };
 
-const getInterviewStatus = (request) => request.interviewStatus
-  || (request.status === 'CANCELLED' ? 'CANCELLED' : 'SCHEDULED');
+const getInterviewStatus = (request) => {
+  if (request?.interviewStatus) return request.interviewStatus;
+  if (request?.status === 'CANCELLED') return 'CANCELLED';
+  return 'SCHEDULED';
+};
 
 const createInterviewPreludeEntry = (request) => {
   const typeLabel = formatInterviewTypeLabel(request.interviewType);
   const interviewStatus = getInterviewStatus(request);
   const meta = INTERVIEW_STATUS_META[interviewStatus] || INTERVIEW_STATUS_META.SCHEDULED;
   const sortTimestamp = getInterviewRequestTimestamp(request);
+  const stepLabel = interviewStatus === 'CANCELLED'
+    ? `${typeLabel} cancelled`
+    : interviewStatus === 'COMPLETED'
+      ? `${typeLabel} completed`
+      : `${typeLabel} scheduled`;
 
   return withSortMeta({
     id: `interview-prelude-${request.interviewScheduleId || request.id}`,
     kind: 'INTERVIEW_PRELUDE',
-    stepLabel: `${typeLabel} scheduled`,
+    stepLabel,
     stepKey: request.interviewType,
     stepStatus: interviewStatus,
     sequenceOrder: 1000 + Number(request.id ?? 0),
@@ -236,13 +297,18 @@ const mapPanelToActivityEntries = (panel) => {
   const scheduledRequests = panelRequests.filter(isScheduledInterviewRequest);
   if (scheduledRequests.length === 0) return [];
 
-  const statuses = scheduledRequests.map((request) => request.interviewStatus).filter(Boolean);
+  const statuses = scheduledRequests.map((request) => getInterviewStatus(request));
   const aggregateStatus = deriveAggregateInterviewStatus(statuses);
   const meta = INTERVIEW_STATUS_META[aggregateStatus] || INTERVIEW_STATUS_META.SCHEDULED;
   const interviewType = scheduledRequests[0]?.interviewType;
   const interviewers = [...new Set(panelRequests.map((request) => request.assignedInterviewerName).filter(Boolean))];
   const sortTimestamp = getInterviewRequestTimestamp(scheduledRequests[0]) || getInterviewRequestTimestamp(panel);
   const typeLabel = formatInterviewTypeLabel(interviewType);
+  const stepLabel = aggregateStatus === 'CANCELLED'
+    ? `${typeLabel} cancelled`
+    : aggregateStatus === 'COMPLETED'
+      ? `${typeLabel} completed`
+      : `${typeLabel} scheduled`;
   const timestamp = panel.startDateTime || scheduledRequests[0]?.scheduledStartDateTime || panel.createdAt || null;
   const endTimestamp = panel.endDateTime || scheduledRequests[0]?.scheduledEndDateTime || null;
 
@@ -264,7 +330,7 @@ const mapPanelToActivityEntries = (panel) => {
       ...shared,
       id: `panel-prelude-${panel.id}`,
       kind: 'INTERVIEW_PRELUDE',
-      stepLabel: `${typeLabel} scheduled`,
+      stepLabel: stepLabel,
       detail: interviewers.join(', '),
     }, sortTimestamp, INTERVIEW_GROUP_ORDER.PRELUDE),
   ];

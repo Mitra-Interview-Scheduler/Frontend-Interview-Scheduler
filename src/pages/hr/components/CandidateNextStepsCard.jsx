@@ -101,17 +101,23 @@ function CandidateNextStepsCard({
     ? closingSteps
     : getCandidateClosingSteps(steps);
 
-  const canConfirmClose = Boolean(closeReasonId) && closeComment.trim().length > 0;
+  const isSelectedClose = closeStatus === 'SELECTED';
+  const canConfirmClose = isSelectedClose
+    ? true
+    : Boolean(closeReasonId) && closeComment.trim().length > 0;
 
   const confirmReject = async () => {
     if (!candidate?.id || !canConfirmClose) return;
     setSaving(true);
     try {
-      await candidateAPI.closeCandidate(candidate.id, {
+      const payload = {
         status: closeStatus,
-        closingReasonId: Number(closeReasonId),
-        comment: closeComment.trim(),
-      });
+        comment: closeComment.trim() || undefined,
+      };
+      if (!isSelectedClose && closeReasonId) {
+        payload.closingReasonId = Number(closeReasonId);
+      }
+      await candidateAPI.closeCandidate(candidate.id, payload);
       toast({
         title: 'Application updated',
         description: `Candidate moved to ${getCandidateStatusLabel(steps, closeStatus)}.`,
@@ -223,7 +229,12 @@ function CandidateNextStepsCard({
                       <button
                         key={statusOption.key}
                         type="button"
-                        onClick={() => setCloseStatus(statusOption.key)}
+                        onClick={() => {
+                          setCloseStatus(statusOption.key);
+                          if (statusOption.key === 'SELECTED') {
+                            setCloseReasonId('');
+                          }
+                        }}
                         className={`rounded-lg border px-3 py-2 text-left transition ${
                           active
                             ? `ring-2 ring-blue-500 ${statusOption.badgeClass}`
@@ -238,33 +249,37 @@ function CandidateNextStepsCard({
                 </div>
               </div>
 
-              <div>
-                <Label className="text-sm">Closing reason *</Label>
-                <Select
-                  value={closeReasonId}
-                  onValueChange={setCloseReasonId}
-                  disabled={reasonsLoading || closingReasons.length === 0}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={reasonsLoading ? 'Loading reasons...' : 'Select a reason'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {closingReasons.map((reason) => (
-                      <SelectItem key={reason.id} value={String(reason.id)}>
-                        {reason.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!isSelectedClose && (
+                <div>
+                  <Label className="text-sm">Closing reason *</Label>
+                  <Select
+                    value={closeReasonId}
+                    onValueChange={setCloseReasonId}
+                    disabled={reasonsLoading || closingReasons.length === 0}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={reasonsLoading ? 'Loading reasons...' : 'Select a reason'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {closingReasons.map((reason) => (
+                        <SelectItem key={reason.id} value={String(reason.id)}>
+                          {reason.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
-                <Label className="text-sm">Reason / Comment *</Label>
+                <Label className="text-sm">{isSelectedClose ? 'Comment' : 'Reason / Comment *'}</Label>
                 <Textarea
                   value={closeComment}
                   onChange={(e) => setCloseComment(e.target.value)}
                   rows={4}
-                  placeholder="Provide details for this closing decision"
+                  placeholder={isSelectedClose
+                    ? 'Add an optional note about this selection'
+                    : 'Provide details for this closing decision'}
                   className="mt-1"
                 />
               </div>

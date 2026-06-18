@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getCandidateDetailTabs } from './candidateDetailsTabsConfig';
-import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
-import { collectCandidateInterviewRequests } from '@/lib/candidateInterviews';
+import { resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
 import { cn } from '@/lib/utils';
 
 const CandidateDetailsTabs = ({
   candidate,
   steps = [],
   stepsLoading = false,
+  interviewRequests = [],
+  interviewsLoading = false,
+  onInterviewsRefresh = () => {},
   documents = [],
   documentsLoading = false,
   onPreviewDocument = () => {},
@@ -16,52 +18,6 @@ const CandidateDetailsTabs = ({
   onDocumentUploaded = () => {},
   onCandidateUpdated = () => {},
 }) => {
-  const [interviews, setInterviews] = useState([]);
-  const [panels, setPanels] = useState([]);
-  const [interviewsLoading, setInterviewsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!candidate?.id) {
-      setInterviews([]);
-      setPanels([]);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const loadInterviews = async () => {
-      setInterviewsLoading(true);
-      try {
-        const [interviewData, panelData] = await Promise.all([
-          hrAvailabilityAPI.getInterviewsForCandidate(candidate.id),
-          hrAvailabilityAPI.getPanelsByCandidateId(candidate.id),
-        ]);
-        if (!cancelled) {
-          setInterviews(Array.isArray(interviewData) ? interviewData : []);
-          setPanels(Array.isArray(panelData) ? panelData : []);
-        }
-      } catch {
-        if (!cancelled) {
-          setInterviews([]);
-          setPanels([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setInterviewsLoading(false);
-        }
-      }
-    };
-
-    loadInterviews();
-    return () => {
-      cancelled = true;
-    };
-  }, [candidate?.id, candidate?.status, steps]);
-
-  const interviewRequests = useMemo(
-    () => collectCandidateInterviewRequests(interviews, panels),
-    [interviews, panels],
-  );
-
   const visibleTabs = useMemo(
     () => getCandidateDetailTabs(candidate?.status, interviewRequests),
     [candidate?.status, interviewRequests],
@@ -69,6 +25,12 @@ const CandidateDetailsTabs = ({
 
   const [activeTab, setActiveTab] = useState('');
   const tabsListRef = useRef(null);
+
+  useEffect(() => {
+    if (!candidate?.id) return undefined;
+    onInterviewsRefresh();
+    return undefined;
+  }, [candidate?.id, activeTab, onInterviewsRefresh]);
 
   useEffect(() => {
     if (!activeTab || !tabsListRef.current) return;
@@ -106,21 +68,24 @@ const CandidateDetailsTabs = ({
           <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-6 rounded-r-xl bg-gradient-to-l from-white to-transparent" />
           <TabsList
             ref={tabsListRef}
-            className="candidate-tabs-scroll relative flex h-auto w-full min-w-0 items-center justify-start gap-1.5 overflow-x-auto scroll-smooth rounded-xl border border-blue-200 bg-white p-1.5 shadow-sm"
+            className="candidate-tabs-scroll horizontal-scroll-friendly relative flex h-auto w-full min-w-0 items-center justify-start gap-1.5 overflow-x-auto scroll-smooth rounded-xl border border-blue-200 bg-white p-1.5 pb-2 shadow-sm"
           >
             {visibleTabs.map((tab) => {
               const isInterviewTab = Boolean(tab.interview);
+              const isCancelled = isInterviewTab
+                && resolveInterviewRequestStatus(tab.interview) === 'CANCELLED';
+
               return (
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
                   title={tab.label}
                   className={cn(
-                    'h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium text-slate-600 transition-all',
-                    'hover:bg-slate-50 hover:text-slate-900',
-                    'data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200',
-                    isInterviewTab && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40',
-                    isInterviewTab && 'data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
+                    'h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-all',
+                    isCancelled
+                      ? 'text-red-700 data-[state=inactive]:border data-[state=inactive]:border-red-200 data-[state=inactive]:bg-red-50/80 data-[state=active]:bg-red-50 data-[state=active]:text-red-800 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-red-200'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200',
+                    isInterviewTab && !isCancelled && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
                   )}
                 >
                   {tab.label}

@@ -12,6 +12,13 @@ const START_SCREENING = {
   className: 'w-full bg-green-50 text-blue-700 hover:bg-blue-100 border-blue-200',
 };
 
+const EXTEND_OFFER = {
+  label: 'Extend Offer',
+  actionType: 'OFFER_PENDING',
+  variant: 'outline',
+  className: 'w-full bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200',
+};
+
 /**
  * Edit this object to add or change buttons per candidate status.
  * actionType: 'SCHEDULE' opens the schedule page; anything else updates candidate status.
@@ -30,8 +37,12 @@ const NEXT_STEPS_BY_STATUS = {
     actions: [SCHEDULE_INTERVIEW],
   },
   HR_ROUND: {
-    prompt: 'HR interview in progress. Schedule another HR interview or continue the process.',
-    actions: [SCHEDULE_INTERVIEW],
+    prompt: 'HR interview in progress. Schedule another HR interview, extend an offer, or continue the process.',
+    actions: [SCHEDULE_INTERVIEW, EXTEND_OFFER],
+  },
+  OFFER_PENDING: {
+    prompt: 'Offer has been extended to the candidate. Awaiting their acceptance or decline. Use Close Application when you have a final decision.',
+    actions: [],
   },
   SCHEDULED: {
     prompt: 'An interview is scheduled. Schedule another interview or continue the process.',

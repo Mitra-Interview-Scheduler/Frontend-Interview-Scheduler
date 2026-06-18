@@ -12,8 +12,6 @@ import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog'
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
-import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
-import { getCandidateStatusLabel } from '@/lib/candidateSteps';
 
 const ProfileSummaryTab = ({
   candidate,
@@ -24,7 +22,6 @@ const ProfileSummaryTab = ({
   onDocumentUploaded = () => {},  
   onCandidateUpdated = () => {},   
 }) => {
-  const { formatDateTime } = useFormattedDateTime();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [documentFile, setDocumentFile] = useState(null);
   const [documentType, setDocumentType] = useState('CV');
@@ -52,7 +49,6 @@ const ProfileSummaryTab = ({
 
   const resourceLinks = parseResourceLinks(candidate.resourceLink);
   const jobDescriptionText = parseJobDescriptionText(candidate.jdUrl);
-  const closure = candidate.closure;
   
   const getHostLabel = (url) => {
     try {
@@ -177,39 +173,6 @@ const ProfileSummaryTab = ({
           </div>
         </CardContent>
       </Card>
-
-      {closure && (
-        <Card className="border border-slate-200 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <NotebookPen className="h-4 w-4 text-rose-600" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application Closure</p>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Final status</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {closure.closedStatusLabel || getCandidateStatusLabel([], closure.closedStatus)}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Closing reason</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{closure.closingReasonLabel || '—'}</p>
-              </div>
-            </div>
-            {closure.comment && (
-              <div className="mt-3 rounded-lg border border-slate-200 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Reason / Comment</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{closure.comment}</p>
-              </div>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              {closure.closedByName ? `Closed by ${closure.closedByName}` : 'Closed'}
-              {closure.closedAt ? ` · ${formatDateTime(closure.closedAt)}` : ''}
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Notes Card */}
       <Card className="border border-slate-200 shadow-sm">
