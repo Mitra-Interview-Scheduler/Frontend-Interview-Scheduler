@@ -195,7 +195,10 @@ const SelectItem = React.forwardRef<
       ref={ref}
       value={value}
       className={cn(
-        "relative flex w-full min-w-full cursor-default select-none items-center gap-2 rounded-none py-2 pl-3 pr-3 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+        "ui-dropdown-option relative flex w-full min-w-full cursor-pointer select-none items-center gap-2 rounded-sm py-2 pl-3 pr-3 text-sm outline-none",
+        "hover:bg-primary-light hover:text-foreground focus:bg-primary-light focus:text-foreground",
+        "data-[highlighted]:bg-primary-light data-[highlighted]:text-foreground",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         hideInOpenMenu && "hidden",
         className,
       )}

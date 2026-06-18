@@ -130,7 +130,10 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
 
     setSubmit(true);
     try {
-      await authAPI.register({ email, password, firstName, lastName, roles: [role] });
+      const registered = await authAPI.register({ email, password, firstName, lastName });
+      if (role && role !== 'INTERVIEWER' && registered?.id) {
+        await usersAPI.updateRoles(registered.id, [role]);
+      }
       toast({ title: 'User registered', description: `${firstName} ${lastName} added successfully.` });
       handleClose();
       onSuccess();
