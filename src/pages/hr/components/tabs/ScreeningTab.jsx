@@ -17,36 +17,49 @@ import { candidateAPI } from '@/services/candidateAPI';
 import COUNTRIES from '/src/data/countries.json';
 
 const DEFAULT_STATE = {
-  isProjectSpecific: 'no',
+  isProjectSpecific: '',
   projectName: '',
   region: '',
-  engagementType: 'FULL_TIME',
+  engagementType: '',
   duration: '',
   targetStartDate: '',
-  profileSource: 'Direct Applicant',
+  profileSource: '',
   referrerName: '',
-  screenedBy: '', 
+  screenedBy: '',
   feedback: '',
   natureOfRecruitment: '',
   roleStretch: '',
   specialNotes: '',
   departmentId: '',
   tierId: '',
-  designationId: '', 
+  designationId: '',
   modifiedAt: '',
 };
+
+const FIELD_ERROR_MESSAGES = {
+  isProjectSpecific: 'Please select whether this is a project-specific interview.',
+  engagementType: 'Engagement type is required.',
+  region: 'Region / country is required.',
+  profileSource: 'Profile source is required.',
+  natureOfRecruitment: 'Nature of recruitment is required.',
+  roleStretch: 'Role stretch / de-stretch is required.',
+  departmentId: 'Department is required for project-specific interviews.',
+  tierId: 'Tier is required for project-specific interviews.',
+  designationId: 'Project role is required for project-specific interviews.',
+  projectName: 'Project name is required for project-specific interviews.',
+  duration: 'Duration is required for contract and part-time engagements.',
+  referrerName: 'Referrer name is required when profile source is Referral.',
+};
+
+const FieldError = ({ message }) => (
+  message ? <p className="text-xs text-red-600 mt-1">{message}</p> : null
+);
 
 const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData, currentUser }) => {
   const loggedInUser = currentUser?.name || '';
 
-  const [localFormData, setLocalFormData] = useState(() => ({
-    ...DEFAULT_STATE,
-    screenedBy: loggedInUser
-  }));
-  const [pristineData, setPristineData] = useState(() => ({
-    ...DEFAULT_STATE,
-    screenedBy: loggedInUser
-  }));
+  const [localFormData, setLocalFormData] = useState(DEFAULT_STATE);
+  const [pristineData, setPristineData] = useState(DEFAULT_STATE);
   
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,18 +71,21 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
   // Normalize incoming backend data shapes to match localized UI format requirements
   const normalizeData = useCallback((rawData) => {
-    if (!rawData) return { ...DEFAULT_STATE, screenedBy: loggedInUser };
+    if (!rawData) return { ...DEFAULT_STATE };
     return {
       ...DEFAULT_STATE,
       ...rawData,
-      isProjectSpecific: rawData.isProjectSpecific === true || rawData.isProjectSpecific === 'yes' ? 'yes' : 'no',
-      engagementType: rawData.engagementType ? rawData.engagementType.toUpperCase() : 'FULL_TIME',
+      isProjectSpecific: rawData.isProjectSpecific === true || rawData.isProjectSpecific === 'yes'
+        ? 'yes'
+        : (rawData.isProjectSpecific === false || rawData.isProjectSpecific === 'no' ? 'no' : ''),
+      engagementType: rawData.engagementType ? rawData.engagementType.toUpperCase() : '',
       departmentId: rawData.departmentId?.toString() || '',
       tierId: rawData.tierId?.toString() || '',
       designationId: rawData.designationId?.toString() || '',
       duration: rawData.duration?.toString() || '',
+      profileSource: rawData.profileSource || '',
     };
-  }, [loggedInUser]);
+  }, []);
 
   // Derived tracking variables
   const isDirty = useMemo(() => JSON.stringify(localFormData) !== JSON.stringify(pristineData), [localFormData, pristineData]);
@@ -144,7 +160,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
       const normalizedForm = normalizeData(formData);
       setLocalFormData(normalizedForm);
       setPristineData(normalizedForm);
-      if (normalizedForm.departmentId) loadTiersForDept(normalizedForm.departmentForm.departmentId);
+      if (normalizedForm.departmentId) loadTiersForDept(normalizedForm.departmentId);
       if (normalizedForm.tierId) loadDesignsForTier(normalizedForm.tierId);
     }
   }, [formData, normalizeData, loadTiersForDept, loadDesignsForTier]);
@@ -168,9 +184,8 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         if (loadedData.tierId) loadDesignsForTier(loadedData.tierId);
       } catch (e) {
         if (e.response?.status === 404) {
-          const freshState = { ...DEFAULT_STATE, screenedBy: loggedInUser };
-          setLocalFormData(freshState);
-          setPristineData(freshState);
+          setLocalFormData({ ...DEFAULT_STATE });
+          setPristineData({ ...DEFAULT_STATE });
         } else {
           console.error("Failed to fetch candidate metadata registers:", e);
           toast({
@@ -185,20 +200,19 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
     };
 
     fetchScreeningAndMetadata();
-  }, [candidate?.id, formData, loggedInUser, normalizeData, loadTiersForDept, loadDesignsForTier]);
+  }, [candidate?.id, formData, normalizeData, loadTiersForDept, loadDesignsForTier]);
 
-  // Sync session metrics
-  useEffect(() => {
-    if (loggedInUser && !localFormData.screenedBy) {
-      setLocalFormData(prev => ({ ...prev, screenedBy: loggedInUser }));
-    }
-  }, [loggedInUser, localFormData.screenedBy]);
+  const isFieldEmpty = (value) => value === undefined || value === null || String(value).trim() === '';
 
   const updateField = (field, value) => {
     if (readOnly || isSubmitting || isLoading) return;
 
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: false }));
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
     }
 
     setLocalFormData(prev => ({ ...prev, [field]: value }));
@@ -211,7 +225,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
     updateField('engagementType', value);
     if (value === 'FULL_TIME' || !value) {
       updateField('duration', '');
-      setErrors(prev => ({ ...prev, duration: false }));
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.duration;
+        return next;
+      });
     }
   };
 
@@ -234,27 +252,38 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
   const handleSubmitData = async () => {
     const newErrors = {};
 
-    // Validate global base required fields
-    if (!localFormData.engagementType) newErrors.engagementType = true;
-    if (!localFormData.region) newErrors.region = true;
-    if (!localFormData.profileSource) newErrors.profileSource = true;
-    if (!localFormData.natureOfRecruitment) newErrors.natureOfRecruitment = true;
-    if (!localFormData.roleStretch) newErrors.roleStretch = true;
+    if (isFieldEmpty(localFormData.isProjectSpecific)) {
+      newErrors.isProjectSpecific = FIELD_ERROR_MESSAGES.isProjectSpecific;
+    }
+    if (isFieldEmpty(localFormData.engagementType)) {
+      newErrors.engagementType = FIELD_ERROR_MESSAGES.engagementType;
+    }
+    if (isFieldEmpty(localFormData.region)) {
+      newErrors.region = FIELD_ERROR_MESSAGES.region;
+    }
+    if (isFieldEmpty(localFormData.profileSource)) {
+      newErrors.profileSource = FIELD_ERROR_MESSAGES.profileSource;
+    }
+    if (isFieldEmpty(localFormData.natureOfRecruitment)) {
+      newErrors.natureOfRecruitment = FIELD_ERROR_MESSAGES.natureOfRecruitment;
+    }
+    if (isFieldEmpty(localFormData.roleStretch)) {
+      newErrors.roleStretch = FIELD_ERROR_MESSAGES.roleStretch;
+    }
 
-    // Validate project specific conditional logic
     if (isProjectRequired) {
-      if (!localFormData.departmentId) newErrors.departmentId = true;
-      if (!localFormData.tierId) newErrors.tierId = true;
-      if (!localFormData.designationId) newErrors.designationId = true;
-      if (!localFormData.projectName?.trim()) newErrors.projectName = true;
+      if (isFieldEmpty(localFormData.departmentId)) newErrors.departmentId = FIELD_ERROR_MESSAGES.departmentId;
+      if (isFieldEmpty(localFormData.tierId)) newErrors.tierId = FIELD_ERROR_MESSAGES.tierId;
+      if (isFieldEmpty(localFormData.designationId)) newErrors.designationId = FIELD_ERROR_MESSAGES.designationId;
+      if (isFieldEmpty(localFormData.projectName)) newErrors.projectName = FIELD_ERROR_MESSAGES.projectName;
     }
 
-    if (isDurationRequired && !localFormData.duration) {
-      newErrors.duration = true;
+    if (isDurationRequired && isFieldEmpty(localFormData.duration)) {
+      newErrors.duration = FIELD_ERROR_MESSAGES.duration;
     }
 
-    if (localFormData.profileSource === 'Referral' && !localFormData.referrerName?.trim()) {
-      newErrors.referrerName = true;
+    if (localFormData.profileSource === 'Referral' && isFieldEmpty(localFormData.referrerName)) {
+      newErrors.referrerName = FIELD_ERROR_MESSAGES.referrerName;
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -277,7 +306,10 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         designationId: localFormData.isProjectSpecific === 'yes' ? (parseInt(localFormData.designationId, 10) || null) : null,
         duration: isDurationRequired ? (parseInt(localFormData.duration, 10) || null) : null,
         modifiedAt: new Date().toISOString(),
-        screenedBy: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).firstName + ' ' + JSON.parse(localStorage.getItem('user')).lastName : 'Unknown User',
+        screenedBy: loggedInUser
+          || (localStorage.getItem('user')
+            ? `${JSON.parse(localStorage.getItem('user')).firstName || ''} ${JSON.parse(localStorage.getItem('user')).lastName || ''}`.trim()
+            : ''),
       };
 
       const savedData = await candidateAPI.saveCandidateScreeningFile(candidate.id, payload);
@@ -301,6 +333,8 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
       setIsSubmitting(false);
     }
   };
+
+  const showSaveBar = !readOnly && (isDirty || !pristineData.modifiedAt);
 
   if (isLoading) {
     return (
@@ -369,14 +403,23 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
         <CardContent className="pt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600">Is this project specific interview?</Label>
-              <Select value={localFormData.isProjectSpecific} onValueChange={(value) => updateField('isProjectSpecific', value)} disabled={readOnly || isSubmitting}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+              <Label className={`text-xs font-medium transition-colors ${errors.isProjectSpecific ? 'text-red-600' : 'text-gray-600'}`}>
+                Is this project specific interview? <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={localFormData.isProjectSpecific || undefined}
+                onValueChange={(value) => updateField('isProjectSpecific', value)}
+                disabled={readOnly || isSubmitting}
+              >
+                <SelectTrigger className={`h-9 transition-colors ${errors.isProjectSpecific ? 'border-red-500 focus:ring-red-500' : ''}`}>
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="yes">Yes</SelectItem>
                   <SelectItem value="no">No</SelectItem>
                 </SelectContent>
               </Select>
+              <FieldError message={errors.isProjectSpecific} />
             </div>
           </div>
 
@@ -391,7 +434,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                   <Label className={`text-xs font-medium transition-colors ${errors.departmentId ? 'text-red-600' : 'text-gray-600'}`}>
                     Department <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={localFormData.departmentId} onValueChange={handleDepartmentChange} disabled={readOnly || isSubmitting}>
+                  <Select value={localFormData.departmentId || undefined} onValueChange={handleDepartmentChange} disabled={readOnly || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.departmentId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Department" />
                     </SelectTrigger>
@@ -401,13 +444,14 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError message={errors.departmentId} />
                 </div>
 
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.tierId ? 'text-red-600' : 'text-gray-600'}`}>
                     Tier <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={localFormData.tierId} onValueChange={handleTierChange} disabled={readOnly || !localFormData.departmentId || isSubmitting}>
+                  <Select value={localFormData.tierId || undefined} onValueChange={handleTierChange} disabled={readOnly || !localFormData.departmentId || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.tierId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Tier" />
                     </SelectTrigger>
@@ -417,13 +461,14 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError message={errors.tierId} />
                 </div>
 
                 <div className="space-y-2">
                   <Label className={`text-xs font-medium transition-colors ${errors.designationId ? 'text-red-600' : 'text-gray-600'}`}>
                     Project Role <span className="text-red-500">*</span>
                   </Label>
-                  <Select value={localFormData.designationId} onValueChange={(value) => updateField('designationId', value)} disabled={readOnly || !localFormData.tierId || isSubmitting}>
+                  <Select value={localFormData.designationId || undefined} onValueChange={(value) => updateField('designationId', value)} disabled={readOnly || !localFormData.tierId || isSubmitting}>
                     <SelectTrigger className={`h-9 transition-colors ${errors.designationId ? 'border-red-500 focus:ring-red-500' : ''}`}>
                       <SelectValue placeholder="Select Project Role" />
                     </SelectTrigger>
@@ -433,6 +478,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError message={errors.designationId} />
                 </div>
               </div>
 
@@ -448,6 +494,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                     className={`h-9 transition-colors ${errors.projectName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                     readOnly={readOnly || isSubmitting} 
                   />
+                  <FieldError message={errors.projectName} />
                 </div>
               </div>
             </motion.div>
@@ -458,21 +505,24 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
               <Label className={`text-xs font-medium transition-colors ${errors.engagementType ? 'text-red-600' : 'text-gray-600'}`}>
                 Engagement Type <span className="text-red-500">*</span>
               </Label>
-              <Select value={localFormData.engagementType} onValueChange={handleEngagementTypeChange} disabled={readOnly || isSubmitting}>
-                <SelectTrigger className={`h-9 transition-colors ${errors.engagementType ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
+              <Select value={localFormData.engagementType || undefined} onValueChange={handleEngagementTypeChange} disabled={readOnly || isSubmitting}>
+                <SelectTrigger className={`h-9 transition-colors ${errors.engagementType ? 'border-red-500 focus:ring-red-500' : ''}`}>
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FULL_TIME">Full Time</SelectItem>
                   <SelectItem value="CONTRACT">Contract</SelectItem>
                   <SelectItem value="PART_TIME">Part Time</SelectItem>
                 </SelectContent>
               </Select>
+              <FieldError message={errors.engagementType} />
             </div>
 
             <div className="space-y-2">
               <Label className={`text-xs font-medium transition-colors ${errors.region ? 'text-red-600' : 'text-gray-600'}`}>
                 Region / Country <span className="text-red-500">*</span>
               </Label>
-              <Select value={localFormData.region} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
+              <Select value={localFormData.region || undefined} onValueChange={(value) => updateField('region', value)} disabled={readOnly || isSubmitting}>
                 <SelectTrigger className={`h-9 transition-colors ${errors.region ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select a country" /></SelectTrigger>
                 <SelectContent>
                   {COUNTRIES.map((country) => (
@@ -480,6 +530,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError message={errors.region} />
             </div>
           </div>
 
@@ -511,6 +562,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                     className={`h-9 transition-colors ${errors.duration ? 'border-red-500 focus-visible:ring-red-500' : 'border-gray-200'}`} 
                     readOnly={readOnly || isSubmitting} 
                   />
+                  <FieldError message={errors.duration} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -533,8 +585,8 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
             <Label className={`text-xs font-medium transition-colors ${errors.profileSource ? 'text-red-600' : 'text-gray-600'}`}>
               How did Mitra get the candidate profile? <span className="text-red-500">*</span>
             </Label>
-            <Select value={localFormData.profileSource} onValueChange={(value) => updateField('profileSource', value)} disabled={readOnly || isSubmitting}>
-              <SelectTrigger className={`h-9 transition-colors ${errors.profileSource ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue /></SelectTrigger>
+            <Select value={localFormData.profileSource || undefined} onValueChange={(value) => updateField('profileSource', value)} disabled={readOnly || isSubmitting}>
+              <SelectTrigger className={`h-9 transition-colors ${errors.profileSource ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select profile source" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Direct Applicant">Direct Applicant</SelectItem>
                 <SelectItem value="Referral">Referral</SelectItem>
@@ -543,6 +595,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 <SelectItem value="Recruiter">Recruiter</SelectItem>
               </SelectContent>
             </Select>
+            <FieldError message={errors.profileSource} />
           </div>
 
           {localFormData.profileSource === 'Referral' && (
@@ -561,6 +614,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 className={`h-9 transition-colors ${errors.referrerName ? 'border-red-500 focus-visible:ring-red-500' : ''}`} 
                 readOnly={readOnly || isSubmitting} 
               />
+              <FieldError message={errors.referrerName} />
             </motion.div>
           )}
         </CardContent>
@@ -576,7 +630,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
             <Label className={`text-xs font-medium transition-colors ${errors.natureOfRecruitment ? 'text-red-600' : 'text-gray-600'}`}>
               Nature of Recruitment <span className="text-red-500">*</span>
             </Label>
-            <Select value={localFormData.natureOfRecruitment} onValueChange={(value) => updateField('natureOfRecruitment', value)} disabled={readOnly || isSubmitting}>
+            <Select value={localFormData.natureOfRecruitment || undefined} onValueChange={(value) => updateField('natureOfRecruitment', value)} disabled={readOnly || isSubmitting}>
               <SelectTrigger className={`h-9 transition-colors ${errors.natureOfRecruitment ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="New Position">New Position</SelectItem>
@@ -584,13 +638,14 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 <SelectItem value="Expansion">Expansion</SelectItem>
               </SelectContent>
             </Select>
+            <FieldError message={errors.natureOfRecruitment} />
           </div>
 
           <div className="space-y-2">
             <Label className={`text-xs font-medium transition-colors ${errors.roleStretch ? 'text-red-600' : 'text-gray-600'}`}>
               Role Stretch / De-stretch Acceptable? <span className="text-red-500">*</span>
             </Label>
-            <Select value={localFormData.roleStretch} onValueChange={(value) => updateField('roleStretch', value)} disabled={readOnly || isSubmitting}>
+            <Select value={localFormData.roleStretch || undefined} onValueChange={(value) => updateField('roleStretch', value)} disabled={readOnly || isSubmitting}>
               <SelectTrigger className={`h-9 transition-colors ${errors.roleStretch ? 'border-red-500 focus:ring-red-500' : ''}`}><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Yes">Yes</SelectItem>
@@ -598,6 +653,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 <SelectItem value="Limited">Limited</SelectItem>
               </SelectContent>
             </Select>
+            <FieldError message={errors.roleStretch} />
           </div>
 
           <div className="space-y-2">
@@ -617,7 +673,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
             <div className="space-y-2">
               <Label className="text-xs font-medium text-gray-600">Screened By</Label>
               <Input 
-                value={localFormData.screenedBy} 
+                value={localFormData.screenedBy || ''} 
                 className="h-9 bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200 select-none font-medium" 
                 readOnly 
               />
@@ -637,7 +693,7 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
       {/* Floating Save Controls */}
       <AnimatePresence>
-        {isDirty && !readOnly && (
+        {showSaveBar && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}

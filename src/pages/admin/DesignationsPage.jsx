@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,14 +9,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
+import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 
 const DesignationsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'designations' ? 'designations' : 'tiers';
+
+  const setActiveTab = (tab) => {
+    setSearchParams(tab === 'designations' ? { tab: 'designations' } : {});
+  };
+
   const [designations, setDesignations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [tiers, setTiers] = useState([]);
@@ -384,6 +392,13 @@ const DesignationsPage = () => {
     ? tiers 
     : tiers.filter(t => t.departmentId === parseInt(selectedDepartment));
 
+  const filteredDesignationCount = selectedDepartment === 'all'
+    ? designations.length
+    : designations.filter((d) => {
+        const tier = tiers.find((t) => t.id === d.tierId);
+        return tier?.departmentId === parseInt(selectedDepartment);
+      }).length;
+
   const availableTiersForForm = designationForm.departmentId
     ? tiers.filter(t => t.departmentId === parseInt(designationForm.departmentId))
     : [];
@@ -431,14 +446,17 @@ const DesignationsPage = () => {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="tiers" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="tiers">Tiers</TabsTrigger>
-            <TabsTrigger value="designations">Designations</TabsTrigger>
-          </TabsList>
+        <AdminSectionTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { value: 'tiers', label: 'Tiers', icon: Layers, count: filteredTiers.length },
+            { value: 'designations', label: 'Designations', icon: Building2, count: filteredDesignationCount },
+          ]}
+        />
 
-          {/* Tiers Tab */}
-          <TabsContent value="tiers" className="space-y-4">
+        {activeTab === 'tiers' ? (
+          <div className="space-y-4">
             <div className="flex justify-end">
               <Button onClick={handleOpenAddTier} disabled={isMutating}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -499,10 +517,9 @@ const DesignationsPage = () => {
                   ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* Designations Tab */}
-          <TabsContent value="designations" className="space-y-4">
+          </div>
+        ) : (
+          <div className="space-y-4">
             <div className="flex justify-end">
               <Button onClick={handleOpenAddDesignation} disabled={isMutating}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -604,8 +621,8 @@ const DesignationsPage = () => {
                   );
                 })
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
 
         {/* Add Tier Dialog */}
         <Dialog open={isAddTierOpen} onOpenChange={setIsAddTierOpen}>

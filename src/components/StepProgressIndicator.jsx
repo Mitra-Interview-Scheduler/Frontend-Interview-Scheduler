@@ -1,106 +1,142 @@
-import React, { useState } from 'react';
-import { Check } from 'lucide-react';
-import { FALLBACK_CANDIDATE_STEPS, normalizeCandidateSteps } from '@/lib/candidateSteps';
+import React from 'react';
+import { Check, X, Minus } from 'lucide-react';
+import { normalizeCandidateSteps, applyCancelledInterviewOverrides } from '@/lib/candidateSteps';
+import '@/styles/StepProgressIndicator.css';
 
-const StepProgressIndicator = ({ currentStatus, steps = FALLBACK_CANDIDATE_STEPS }) => {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const statusSteps = normalizeCandidateSteps(steps);
-  const currentStatusObj = statusSteps.find((s) => s.key === currentStatus);
-  const currentStep = currentStatusObj?.step || 0;
+const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] }) => {
+  const statusSteps = applyCancelledInterviewOverrides(
+    normalizeCandidateSteps(steps),
+    interviewRequests,
+  );
+  const currentPipelineStep = statusSteps.find((s) => s.stepStatus === 'CURRENT');
+  const currentStatusObj = currentPipelineStep
+    || statusSteps.find((s) => s.key === currentStatus);
 
-  const uniqueSteps = [...new Set(statusSteps.map((s) => s.step))].sort((a, b) => a - b);
-  const totalSteps = uniqueSteps.length || 1;
+  const displaySteps = statusSteps
+    .slice()
+    .sort((a, b) => a.step - b.step || Number(a.id ?? 0) - Number(b.id ?? 0));
 
-  const statusesByStep = {};
-  statusSteps.forEach((status) => {
-    if (!statusesByStep[status.step]) {
-      statusesByStep[status.step] = [];
+  const currentIndex = currentPipelineStep
+    ? displaySteps.findIndex((s) => s.id === currentPipelineStep.id)
+    : displaySteps.findIndex((s) => s.key === currentStatus);
+
+  if (displaySteps.length === 0) {
+    return null;
+  }
+
+  const getStepColor = (step) => {
+    if (step?.cancelledInterview || step?.stepStatus === 'FAILED') {
+      return '#ef4444';
     }
-    statusesByStep[status.step].push(status);
-  });
+    return step?.bgColor || '#6366f1';
+  };
 
-  const displaySteps = Object.keys(statusesByStep)
-    .sort((a, b) => a - b)
-    .map((step) => statusesByStep[step][0]);
+  const getStepState = (pipelineStep, index) => {
+    const isCurrent = pipelineStep.stepStatus === 'CURRENT'
+      || (!currentPipelineStep && pipelineStep.key === currentStatusObj?.key && index === currentIndex);
+    const isFailed = pipelineStep.stepStatus === 'FAILED';
+    const isSkipped = pipelineStep.stepStatus === 'SKIPPED';
+    const isCompleted = pipelineStep.stepStatus === 'COMPLETED'
+      || (currentIndex >= 0 && index < currentIndex && !isFailed && !isSkipped);
+    const isPending = !isCurrent && !isCompleted && !isFailed && !isSkipped;
+    const isActive = isCurrent || isCompleted || isFailed || isSkipped;
+
+    return { isCurrent, isFailed, isSkipped, isCompleted, isPending, isActive };
+  };
+
+  const renderStepIcon = (index, { isCurrent, isCompleted, isFailed, isSkipped }) => {
+    if (isFailed) return <X className="h-4 w-4" strokeWidth={2.5} />;
+    if (isSkipped) return <Minus className="h-4 w-4" strokeWidth={2.5} />;
+    if (isCompleted) return <Check className="h-4 w-4" strokeWidth={2.5} />;
+    if (isCurrent) return <span className="step-progress-pulse-dot" />;
+    return <span className="text-xs font-bold">{index + 1}</span>;
+  };
+
+  const renderConnector = (index) => {
+    if (index <= 0) return null;
+
+    const connectorFilled = index <= currentIndex;
+    const prevColor = getStepColor(displaySteps[index - 1]);
+    const accentColor = getStepColor(displaySteps[index]);
+
+    return (
+      <div
+        className={`step-progress-connector ${connectorFilled ? 'is-filled' : ''}`}
+        style={connectorFilled
+          ? { background: `linear-gradient(90deg, ${prevColor}, ${accentColor})` }
+          : undefined}
+        aria-hidden="true"
+      />
+    );
+  };
 
   return (
-    <div className="w-full space-y-4">
-      <div className="relative w-full h-2 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full overflow-hidden shadow-sm">
-        {currentStep > 0 && (
-          <div
-            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-          />
-        )}
-      </div>
+    <div className="step-progress-root w-full">
+      <div className="step-progress-card">
+        <div className="step-progress-track horizontal-scroll-friendly">
+          {displaySteps.map((pipelineStep, index) => {
+            const { isCurrent, isFailed, isSkipped, isCompleted, isPending, isActive } = getStepState(pipelineStep, index);
+            const accentColor = getStepColor(pipelineStep);
 
-      <div className="flex items-start justify-between gap-2">
-        {displaySteps.map((representativeStep) => {
-          const stepNumber = representativeStep.step;
-          const statusesAtStep = statusesByStep[stepNumber];
-          const isCompleted = currentStep >= stepNumber;
-          const isCurrent = currentStep === stepNumber;
-          const currentStatusAtStep = currentStatusObj?.step === stepNumber ? currentStatusObj : statusesAtStep[0];
-          const hasMultiple = statusesAtStep.length > 1;
-
-          return (
-            <div key={`step-${stepNumber}`} className="flex flex-col items-center flex-1 relative">
-              <div
-                className="relative w-full flex justify-center"
-                onMouseEnter={() => hasMultiple && setShowDropdown(true)}
-                onMouseLeave={() => setShowDropdown(false)}
+            return (
+              <React.Fragment
+                key={`track-${pipelineStep.id ?? `${pipelineStep.key}-${pipelineStep.step}-${index}`}`}
               >
-                <div
-                  className={`
-                    w-10 h-10 rounded-full flex items-center justify-center font-bold text-white
-                    transition-all duration-300 transform cursor-pointer relative z-10
-                    ${isCurrent ? 'ring-2 ring-offset-2 ring-gray-400 scale-110 shadow-lg' : 'shadow-md'}
-                    ${hasMultiple && isCurrent ? 'cursor-pointer hover:scale-125' : ''}
-                  `}
-                  style={{
-                    backgroundColor: isCompleted ? currentStatusAtStep.bgColor : '#e5e7eb',
-                    color: isCompleted ? 'white' : '#9ca3af',
-                  }}
-                  onClick={() => hasMultiple && setShowDropdown(!showDropdown)}
-                >
-                  {isCompleted ? <Check className="h-4 w-4" /> : <div className="h-4 w-4 rounded-full border border-dashed border-gray-400" />}
-                </div>
-
-                {hasMultiple && showDropdown && isCurrent && (
-                  <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-max">
-                    {statusesAtStep.map((status) => (
-                      <div
-                        key={status.key}
-                        className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer text-gray-700 whitespace-nowrap border-b last:border-b-0"
-                        style={{ borderLeft: `3px solid ${status.bgColor}` }}
-                      >
-                        {status.label}
-                      </div>
-                    ))}
+                {renderConnector(index)}
+                <div className="step-progress-node-slot">
+                  <div
+                    className={[
+                      'step-progress-node',
+                      isCurrent && 'is-current',
+                      isCompleted && 'is-completed',
+                      isFailed && 'is-failed',
+                      isSkipped && 'is-skipped',
+                      isPending && 'is-pending',
+                    ].filter(Boolean).join(' ')}
+                    style={{
+                      '--step-color': accentColor,
+                      backgroundColor: isActive ? accentColor : undefined,
+                    }}
+                  >
+                    {renderStepIcon(index, { isCurrent, isCompleted, isFailed, isSkipped })}
                   </div>
-                )}
-              </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
 
-              <div className="mt-3 text-center">
-                <p
-                  className={`text-xs font-semibold transition-colors duration-300 ${
-                    isCompleted ? 'text-gray-900' : 'text-gray-500'
-                  }`}
-                  style={{ color: isCompleted ? currentStatusAtStep.bgColor : '#9ca3af' }}
-                >
-                  {currentStatusAtStep.label}
-                </p>
-                {hasMultiple && (
-                  <p className="text-xs text-gray-400 mt-1">({statusesAtStep.length} options)</p>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        <div className="step-progress-labels horizontal-scroll-friendly">
+          {displaySteps.map((pipelineStep, index) => {
+            const { isCurrent, isFailed, isActive } = getStepState(pipelineStep, index);
+            const accentColor = getStepColor(pipelineStep);
+
+            return (
+              <React.Fragment
+                key={`label-${pipelineStep.id ?? `${pipelineStep.key}-${pipelineStep.step}-${index}`}`}
+              >
+                {index > 0 && <div className="step-progress-label-gap" aria-hidden="true" />}
+                <div className="step-progress-label-slot">
+                  <p
+                    className={[
+                      'step-progress-label',
+                      isActive && 'is-active',
+                      isCurrent && 'is-current',
+                      isFailed && 'is-failed',
+                    ].filter(Boolean).join(' ')}
+                    style={{ color: isActive ? accentColor : undefined }}
+                    title={pipelineStep.label}
+                  >
+                    {pipelineStep.label}
+                  </p>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 };
 
-export { FALLBACK_CANDIDATE_STEPS as STATUS_STEPS };
 export default StepProgressIndicator;

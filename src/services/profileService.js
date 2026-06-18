@@ -40,8 +40,8 @@ export const profileAPI = {
   },
 
   // Create new technology (if it doesn't exist)
-  createTechnology: async (name, category = 'General') => {
-    const response = await api.post('/technologies', { name, category });
+  createTechnology: async (name, categoryId) => {
+    const response = await api.post('/technologies', { name, categoryId });
     return response.data;
   },
 

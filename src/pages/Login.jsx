@@ -19,12 +19,15 @@ const Login = () => {
   const navigate = useNavigate();
 
   const navigateByRole = (user) => {
-    if (user.role === 'ADMIN') {
+    const role = user?.role || user?.roles?.[0];
+    if (role === 'ADMIN') {
       navigate('/admin/dashboard');
-    } else if (user.role === 'HR') {
+    } else if (role === 'HR') {
       navigate('/hr/dashboard');
-    } else if (user.role === 'INTERVIEWER') {
+    } else if (role === 'INTERVIEWER') {
       navigate('/interviewer/dashboard');
+    } else {
+      setError('Your account has no assigned role. Contact an administrator.');
     }
   };
 

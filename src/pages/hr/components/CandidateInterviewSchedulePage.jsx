@@ -40,8 +40,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
 
   
   useEffect(() => {
-    if (!open) {
-
+    if (open) {
       getHrDepartmentId();
       setAvailabilityDate(getTodayDate());
       setInterviewType('TECHNICAL');
@@ -51,31 +50,23 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   if (!candidate) return null;
 
   const handleGoToAvailability = () => {
-    if (!availabilityDate) return;
+    if (!availabilityDate || !interviewType) return;
 
-     let filteredData = {
+    const filteredData = {
       startDateTime: availabilityDate,
-          departmentId: candidate.departmentId,
-          minTierOrder: candidate.tierOrder,
-          minLevelOrder: candidate.levelOrder,
-          candidateId: candidate.id,
-          candidateName: candidate.name,
+      departmentId: interviewType === 'HR' ? hrDepartmentId : candidate.departmentId,
+      minTierOrder: candidate.tierOrder,
+      minLevelOrder: interviewType === 'HR' ? null : candidate.levelOrder,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      interviewType,
     };
 
-    if (interviewType === 'HR') {
-      filteredData.departmentId = hrDepartmentId;
-      filteredData.minLevelOrder = null; 
-    } else {
-      filteredData.departmentId = candidate.departmentId;
-      filteredData.minLevelOrder = candidate.levelOrder;
-    }
-    
-
-    navigate('/hr/availability', {
-      state: {
-        filterData: filteredData
-      }
-    });
+    onOpenChange(false);
+    navigate(
+      `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
+      { state: { filterData: filteredData } },
+    );
   };
 
   return (
@@ -197,7 +188,11 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
             <div className="flex items-start gap-3 text-sm text-blue-700 bg-blue-50/80 p-4 rounded-xl border border-blue-100">
               <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
               <p className="leading-relaxed">
-                Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.
+                {interviewType === 'HR' ? (
+                  <>Matching interviewers will be from the <strong className="font-semibold">Human Resources</strong> department.</>
+                ) : (
+                  <>Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.</>
+                )}
               </p>
             </div>
           </div>

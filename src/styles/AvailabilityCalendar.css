@@ -615,6 +615,118 @@
 }
 
 /* ══════════════════════════════════════════════════════════
+   BOOKED EVENTS
+   ══════════════════════════════════════════════════════════ */
+.availability-calendar-container .rbc-event.booked-event {
+  min-height: 42px;
+}
+
+.booked-event-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  line-height: 1.2;
+}
+
+.booked-event-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.booked-event-lock {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
+.booked-event-candidate {
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.booked-event-interviewer {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 15px;
+}
+
+.booked-event-time {
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.85;
+  white-space: nowrap;
+  padding-left: 15px;
+}
+
+.availability-calendar-container .rbc-event.completed-event {
+  box-shadow: 0 1px 6px rgba(5, 150, 105, 0.35);
+}
+
+.completed-event-icon {
+  color: #ecfdf5;
+}
+
+.booked-event-completed-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ecfdf5;
+  margin-left: 15px;
+}
+
+.calendar-event-inner {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
+
+.calendar-event-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.calendar-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ══════════════════════════════════════════════════════════
    RESPONSIVE
    ══════════════════════════════════════════════════════════ */
 @media (max-width: 1024px) {

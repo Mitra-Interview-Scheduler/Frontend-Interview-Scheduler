@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router-dom'; 
+import { useLocation, useSearchParams } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
@@ -32,11 +32,12 @@ import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
-import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
-import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './utils/AvailabilityViewPageHelperUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, getDepartmentPalette, BOOKED_TYPE_PALETTES, COMPLETED_EVENT_PALETTE } from './utils/AvailabilityViewPageUiUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
 
@@ -51,8 +52,14 @@ const CALENDAR_PAGE_SIZES = {
 
 
 // ── Component ────────────────────────────────────────────────────────────────
+const resolveInterviewType = (...values) => {
+  const match = values.find((value) => value === 'HR' || value === 'TECHNICAL');
+  return match || 'TECHNICAL';
+};
+
 const AvailabilityViewPage = () => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const calendarFormats = useCalendarFormats();
   const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
   const [rawSlots, setRawSlots] = useState([]);
@@ -84,6 +91,7 @@ const AvailabilityViewPage = () => {
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
+  const [interviewType, setInterviewType] = useState('TECHNICAL');
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Panel mode
@@ -99,7 +107,7 @@ const AvailabilityViewPage = () => {
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
   const [requestForm, setRequestForm] = useState({
     candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '',
+    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: 'TECHNICAL',
   });
 
   // Cancel booked dialog
@@ -135,8 +143,14 @@ const AvailabilityViewPage = () => {
 
   // For the calendar components prop
   const calendarComponents = useMemo(() => ({
-    event: (props) => <CalendarEventComponent {...props} panelSlots={panelSlots} />
-  }), [panelSlots]);
+    event: (props) => (
+      <CalendarEventComponent
+        {...props}
+        panelSlots={panelSlots}
+        formatTimeRange={formatTimeRange}
+      />
+    ),
+  }), [panelSlots, formatTimeRange]);
 
 
   // ── Initial load ──────────────────────────────────────────────────────────
@@ -201,31 +215,39 @@ const AvailabilityViewPage = () => {
 
   useEffect(() => {
     const incomingFilter = location.state?.filterData;
-    
+    const paramCandidateId = searchParams.get('candidateId');
+    const paramInterviewType = searchParams.get('interviewType');
+
+    if (!incomingFilter && !paramCandidateId && !paramInterviewType) return;
+
+    const resolvedInterviewType = resolveInterviewType(
+      incomingFilter?.interviewType,
+      paramInterviewType,
+    );
+
     if (incomingFilter) {
-      console.log('Applying incoming filter from navigation state:', incomingFilter);
       setPendingFilter(incomingFilter);
-      
-      // 1. Set the Date Range
-      setDateRange({ 
-        start: new Date(incomingFilter.startDateTime), 
-        end: null 
+
+      setDateRange({
+        start: new Date(incomingFilter.startDateTime),
+        end: null,
       });
 
-      // 2. Set Department
       if (incomingFilter.departmentId) {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
       }
-
-      // 3. Set the pre-selected candidate for the Booking Dialog later
-      setRequestForm(prev => ({
-        ...prev,
-        candidateId: incomingFilter.candidateId,
-        candidateName: incomingFilter.candidateName
-      }));
     }
-  }, [location.state]);
+
+    setInterviewType(resolvedInterviewType);
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: incomingFilter?.candidateId
+        ?? (paramCandidateId ? parseInt(paramCandidateId, 10) : prev.candidateId),
+      candidateName: incomingFilter?.candidateName ?? prev.candidateName,
+      interviewType: resolvedInterviewType,
+    }));
+  }, [location.state, searchParams]);
 
 
   
@@ -492,6 +514,15 @@ const AvailabilityViewPage = () => {
     return;
   }
     const isBooked = event.resource?.status === 'BOOKED';
+    const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+
+    if (isBooked && isCompleted) {
+      toast({
+        title: 'Interview completed',
+        description: `${event.resource.candidateName || 'Interview'} with ${event.resource.interviewer} is finished.`,
+      });
+      return;
+    }
 
     if (isBooked) {
       openCancelDialog(event);
@@ -514,14 +545,16 @@ const AvailabilityViewPage = () => {
     setBookStartTime(format(event.start, 'HH:mm'));
     setBookEndTime(format(event.end, 'HH:mm'));
     setRequestForm(prev => ({
-      candidateId: prev.candidateId, 
-      candidateName: prev.candidateName, 
+      candidateId: prev.candidateId,
+      candidateName: prev.candidateName,
       candidateDesignationId: prev.candidateDesignationId,
+      interviewType: resolveInterviewType(prev.interviewType, interviewType),
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
       }).filter(Boolean),
-      isUrgent: false, notes: '',
+      isUrgent: false,
+      notes: '',
     }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
@@ -561,6 +594,7 @@ const AvailabilityViewPage = () => {
         preferredEndDateTime: formatLocalDateTime(bookEnd),
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
       });
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
@@ -606,6 +640,7 @@ const AvailabilityViewPage = () => {
         requiredTechnologyIds: requestForm.requiredTechnologyIds,
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
       });
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
@@ -712,14 +747,22 @@ const calendarSlotPropGetter = useCallback((date) => {
   return {};
 }, [calendarLockStart]);
   const technologyCategories = useMemo(() => {
-    const categories = Array.from(new Set(technologies.map((tech) => tech.category || 'Other')))
-      .sort((a, b) => a.localeCompare(b));
-    return categories;
+    const byCode = new Map();
+    technologies.forEach((tech) => {
+      const code = getTechnologyCategoryCode(tech) || 'OTHER';
+      const label = getTechnologyCategoryLabel(tech);
+      if (!byCode.has(code)) {
+        byCode.set(code, label);
+      }
+    });
+    return Array.from(byCode.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [technologies]);
 
   const filteredTechnologies = useMemo(() => {
     return technologies
-      .filter((tech) => !selectedTechCategory || (tech.category || 'Other') === selectedTechCategory)
+      .filter((tech) => !selectedTechCategory || getTechnologyCategoryCode(tech) === selectedTechCategory)
       .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
   }, [technologies, selectedTechCategory, techSearchTerm]);
 
@@ -728,14 +771,54 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
   const availableCount = events.filter((e) => e.resource?.status === 'AVAILABLE').length;
-  const bookedCount    = events.filter((e) => e.resource?.status === 'BOOKED').length;
+  const bookedCount = events.filter(
+    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus !== 'COMPLETED',
+  ).length;
+  const completedCount = events.filter(
+    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus === 'COMPLETED',
+  ).length;
 
-  const interviewerLegend = Object.entries(interviewerColorMap)
-    .map(([id, idx]) => {
-      const ev = events.find((e) => String(e.interviewerId) === String(id));
-      return { id, name: ev?.resource?.interviewer || `#${id}`, palette: INTERVIEWER_PALETTES[idx] };
-    })
-    .slice(0, 20);
+  const departmentLegend = useMemo(() => {
+    const seen = new Map();
+    events.forEach((event) => {
+      const department = event.resource?.department;
+      if (department && !seen.has(department)) {
+        seen.set(department, getDepartmentPalette(department));
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([name, palette]) => ({ name, palette }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [events]);
+
+  // ── Interview type (shared between single + panel dialogs) ───────────────
+  const renderInterviewTypeSection = () => (
+    <Card className="border-slate-200">
+      <CardContent className="p-4 space-y-2">
+        <Label className="text-sm font-semibold">Interview Type</Label>
+        <Select
+          value={resolveInterviewType(requestForm.interviewType, interviewType)}
+          onValueChange={(value) => {
+            setInterviewType(value);
+            setRequestForm((prev) => ({ ...prev, interviewType: value }));
+          }}
+        >
+          <SelectTrigger className="bg-white dark:bg-gray-900">
+            <SelectValue placeholder="Select interview type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+            <SelectItem value="HR">HR Interview</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {resolveInterviewType(requestForm.interviewType, interviewType) === 'HR'
+            ? 'Candidate status will move to HR Round when this interview is booked.'
+            : 'Candidate status will move to Technical Round when this interview is booked.'}
+        </p>
+      </CardContent>
+    </Card>
+  );
 
   // ── Candidate section (shared between single + panel dialogs) ─────────────
   const renderCandidateSection = (privilegeError) => (
@@ -864,23 +947,55 @@ const calendarSlotPropGetter = useCallback((date) => {
          
         </motion.div>
 
-        {/* Interviewer color legend */}
-        {/* {interviewerLegend.length > 0 && (
+        {/* Department color legend */}
+        {departmentLegend.length > 0 && (
           <div className="hr-interviewer-legend">
-            {interviewerLegend.map(({ id, name, palette }) => (
-              <div key={id} className="hr-interviewer-legend-chip"
-                style={{ borderColor: palette.solid + '60', background: palette.solid + '12', color: palette.solid }}>
+            {departmentLegend.map(({ name, palette }) => (
+              <div
+                key={name}
+                className="hr-interviewer-legend-chip"
+                style={{
+                  borderColor: `${palette.solid}60`,
+                  background: `${palette.solid}12`,
+                  color: palette.solid,
+                }}
+              >
                 <div className="hr-interviewer-legend-dot" style={{ backgroundColor: palette.solid }} />
                 {name}
               </div>
             ))}
-            <div className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#10b98160', background: '#10b98112', color: '#10b981' }}>
-              <div className="hr-interviewer-legend-dot" style={{ backgroundColor: '#10b981' }} />
-              🔒 Booked (click to cancel)
+            <div
+              className="hr-interviewer-legend-chip"
+              style={{ borderColor: '#3b82f660', background: '#3b82f612', color: '#2563eb' }}
+            >
+              <div
+                className="hr-interviewer-legend-dot"
+                style={{ backgroundColor: BOOKED_TYPE_PALETTES.TECHNICAL.solid, borderRadius: 2 }}
+              />
+              Booked · Technical
+            </div>
+            <div
+              className="hr-interviewer-legend-chip"
+              style={{ borderColor: '#ec489960', background: '#ec489912', color: '#db2777' }}
+            >
+              <div
+                className="hr-interviewer-legend-dot"
+                style={{ backgroundColor: BOOKED_TYPE_PALETTES.HR.solid, borderRadius: 2 }}
+              />
+              Booked · HR
+            </div>
+            <div
+              className="hr-interviewer-legend-chip"
+              style={{ borderColor: '#05966960', background: '#05966912', color: '#047857' }}
+            >
+              <div
+                className="hr-interviewer-legend-dot"
+                style={{ backgroundColor: COMPLETED_EVENT_PALETTE.solid, borderRadius: 2 }}
+              />
+              Completed
             </div>
           </div>
-        )} */}
+        )}
 
         {/* Slot counts */}
         {/* <div className="flex items-center gap-6 px-1 flex-wrap">
@@ -945,7 +1060,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <SelectContent>
                       <SelectItem value="NONE">All Categories</SelectItem>
                       {technologyCategories.map((category) => (
-                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                        <SelectItem key={category.code} value={category.code}>{category.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -984,7 +1099,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                                 className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
                                 <span className="font-medium">{tech.name}</span>
                                 <span className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">{tech.category || 'Other'}</span>
+                                  <span className="text-xs text-muted-foreground">{getTechnologyCategoryLabel(tech)}</span>
                                   {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
                                 </span>
                               </button>
@@ -1089,6 +1204,10 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-700" />
+                    <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
@@ -1271,6 +1390,11 @@ const calendarSlotPropGetter = useCallback((date) => {
               {cancelTarget.resource.candidateName && (
                 <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
               )}
+              {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
+                <p className="text-sm">
+                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
               </p>
@@ -1388,6 +1512,8 @@ const calendarSlotPropGetter = useCallback((date) => {
                   )}
                 </CardContent>
               </Card>
+
+              {renderInterviewTypeSection()}
 
               {/* Candidate + privilege check */}
               {renderCandidateSection(singlePrivilegeError)}
@@ -1510,6 +1636,8 @@ const calendarSlotPropGetter = useCallback((date) => {
                 )}
               </CardContent>
             </Card>
+
+            {renderInterviewTypeSection()}
 
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}

@@ -116,6 +116,44 @@ All colors MUST be HSL.
   }
 }
 
+@layer components {
+  .ui-dropdown-option {
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .ui-dropdown-option:hover,
+  .ui-dropdown-option:focus,
+  .ui-dropdown-option[data-highlighted],
+  .ui-dropdown-option[data-selected="true"],
+  .ui-dropdown-option[data-state="open"] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+
+  .dark .ui-dropdown-option:hover,
+  .dark .ui-dropdown-option:focus,
+  .dark .ui-dropdown-option[data-highlighted],
+  .dark .ui-dropdown-option[data-selected="true"],
+  .dark .ui-dropdown-option[data-state="open"] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+
+  /* Radix portaled menus — ensure hover works even outside component class chain */
+  [data-radix-select-viewport] [role="option"]:hover,
+  [data-radix-select-viewport] [role="option"][data-highlighted],
+  [role="menuitem"]:hover,
+  [role="menuitem"][data-highlighted],
+  [role="menuitemcheckbox"]:hover,
+  [role="menuitemcheckbox"][data-highlighted],
+  [role="menuitemradio"]:hover,
+  [role="menuitemradio"][data-highlighted] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -228,6 +266,62 @@ All colors MUST be HSL.
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  .candidate-tabs-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) hsl(var(--muted) / 0.35);
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-track {
+    margin: 0 0.25rem;
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.45);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.65);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .horizontal-scroll-friendly {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) hsl(var(--muted) / 0.35);
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-track {
+    margin: 0 0.25rem;
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.45);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.65);
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   .animate-fade-in {

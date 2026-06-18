@@ -67,6 +67,11 @@ const feedbackAPI = {
       return null;
     }
   },
+
+  async completeInterview(interviewScheduleId) {
+    const response = await api.patch(`/hr/interviews/schedules/${interviewScheduleId}/complete`);
+    return response.data;
+  },
 };
 
 export { feedbackAPI };

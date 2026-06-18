@@ -27,10 +27,36 @@ export const PANEL_PALETTE = {
   text: '#fff',
 };
 
-export const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg, #e5e7eb, #9ca3af)',
-  border: '#6b7280',
+export const BOOKED_TYPE_PALETTES = {
+  TECHNICAL: {
+    bg: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+    solid: '#3b82f6',
+    border: '#1e40af',
+    text: '#fff',
+  },
+  HR: {
+    bg: 'linear-gradient(135deg, #ec4899, #db2777)',
+    solid: '#ec4899',
+    border: '#9d174d',
+    text: '#fff',
+  },
+  DEFAULT: {
+    bg: 'linear-gradient(135deg, #64748b, #475569)',
+    solid: '#64748b',
+    border: '#334155',
+    text: '#fff',
+  },
 };
+
+export const COMPLETED_EVENT_PALETTE = {
+  bg: 'linear-gradient(135deg, #059669, #047857)',
+  solid: '#059669',
+  border: '#064e3b',
+  text: '#fff',
+};
+
+export const getBookedTypePalette = (interviewType) =>
+  BOOKED_TYPE_PALETTES[interviewType] || BOOKED_TYPE_PALETTES.DEFAULT;
 
 // Explicit, stable mapping of departments to palettes
 export const DEPARTMENT_PALETTES = {
@@ -55,119 +81,90 @@ export const getDepartmentPalette = (department) => {
   return INTERVIEWER_PALETTES[sum % INTERVIEWER_PALETTES.length];
 };
 
-export const CalendarEventComponent = ({ event, panelSlots }) => {
+export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) => {
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const isBooked = event.resource?.status === 'BOOKED';
+  const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+  const resource = event.resource || {};
+  const candidateName = resource.candidateName?.trim();
+  const interviewerName = resource.interviewer?.trim();
+  const showInterviewer = interviewerName
+    && candidateName
+    && interviewerName.toLowerCase() !== candidateName.toLowerCase();
+  const timeLabel = formatTimeRange
+    ? formatTimeRange(event.start, event.end)
+    : null;
+
+  if (isBooked && !isInPanel) {
+    return (
+      <div className="booked-event-content">
+        <div className="booked-event-header">
+          {isCompleted ? (
+            <CheckCircle2 className="booked-event-lock completed-event-icon" aria-hidden="true" />
+          ) : (
+            <Lock className="booked-event-lock" aria-hidden="true" />
+          )}
+          <span className="booked-event-candidate">
+            {candidateName || interviewerName || (isCompleted ? 'Completed' : 'Booked')}
+          </span>
+        </div>
+        {isCompleted && (
+          <span className="booked-event-completed-badge">Completed</span>
+        )}
+        {showInterviewer && (
+          <span className="booked-event-interviewer">{interviewerName}</span>
+        )}
+        {timeLabel && (
+          <span className="booked-event-time">{timeLabel}</span>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 3,
-      overflow: 'hidden',
-      height: '100%',
-      width: '100%',
-    }}>
+    <div className="calendar-event-inner">
       {isInPanel && (
-        <span style={{
-
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 2,
-          background: 'rgba(255,255,255,0.25)',
-          borderRadius: 3,
-          padding: '1px 4px',
-          fontSize: 10,
-          fontWeight: 700,
-          flexShrink: 0,
-          whiteSpace: 'nowrap',
-        }}>
+        <span className="calendar-event-panel-badge">
           <CheckCircle2 style={{ width: 9, height: 9 }} />
           Panel
         </span>
       )}
-      {isBooked && !isInPanel ? (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 4,
-          flex: 1,
-          minWidth: 0,
-          padding: '4px',
-          height: '100%',
-          borderRadius: 3,
-          textAlign: 'center',
-        }}>
-          <Lock style={{ width: 30, height: 30, color: 'inherit' }} />
-          <span style={{
-            fontSize: 11,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textAlign: 'center',
-            marginTop: 6,
-            lineHeight: '1.1',
-            maxWidth: '100%',
-            fontWeight: 600,
-            color: 'inherit',
-          }}>
-            {event.title.replace(/^Booked\s*/, '')}
-          </span>
-        </div>
-      ) : (
-        <span style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 11,
-          flex: 1,
-          minWidth: 0,
-          
-        }}>
-          {event.resource?.interviewer || event.title}
-        </span>
-      )
-      }
+      <span className="calendar-event-title">
+        {resource.interviewer || event.title}
+      </span>
     </div>
   );
 };
 
 export const getEventStyle = (event, panelSlots) => {
   const isBooked = event.resource?.status === 'BOOKED';
+  const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const deptPalette = getDepartmentPalette(event.resource?.department);
   const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
-
-  // Mix gray booked overlay with department gradient for booked slots
-  const background = isBooked
-    ? `${BOOKED_OVERLAY.bg}, ${basePalette.bg}`
-    : basePalette.bg;
-
-  const textColor = isBooked ? '#000' : (basePalette.text || 'white');
-  const leftBorder = isBooked
-    ? `3px solid ${BOOKED_OVERLAY.border || basePalette.border || basePalette.solid}`
-    : `3px solid ${basePalette.border || basePalette.solid}`;
+  const typePalette = isBooked && !isCompleted ? getBookedTypePalette(event.resource?.interviewType) : null;
+  const completedPalette = isCompleted ? COMPLETED_EVENT_PALETTE : null;
+  const leftBorderColor = isCompleted
+    ? completedPalette.border
+    : (isBooked && typePalette ? typePalette.border || typePalette.solid : basePalette.border || basePalette.solid);
 
   return {
-    className: isBooked ? 'booked-event' : 'available-event',
+    className: isCompleted ? 'booked-event completed-event' : (isBooked ? 'booked-event' : 'available-event'),
     style: {
-      background,
+      background: isCompleted ? completedPalette.bg : basePalette.bg,
       borderRadius: '5px',
-      opacity: isBooked ? 0.95 : 0.94,
-      color: textColor,
-      borderLeft: leftBorder,
+      opacity: isCompleted ? 0.92 : (isBooked ? 0.97 : 0.94),
+      color: isCompleted ? completedPalette.text : (basePalette.text || 'white'),
+      borderLeft: `${isBooked || isCompleted ? 4 : 3}px solid ${leftBorderColor}`,
       borderTop: 'none',
       borderRight: 'none',
       borderBottom: 'none',
-      padding: '3px 6px',
+      padding: isBooked ? '4px 6px' : '3px 6px',
       fontSize: '11px',
-      fontWeight: '500',
+      fontWeight: isBooked ? '600' : '500',
       boxShadow: isInPanel
         ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-        : `0 1px 4px ${basePalette.solid}30`,
+        : `0 1px 4px ${basePalette.solid}40`,
       cursor: 'pointer',
       overflow: 'hidden',
       maxWidth: '100%',
@@ -182,6 +179,9 @@ export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end)
   const timeRange = formatTimeRange(event.start, event.end);
 
   if (r?.status === 'BOOKED') {
+    if (r.interviewStatus === 'COMPLETED') {
+      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nInterview finished — feedback locked`;
+    }
     return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;
   }
 

@@ -8,9 +8,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 import { DocumentDropzone } from './../../../../components/DocumentDropzone';
-import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog'; // Import our new modal component
+import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog';
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
+import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
 
 const ProfileSummaryTab = ({
   candidate,
@@ -21,7 +22,6 @@ const ProfileSummaryTab = ({
   onDocumentUploaded = () => {},  
   onCandidateUpdated = () => {},   
 }) => {
-  // Document states
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [documentFile, setDocumentFile] = useState(null);
   const [documentType, setDocumentType] = useState('CV');
@@ -48,6 +48,7 @@ const ProfileSummaryTab = ({
   };
 
   const resourceLinks = parseResourceLinks(candidate.resourceLink);
+  const jobDescriptionText = parseJobDescriptionText(candidate.jdUrl);
   
   const getHostLabel = (url) => {
     try {
@@ -73,13 +74,13 @@ const ProfileSummaryTab = ({
         location: candidate.location || null,
         notes: candidate.notes || null,
         resourceRequestNumber: candidate.resourceRequestNumber || null,
-        resourceLink: JSON.stringify(updatedLinksList)
+        resourceLink: JSON.stringify(updatedLinksList),
       };
 
       await candidateAPI.updateCandidate(candidate.id, payload);
       toast({ title: 'Success', description: 'Resource links synchronized successfully' });
       setIsLinkModalOpen(false);
-      onCandidateUpdated(); 
+      onCandidateUpdated();
     } catch (err) {
       toast({
         title: 'Update Failed',
@@ -166,14 +167,9 @@ const ProfileSummaryTab = ({
               <FileText className="h-4 w-4 text-blue-600" />
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job Description</p>
             </div>
-            {candidate.jdUrl ? (
-              <a href={candidate.jdUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 break-all text-sm text-blue-700 hover:underline">
-                <ExternalLink className="h-3.5 w-3.5" />
-                {candidate.jdUrl}
-              </a>
-            ) : (
-              <p className="mt-2 text-sm text-slate-700">-</p>
-            )}
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+              {jobDescriptionText || '-'}
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -20,11 +20,11 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { downloadBlobResponse } from '@/lib/documentUtils';
-import { FALLBACK_CANDIDATE_STEPS } from '@/lib/candidateSteps';
 
 // Reusable Subcomponents
 import { DocumentDropzone } from './../../../components/DocumentDropzone'; 
 import { ResourceLinkDialog } from './../../../components/ResourceLinkDialog';
+import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '',
@@ -38,7 +38,7 @@ function CandidateDialogPage({
   open, 
   candidate, 
   departments = [],
-  candidateSteps = FALLBACK_CANDIDATE_STEPS,
+  candidateSteps = [],
   onOpenChange, 
   onSaveSuccess,
   readOnly = false,
@@ -143,7 +143,7 @@ function CandidateDialogPage({
       targetDesignationId:   candidate.targetDesignationId?.toString() || '',
       yearsOfExperience:     candidate.yearsOfExperience?.toString() || '',
       resumeUrl:             candidate.resumeUrl || '',
-      jdUrl:                 candidate.jdUrl || '',
+      jdUrl:                 parseJobDescriptionText(candidate.jdUrl),
       resourceLink:          candidate.resourceLink || '',
       jobReferenceCode:      candidate.jobReferenceCode || '',
       location:              candidate.location || '',
@@ -531,6 +531,23 @@ function CandidateDialogPage({
               </SelectContent>
             </Select>
           </div>
+
+            {/* Job Description */}
+            <div className="md:col-span-2 pt-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Job Description</p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label className="flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5" /> Job Description
+              </Label>
+              <Textarea
+                value={form.jdUrl}
+                onChange={(e) => setForm({ ...form, jdUrl: e.target.value })}
+                placeholder="Paste or write the job description..."
+                rows={5}
+                disabled={saving || readOnly}
+              />
+            </div>
 
             {/* Resource Links Block */}
             <div className="space-y-3 md:col-span-2">

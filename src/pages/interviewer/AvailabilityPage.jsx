@@ -42,6 +42,12 @@ const STATUS_COLORS = {
     solid: '#10b981',
     label: 'Booked',
   },
+  completed: {
+    bg: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+    border: '#064e3b',
+    solid: '#059669',
+    label: 'Completed',
+  },
   blocked: {
     bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
     border: '#92400e',
@@ -157,19 +163,31 @@ const AvailabilityPage = () => {
   const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   // ── Data loading 
-  const mapSlotsToEvents = (data) => data.map((slot) => ({
-    id: slot.id,
-    title: slot.status === 'BOOKED' ? `🔒 ${slot.candidateName || 'Interview Scheduled'}` : slot.description || 'Available',
-    start: new Date(slot.startDateTime),
-    end: new Date(slot.endDateTime),
-    status: slot.status.toLowerCase(),
-    description: slot.description,
-    candidateName: slot.candidateName,
-    interviewScheduleId: slot.interviewScheduleId,
-    durationHours: slot.durationHours,
-    recurrenceGroupId: slot.recurrenceGroupId,
-    isRecurring: slot.isRecurring,
-  }));
+  const mapSlotsToEvents = (data) => data.map((slot) => {
+    const isCompleted = slot.interviewStatus === 'COMPLETED';
+    const statusKey = slot.status === 'BOOKED'
+      ? (isCompleted ? 'completed' : 'booked')
+      : slot.status.toLowerCase();
+
+    return {
+      id: slot.id,
+      title: slot.status === 'BOOKED'
+        ? (isCompleted
+          ? `✓ ${slot.candidateName || 'Interview Completed'}`
+          : `🔒 ${slot.candidateName || 'Interview Scheduled'}`)
+        : slot.description || 'Available',
+      start: new Date(slot.startDateTime),
+      end: new Date(slot.endDateTime),
+      status: statusKey,
+      description: slot.description,
+      candidateName: slot.candidateName,
+      interviewScheduleId: slot.interviewScheduleId,
+      interviewStatus: slot.interviewStatus,
+      durationHours: slot.durationHours,
+      recurrenceGroupId: slot.recurrenceGroupId,
+      isRecurring: slot.isRecurring,
+    };
+  });
 
   const computeRangeForView = (view, date) => {
     const d = date ? new Date(date) : new Date();
@@ -314,10 +332,9 @@ const handleSelectSlot = ({ start, end }) => {
 
 /** Clicking an existing event. */
   const handleEventClick = (event) => {
-    if (event.status === 'booked') {
-      // Open interview start dialog for booked events
+    if (event.status === 'booked' || event.status === 'completed') {
+      if (!event.interviewScheduleId) return;
       setSelectedInterviewScheduleId(event.interviewScheduleId);
-      console.log('Opening interview start dialog for schedule ID:', event.interviewScheduleId);
       setIsInterviewStartDialogOpen(true);
       return;
     }
@@ -415,12 +432,15 @@ const handleSelectSlot = ({ start, end }) => {
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
+    const isBookedLike = event.status === 'booked' || event.status === 'completed';
     return {
-      className: event.status === 'booked' ? 'booked-event' : 'available-event',
+      className: event.status === 'completed'
+        ? 'booked-event completed-event'
+        : (event.status === 'booked' ? 'booked-event' : 'available-event'),
       style: {
         background:   colors.bg,
         borderRadius: '5px',
-        opacity:      event.status === 'booked' ? 0.88 : 0.96,
+        opacity:      isBookedLike ? 0.88 : 0.96,
         color:        'white',
         borderLeft:   `3px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',

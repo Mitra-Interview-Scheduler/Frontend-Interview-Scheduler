@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User } from 'lucide-react';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import ProposeTimeDialog from './ProposeTimeDialog';
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const [candidate, setCandidate] = useState(null);
   const [interviewDetails, setInterviewDetails] = useState(null);
   const [error, setError] = useState('');
+  const [isProposeDialogOpen, setIsProposeDialogOpen] = useState(false);
   const displayCandidateName = candidate?.name || interviewDetails?.candidateName || 'Candidate details unavailable';
 
   useEffect(() => {
@@ -38,6 +40,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
     loadInterviewData();
   }, [open, interviewScheduleId]);
+
+  const isCompleted = interviewDetails?.interviewStatus === 'COMPLETED';
 
   const loadInterviewData = async () => {
     try {
@@ -79,13 +83,18 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     navigate(`/interviewer/feedback/${interviewScheduleId}`);
   };
 
+  const dialogTitle = isCompleted ? 'Completed Interview' : 'Interview Session';
+  const dialogDescription = isCompleted
+    ? 'This interview is finished. View the submitted feedback.'
+    : 'Review candidate information before starting the interview';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Interview Session</DialogTitle>
+          <DialogTitle className="text-2xl">{dialogTitle}</DialogTitle>
           <DialogDescription>
-            Review candidate information before starting the interview
+            {dialogDescription}
           </DialogDescription>
         </DialogHeader>
 
@@ -241,12 +250,29 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
+          {!loading && !error && !isCompleted && interviewScheduleId && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsProposeDialogOpen(true)}
+              className="gap-2"
+            >
+              <CalendarClock className="w-4 h-4" />
+              Propose a time
+            </Button>
+          )}
           <Button onClick={handleStartInterview} disabled={loading || !interviewScheduleId} className="gap-2">
             <User className="w-4 h-4" />
-            Start Interview
+            {isCompleted ? 'View Feedback' : 'Start Interview'}
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ProposeTimeDialog
+        open={isProposeDialogOpen}
+        onOpenChange={setIsProposeDialogOpen}
+        interviewScheduleId={interviewScheduleId}
+        currentInterview={interviewDetails}
+      />
     </Dialog>
   );
 }

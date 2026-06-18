@@ -47,6 +47,20 @@ export const availabilityAPI = {
     }
   },
 
+  completeInterview: async (interviewScheduleId) => {
+    const response = await api.patch(`interviewer/interviews/schedules/${interviewScheduleId}/complete`);
+    return response.data;
+  },
+
+  /**
+   * TODO: Backend — POST /api/interviewer/interviews/schedules/{scheduleId}/propose-time
+   * Payload: { availabilitySlotId, proposedStartDateTime, proposedEndDateTime, notes? }
+   */
+  proposeAlternativeTime: async (payload) => {
+    console.info('[STUB] proposeAlternativeTime', payload);
+    return { status: 'PENDING', ...payload };
+  },
+
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a single availability slot */

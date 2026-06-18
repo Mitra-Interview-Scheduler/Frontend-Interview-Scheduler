@@ -80,6 +80,10 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/categories"
+              element={<Navigate to="/admin/technologies?tab=categories" replace />}
+            />
+            <Route
               path="/admin/rules"
               element={
                 <PrivateRoute allowedRoles={['ADMIN']}>
