@@ -50,6 +50,11 @@ export const candidateAPI = {
     return response.data;
   },
 
+  closeCandidate: async (id, payload) => {
+    const response = await api.post(`/candidates/${id}/close`, payload);
+    return response.data;
+  },
+
   // Delete (deactivate) candidate
   deleteCandidate: async (id) => {
     await api.delete(`/candidates/${id}`);

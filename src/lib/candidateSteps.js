@@ -30,6 +30,9 @@ export const normalizeCandidateSteps = (steps) => {
     const bgColor = (hasNestedStep ? item.step.bgColor : item.bgColor) || '#6b7280';
     const badgeClass = (hasNestedStep ? item.step.badgeClass : item.badgeClass) || 'bg-gray-100 text-gray-800';
     const lightClass = (hasNestedStep ? item.step.lightClass : item.lightClass) || 'bg-gray-100';
+    const isVisible = hasNestedStep
+      ? item.step.isVisible !== false
+      : item.isVisible !== false;
 
     return {
       ...item,
@@ -42,8 +45,9 @@ export const normalizeCandidateSteps = (steps) => {
       badgeClass,
       lightClass,
       isClosingStep,
+      isVisible,
     };
-  }).sort((a, b) => (a.step - b.step) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
+  }).filter((step) => step.isVisible !== false).sort((a, b) => (a.step - b.step) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
 
   const roundCounts = mapped.reduce((counts, step) => {
     if (REPEATABLE_ROUND_KEYS.has(step.key)) {
@@ -95,7 +99,9 @@ export const getCandidateStatusBadgeClass = (steps, status) => {
 
 
 
-export const getCandidateClosingSteps = (steps) => normalizeCandidateSteps(steps).filter((step) => step.isClosingStep);
+export const getCandidateClosingSteps = (steps) => normalizeCandidateSteps(steps).filter(
+  (step) => step.isClosingStep && step.isVisible !== false,
+);
 
 const ACTIVITY_STATUS_META = {
   COMPLETED: {

@@ -66,3 +66,8 @@ export const getNextStepsConfig = (status, steps = []) => {
 
   return { prompt: config.prompt, actions: config.actions };
 };
+
+export const isFinalClosingStage = (status) => {
+  const statusKey = String(status || '').trim().toUpperCase();
+  return statusKey === 'SELECTED' || statusKey === 'REJECTED';
+};

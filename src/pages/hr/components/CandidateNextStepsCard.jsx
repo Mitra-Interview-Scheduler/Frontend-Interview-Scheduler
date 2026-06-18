@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
+import { closingReasonAPI } from '@/services/closingReasonAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { getNextStepsConfig } from '@/lib/nextStepsConfig';
 import CandidateInterviewSchedulePage from './CandidateInterviewSchedulePage';
@@ -26,8 +27,40 @@ function CandidateNextStepsCard({
   const [open, setOpen] = useState(initiallyOpen);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [closeStatus, setCloseStatus] = useState('REJECTED');
-  const [closeReason, setCloseReason] = useState('');
+  const [closeReasonId, setCloseReasonId] = useState('');
+  const [closeComment, setCloseComment] = useState('');
+  const [closingReasons, setClosingReasons] = useState([]);
+  const [reasonsLoading, setReasonsLoading] = useState(false);
   const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
+
+  useEffect(() => {
+    if (!showRejectDialog) return undefined;
+
+    let active = true;
+    setReasonsLoading(true);
+    setCloseReasonId('');
+    setCloseComment('');
+
+    closingReasonAPI.getActiveReasons()
+      .then((reasons) => {
+        if (!active) return;
+        const list = Array.isArray(reasons) ? reasons : [];
+        setClosingReasons(list);
+        if (list.length > 0) {
+          setCloseReasonId(String(list[0].id));
+        }
+      })
+      .catch(() => {
+        if (active) setClosingReasons([]);
+      })
+      .finally(() => {
+        if (active) setReasonsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [showRejectDialog]);
 
   const handleSetStatus = async (status, addPipelineRound = false) => {
     if (!candidate?.id) return;
@@ -68,23 +101,32 @@ function CandidateNextStepsCard({
     ? closingSteps
     : getCandidateClosingSteps(steps);
 
-  const isCommentStage = CLOSE_STATUS_OPTIONS.some((statusOption) => statusOption.key === closeStatus);
+  const canConfirmClose = Boolean(closeReasonId) && closeComment.trim().length > 0;
 
   const confirmReject = async () => {
-    if (!candidate?.id) return;
+    if (!candidate?.id || !canConfirmClose) return;
     setSaving(true);
     try {
-      await candidateAPI.updateCandidate(candidate.id, {
+      await candidateAPI.closeCandidate(candidate.id, {
         status: closeStatus,
-        notes: closeReason || undefined,
+        closingReasonId: Number(closeReasonId),
+        comment: closeComment.trim(),
       });
-      toast({ title: 'Application updated', description: `Candidate moved to ${getCandidateStatusLabel(steps, closeStatus)}.` });
+      toast({
+        title: 'Application updated',
+        description: `Candidate moved to ${getCandidateStatusLabel(steps, closeStatus)}.`,
+      });
       onUpdated?.();
       setShowRejectDialog(false);
-      setCloseReason('');
+      setCloseComment('');
+      setCloseReasonId('');
       setCloseStatus('REJECTED');
     } catch (err) {
-      toast({ title: 'Update failed', description: err.response?.data?.message || err.message || 'Could not update candidate status.', variant: 'destructive' });
+      toast({
+        title: 'Update failed',
+        description: err.response?.data?.message || err.message || 'Could not close the application.',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -125,7 +167,6 @@ function CandidateNextStepsCard({
                 </p>
               )}
 
-              {/* Dynamic Actions for moving the candidate forward */}
               <div className="flex flex-wrap items-center gap-2">
                 {actions.map((action) => (
                   <Button
@@ -141,10 +182,8 @@ function CandidateNextStepsCard({
                     <span className="truncate">{action.label}</span>
                   </Button>
                 ))}
-                 
               </div>
 
-              {/* Fixed Reject / Close Button */}
               <div className="mt-3">
                 <Button
                   type="button"
@@ -153,7 +192,7 @@ function CandidateNextStepsCard({
                   className="w-full h-8 bg-red-50 text-red-700 hover:bg-red-100 border-red-200"
                   onClick={handleReject}
                   disabled={saving || !candidate?.id}
-                  title="Reject This Application"
+                  title="Close This Application"
                 >
                   Close This Application
                 </Button>
@@ -163,7 +202,6 @@ function CandidateNextStepsCard({
         </CardContent>
       </Card>
 
-      {/* Reject / Close Dialog Implementation */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent className="max-w-xl w-full">
           <DialogHeader>
@@ -171,62 +209,66 @@ function CandidateNextStepsCard({
           </DialogHeader>
 
           <DialogBody className="space-y-4">
-            <Tabs defaultValue="status">
-              <TabsList>
-                <TabsTrigger value="status">Status</TabsTrigger>
-                {isCommentStage && <TabsTrigger value="comments">Comments</TabsTrigger>}
-              </TabsList>
-
-              <TabsContent value="status">
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-slate-500">Select the final status for this application</p>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      {CLOSE_STATUS_OPTIONS.length === 0 ? (
-                        <p className="col-span-2 text-sm text-slate-500 rounded-md border border-dashed border-slate-200 px-3 py-4">
-                          No closing stages are configured. Check that master steps with closing status exist in the database.
-                        </p>
-                      ) : CLOSE_STATUS_OPTIONS.map((statusOption) => {
-                        const active = closeStatus === statusOption.key;
-                        return (
-                          <button
-                            key={statusOption.key}
-                            type="button"
-                            onClick={() => setCloseStatus(statusOption.key)}
-                            className={`rounded-lg border px-3 py-2 text-left transition ${
-                              active
-                                ? 'ring-2 ring-blue-500 ' + statusOption.badgeClass
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <div className="text-sm font-semibold">{statusOption.label}</div>
-                            <div className="text-xs text-slate-500">{statusOption.key.replace(/_/g, ' ')}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-sm">Reason / Comment</Label>
-                    <Textarea
-                      value={closeReason}
-                      onChange={(e) => setCloseReason(e.target.value)}
-                      rows={4}
-                      placeholder="Add a reason or comment for this status change"
-                    />
-                  </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-slate-500">Select the final status for this application</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {CLOSE_STATUS_OPTIONS.length === 0 ? (
+                    <p className="col-span-2 text-sm text-slate-500 rounded-md border border-dashed border-slate-200 px-3 py-4">
+                      No visible closing stages are configured.
+                    </p>
+                  ) : CLOSE_STATUS_OPTIONS.map((statusOption) => {
+                    const active = closeStatus === statusOption.key;
+                    return (
+                      <button
+                        key={statusOption.key}
+                        type="button"
+                        onClick={() => setCloseStatus(statusOption.key)}
+                        className={`rounded-lg border px-3 py-2 text-left transition ${
+                          active
+                            ? `ring-2 ring-blue-500 ${statusOption.badgeClass}`
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="text-sm font-semibold">{statusOption.label}</div>
+                        <div className="text-xs text-slate-500">{statusOption.key.replace(/_/g, ' ')}</div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </TabsContent>
+              </div>
 
-              <TabsContent value="comments">
-                <div>
-                  <p className="text-sm text-slate-700">
-                    {candidate?.notes || closeReason || 'No comments available.'}
-                  </p>
-                </div>
-              </TabsContent>
-            </Tabs>
+              <div>
+                <Label className="text-sm">Closing reason *</Label>
+                <Select
+                  value={closeReasonId}
+                  onValueChange={setCloseReasonId}
+                  disabled={reasonsLoading || closingReasons.length === 0}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={reasonsLoading ? 'Loading reasons...' : 'Select a reason'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {closingReasons.map((reason) => (
+                      <SelectItem key={reason.id} value={String(reason.id)}>
+                        {reason.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm">Reason / Comment *</Label>
+                <Textarea
+                  value={closeComment}
+                  onChange={(e) => setCloseComment(e.target.value)}
+                  rows={4}
+                  placeholder="Provide details for this closing decision"
+                  className="mt-1"
+                />
+              </div>
+            </div>
           </DialogBody>
 
           <DialogFooter className="flex gap-2">
@@ -235,7 +277,7 @@ function CandidateNextStepsCard({
             </Button>
             <Button
               onClick={confirmReject}
-              disabled={saving || !candidate?.id}
+              disabled={saving || !candidate?.id || !canConfirmClose}
               className="bg-red-600 text-white hover:bg-red-700"
             >
               Apply Status
@@ -245,12 +287,10 @@ function CandidateNextStepsCard({
       </Dialog>
 
       <CandidateInterviewSchedulePage
-          open={isInterviewSchedulePageOpen}
-          candidate={candidate}
-          onOpenChange={setIsInterviewSchedulePageOpen}
-        />
-
-
+        open={isInterviewSchedulePageOpen}
+        candidate={candidate}
+        onOpenChange={setIsInterviewSchedulePageOpen}
+      />
     </>
   );
 }

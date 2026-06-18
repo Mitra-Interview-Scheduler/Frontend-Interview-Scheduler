@@ -15,6 +15,7 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { isFinalClosingStage } from '@/lib/nextStepsConfig';
 function CandidateDetailsPage() {
   const navigate = useNavigate();
   const { candidateId } = useParams();
@@ -179,12 +180,14 @@ function CandidateDetailsPage() {
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden gap-6 px-4 py-0">
           <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-2 min-h-0">
-            <CandidateNextStepsCard
-              candidate={candidate}
-              steps={candidateSteps}
-              closingSteps={closingSteps}
-              onUpdated={handleCandidateUpdated}
-            />
+            {!isFinalClosingStage(candidate.status) && (
+              <CandidateNextStepsCard
+                candidate={candidate}
+                steps={candidateSteps}
+                closingSteps={closingSteps}
+                onUpdated={handleCandidateUpdated}
+              />
+            )}
 
             <motion.div
             initial={{ opacity: 0, x: -20 }}

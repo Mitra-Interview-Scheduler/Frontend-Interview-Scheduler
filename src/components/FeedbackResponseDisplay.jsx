@@ -1,6 +1,10 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Star, UserCheck } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const SUMMARY_QUESTION_LABELS = new Set(['overall rating', 'decision on hire']);
 
 const getOptionLabel = (option) => {
   if (option == null) return '';
@@ -16,6 +20,65 @@ const resolveAnswerLabel = (question, rawValue) => {
   return match ? getOptionLabel(match) : value;
 };
 
+const findQuestionByLabel = (questions, label) => (
+  questions.find((question) => question.label?.trim().toLowerCase() === label.toLowerCase())
+);
+
+const getRatingStyles = (answerLabel) => {
+  const score = parseInt(answerLabel, 10);
+  if (Number.isNaN(score)) {
+    return 'border-slate-200 bg-slate-50 text-slate-800';
+  }
+  if (score <= 2) return 'border-red-200 bg-red-50 text-red-800';
+  if (score === 3) return 'border-amber-200 bg-amber-50 text-amber-900';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+};
+
+const getHireDecisionStyles = (answerLabel) => {
+  const normalized = answerLabel.trim().toLowerCase();
+  if (normalized === 'yes') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (normalized === 'no') return 'border-red-200 bg-red-50 text-red-800';
+  if (normalized === 'differed' || normalized === 'deferred') {
+    return 'border-amber-200 bg-amber-50 text-amber-900';
+  }
+  return 'border-slate-200 bg-slate-50 text-slate-800';
+};
+
+const SummaryMetric = ({ icon: Icon, label, value, toneClassName }) => (
+  <div className={cn('inline-flex w-fit flex-col rounded-lg border px-2.5 py-1.5', toneClassName)}>
+    <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">
+      <Icon className="h-3 w-3 shrink-0" />
+      <span>{label}</span>
+    </div>
+    <p className="text-sm font-semibold leading-tight">{value}</p>
+  </div>
+);
+
+const FeedbackSummaryWidget = ({ overallRating, hireDecision }) => {
+  if (!overallRating && !hireDecision) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {overallRating && (
+        <SummaryMetric
+          icon={Star}
+          label="Overall Rating"
+          value={overallRating}
+          toneClassName={getRatingStyles(overallRating)}
+        />
+      )}
+      {hireDecision && (
+        <SummaryMetric
+          icon={UserCheck}
+          label="Decision on Hire"
+          value={hireDecision}
+          toneClassName={getHireDecisionStyles(hireDecision)}
+        />
+      )}
+    </div>
+  );
+};
+
 const FeedbackResponseDisplay = ({ form, responses = {}, submittedAt = null }) => {
   if (!form) {
     return (
@@ -25,9 +88,27 @@ const FeedbackResponseDisplay = ({ form, responses = {}, submittedAt = null }) =
     );
   }
 
-  const allQuestions = [
-    ...(form.questions || []),
-    ...(form.obligatoryQuestions || []),
+  const formQuestions = form.questions || [];
+  const obligatoryQuestions = form.obligatoryQuestions || [];
+  const lookupQuestions = [...formQuestions, ...obligatoryQuestions];
+
+  const overallRatingQuestion = findQuestionByLabel(lookupQuestions, 'Overall Rating');
+  const hireDecisionQuestion = findQuestionByLabel(lookupQuestions, 'Decision on Hire');
+
+  const overallRating = overallRatingQuestion
+    ? resolveAnswerLabel(overallRatingQuestion, responses[overallRatingQuestion.order])
+    : null;
+  const hireDecision = hireDecisionQuestion
+    ? resolveAnswerLabel(hireDecisionQuestion, responses[hireDecisionQuestion.order])
+    : null;
+
+  const hasSummary = (overallRating && overallRating !== '—') || (hireDecision && hireDecision !== '—');
+
+  const detailQuestions = [
+    ...formQuestions,
+    ...obligatoryQuestions.filter(
+      (question) => !SUMMARY_QUESTION_LABELS.has(question.label?.trim().toLowerCase()),
+    ),
   ];
 
   return (
@@ -48,8 +129,15 @@ const FeedbackResponseDisplay = ({ form, responses = {}, submittedAt = null }) =
         <p className="text-sm text-muted-foreground">{form.description}</p>
       )}
 
+      {hasSummary && (
+        <FeedbackSummaryWidget
+          overallRating={overallRating !== '—' ? overallRating : null}
+          hireDecision={hireDecision !== '—' ? hireDecision : null}
+        />
+      )}
+
       <div className="space-y-3">
-        {allQuestions.map((question, index) => {
+        {detailQuestions.map((question, index) => {
           const answer = responses[question.order];
           const comment = responses[`${question.order}_comment`];
 
