@@ -12,12 +12,19 @@ const START_SCREENING = {
   className: 'w-full bg-green-50 text-blue-700 hover:bg-blue-100 border-blue-200',
 };
 
-const EXTEND_OFFER = {
-  label: 'Extend Offer',
+const MAKE_OFFER = {
+  label: 'Make Offer',
   actionType: 'OFFER_PENDING',
   variant: 'outline',
   className: 'w-full bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200',
 };
+
+const INTERVIEW_STAGE_KEYS = new Set([
+  'TECHNICAL_ROUND',
+  'HR_ROUND',
+  'INTERVIEW_SCHEDULES',
+  'SCHEDULED',
+]);
 
 /**
  * Edit this object to add or change buttons per candidate status.
@@ -33,24 +40,24 @@ const NEXT_STEPS_BY_STATUS = {
     actions: [SCHEDULE_INTERVIEW],
   },
   TECHNICAL_ROUND: {
-    prompt: 'Technical interview in progress. Schedule another technical interview or continue the process.',
-    actions: [SCHEDULE_INTERVIEW],
+    prompt: 'Technical interview in progress. Schedule another technical interview or make an offer.',
+    actions: [SCHEDULE_INTERVIEW, MAKE_OFFER],
   },
   HR_ROUND: {
-    prompt: 'HR interview in progress. Schedule another HR interview, extend an offer, or continue the process.',
-    actions: [SCHEDULE_INTERVIEW, EXTEND_OFFER],
+    prompt: 'HR interview in progress. Schedule another HR interview, make an offer, or continue the process.',
+    actions: [SCHEDULE_INTERVIEW, MAKE_OFFER],
   },
   OFFER_PENDING: {
     prompt: 'Offer has been extended to the candidate. Awaiting their acceptance or decline. Use Close Application when you have a final decision.',
     actions: [],
   },
   SCHEDULED: {
-    prompt: 'An interview is scheduled. Schedule another interview or continue the process.',
-    actions: [SCHEDULE_INTERVIEW],
+    prompt: 'An interview is scheduled. Schedule another interview or make an offer.',
+    actions: [SCHEDULE_INTERVIEW, MAKE_OFFER],
   },
   INTERVIEW_SCHEDULES: {
-    prompt: 'Interview schedules are in progress. Schedule another interview or continue the process.',
-    actions: [SCHEDULE_INTERVIEW],
+    prompt: 'Interview schedules are in progress. Schedule another interview or make an offer.',
+    actions: [SCHEDULE_INTERVIEW, MAKE_OFFER],
   },
   DEFAULT: {
     prompt: 'Review the candidate and choose the next stage to move the process forward.',
@@ -59,20 +66,30 @@ const NEXT_STEPS_BY_STATUS = {
 };
 
 export const getNextStepsConfig = (status, steps = []) => {
-  const statusKey = String(status || '').trim().toUpperCase();
+  const normalizedSteps = Array.isArray(steps) ? steps : [];
+  const currentPipelineStep = normalizedSteps.find((step) => step.stepStatus === 'CURRENT');
+  const statusKey = String(currentPipelineStep?.key || status || '').trim().toUpperCase();
   const config = NEXT_STEPS_BY_STATUS[statusKey] ?? NEXT_STEPS_BY_STATUS.DEFAULT;
 
-  const currentStep = steps.find((step) => step.key === statusKey);
+  const currentStep = normalizedSteps.find((step) => step.key === statusKey)
+    || currentPipelineStep;
   if (currentStep?.isClosingStep) {
     return { prompt: config.prompt, actions: [] };
   }
 
   if (statusKey === 'NEW') {
-    const hasScreeningStep = steps.some((step) => step.key === 'SCREENING');
+    const hasScreeningStep = normalizedSteps.some((step) => step.key === 'SCREENING');
     return {
       prompt: config.prompt,
       actions: hasScreeningStep ? config.actions : [],
     };
+  }
+
+  if (INTERVIEW_STAGE_KEYS.has(statusKey)) {
+    const actions = config.actions.length > 0
+      ? config.actions
+      : [SCHEDULE_INTERVIEW, MAKE_OFFER];
+    return { prompt: config.prompt, actions };
   }
 
   return { prompt: config.prompt, actions: config.actions };
