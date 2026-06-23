@@ -23,7 +23,16 @@ export const PrivateRoute = ({ children, allowedRoles = [] }) => {
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const hasAccess = allowedRoles.some((role) => userRoles.includes(role));
     if (!hasAccess) {
-      return <Navigate to="/" replace />;
+      if (userRoles.includes('ADMIN')) {
+        return <Navigate to="/admin/dashboard" replace />;
+      }
+      if (userRoles.includes('HR')) {
+        return <Navigate to="/hr/dashboard" replace />;
+      }
+      if (userRoles.includes('INTERVIEWER')) {
+        return <Navigate to="/interviewer/dashboard" replace />;
+      }
+      return <Navigate to="/login" replace />;
     }
   }
 

@@ -25,14 +25,13 @@ const hrLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/hr/dashboard' },
   { icon: Users, label: 'Candidates', path: '/hr/candidates' },
   { icon: UserCheck, label: 'Interviewer Availability', path: '/hr/availability' },
-  // { icon: Shield, label: 'Designations', path: '/hr/designations' },
-  // { icon: Briefcase, label: 'Technologies', path: '/hr/technologies' }
-  
+  { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
 ];
 
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
+  { icon: Shield, label: 'Designations', path: '/interviewer/designations' },
 ];
 
 const Sidebar = ({ isOpen, onNavigate }) => {

@@ -18,6 +18,7 @@ import { designationAPI } from '@/services/designationAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
@@ -76,6 +77,7 @@ const FeedbackQuestionsPage = () => {
   const [designations, setDesignations] = useState([]);
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState([]);
   const [selectedDesignationIds, setSelectedDesignationIds] = useState([]);
+  const [selectedInterviewTypes, setSelectedInterviewTypes] = useState([]);
   const [designationsByDepartment, setDesignationsByDepartment] = useState({});
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -92,9 +94,10 @@ const FeedbackQuestionsPage = () => {
       formDescription !== initialData.formDescription ||
       JSON.stringify(selectedDepartmentIds) !== JSON.stringify(initialData.selectedDepartmentIds) ||
       JSON.stringify(selectedDesignationIds) !== JSON.stringify(initialData.selectedDesignationIds) ||
+      JSON.stringify(selectedInterviewTypes) !== JSON.stringify(initialData.selectedInterviewTypes) ||
       JSON.stringify(questions) !== JSON.stringify(initialData.questions)
     );
-  }, [formName, formDescription, selectedDepartmentIds, selectedDesignationIds, questions, initialData]);
+  }, [formName, formDescription, selectedDepartmentIds, selectedDesignationIds, selectedInterviewTypes, questions, initialData]);
 
   useEffect(() => {
     const loadLookups = async () => {
@@ -121,6 +124,7 @@ const FeedbackQuestionsPage = () => {
               setFormDescription(form.description || '');
               setSelectedDepartmentIds((form.scopes?.departmentIds || []).map(String));
               setSelectedDesignationIds((form.scopes?.designationIds || []).map(String));
+              setSelectedInterviewTypes(form.scopes?.interviewTypes || []);
               const questionsData = (form.questions || []).map((q) => ({
                 id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
                 label: q.label || '',
@@ -138,6 +142,7 @@ const FeedbackQuestionsPage = () => {
                 formDescription: form.description || '',
                 selectedDepartmentIds: (form.scopes?.departmentIds || []).map(String),
                 selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
+                selectedInterviewTypes: form.scopes?.interviewTypes || [],
                 questions: questionsData,
               });
             }
@@ -296,12 +301,21 @@ const FeedbackQuestionsPage = () => {
     );
   };
 
+  const toggleInterviewType = (interviewType) => {
+    setSelectedInterviewTypes((current) =>
+      current.includes(interviewType)
+        ? current.filter((value) => value !== interviewType)
+        : [...current, interviewType]
+    );
+  };
+
   const buildPayload = () => ({
     name: formName.trim(),
     description: formDescription.trim(),
     scopes: {
       departmentIds: selectedDepartmentIds.map((value) => Number(value)),
       designationIds: selectedDesignationIds.map((value) => Number(value)),
+      interviewTypes: selectedInterviewTypes,
     },
     questions: questions.map((question, index) => ({
       order: index + 1,
@@ -405,7 +419,7 @@ const FeedbackQuestionsPage = () => {
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div className="space-y-1">
                 <CardTitle>Form Scope</CardTitle>
-                <CardDescription>Select departments and their relevant designations for this form.</CardDescription>
+                <CardDescription>Select departments, designations, and interview types for this form.</CardDescription>
               </div>
               <Button
                 type="button"
@@ -441,6 +455,31 @@ const FeedbackQuestionsPage = () => {
                 </div>
 
                 <div className="space-y-6">
+                  {/* Interview Type Selection */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-base font-semibold">Interview Types</Label>
+                      <Badge variant="secondary">Optional</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to apply this form to all interview types.
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                        <label
+                          key={option.value}
+                          className="flex items-center gap-3 rounded-lg border p-3 text-sm hover:bg-muted/30 cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={selectedInterviewTypes.includes(option.value)}
+                            onCheckedChange={() => toggleInterviewType(option.value)}
+                          />
+                          <span className="flex-1 font-medium">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Department Selection */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
@@ -530,10 +569,15 @@ const FeedbackQuestionsPage = () => {
                   )}
 
                   {/* Selected Summary */}
-                  {(selectedDepartmentIds.length > 0 || selectedDesignationIds.length > 0) && (
+                  {(selectedDepartmentIds.length > 0 || selectedDesignationIds.length > 0 || selectedInterviewTypes.length > 0) && (
                     <div className="rounded-lg border bg-primary/5 p-3">
                       <p className="text-xs font-medium text-foreground mb-2">Selected Scope:</p>
                       <div className="flex flex-wrap gap-2">
+                        {selectedInterviewTypes.map((interviewType) => (
+                          <Badge key={`type-${interviewType}`} variant="outline">
+                            {FEEDBACK_INTERVIEW_TYPE_OPTIONS.find((option) => option.value === interviewType)?.label || interviewType}
+                          </Badge>
+                        ))}
                         {selectedDepartmentIds.map((deptId) => (
                           <Badge key={`dept-${deptId}`} variant="default">
                             {departments.find((d) => d.id.toString() === deptId)?.name}

@@ -193,6 +193,11 @@ export const formatInterviewTypeLabel = (interviewType) => {
   return 'Interview';
 };
 
+export const FEEDBACK_INTERVIEW_TYPE_OPTIONS = [
+  { value: InterviewType.TECHNICAL, label: formatInterviewTypeLabel(InterviewType.TECHNICAL) },
+  { value: InterviewType.HR, label: formatInterviewTypeLabel(InterviewType.HR) },
+];
+
 export const isClosingStatus = (status) => (
   CLOSING_STATUS_LIST.includes(String(status || '').trim().toUpperCase())
 );

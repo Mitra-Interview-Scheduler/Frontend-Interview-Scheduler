@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Edit } from 'lucide-react';
+import { formatInterviewTypeLabel } from '@/lib/statusConstants';
 
 const getOptionLabel = (option) => {
   if (option == null) return '';
@@ -43,6 +44,15 @@ const FeedbackFormPreview = ({
               <Badge variant="outline">Version {form.versionNumber || 1}</Badge>
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
+              {form.scopes?.interviewTypes?.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {form.scopes.interviewTypes.map((interviewType) => (
+                    <Badge key={`type-${interviewType}`} variant="outline">
+                      {formatInterviewTypeLabel(interviewType)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               {form.scopes?.departmentIds?.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {form.scopes.departmentIds.map((deptId) => (

@@ -8,11 +8,12 @@ export const feedbackQuestionsAPI = {
     return response.data;
   },
 
-  getByDepartmentAndRole: async (departmentId, designationId) => {
+  getByDepartmentAndRole: async (departmentId, designationId, interviewType) => {
   const response = await api.get('/feedback/candidateforms', {
     params: {
-      departmentId: departmentId,
-      designationId: designationId
+      departmentId,
+      designationId,
+      interviewType,
     }
   });
   return response.data;
@@ -42,6 +43,27 @@ export const feedbackQuestionsAPI = {
 
   delete: async (id) => {
     await api.delete(`/feedback/forms/${id}`);
+  },
+
+  getObligatoryQuestions: async () => {
+    const response = await api.get('/feedback/obligatory-questions', {
+      _skipAuthRedirect: true,
+    });
+    return response.data;
+  },
+
+  createObligatoryQuestion: async (payload) => {
+    const response = await api.post('/feedback/obligatory-questions', payload);
+    return response.data;
+  },
+
+  updateObligatoryQuestion: async (id, payload) => {
+    const response = await api.put(`/feedback/obligatory-questions/${id}`, payload);
+    return response.data;
+  },
+
+  deleteObligatoryQuestion: async (id) => {
+    await api.delete(`/feedback/obligatory-questions/${id}`);
   },
 
   // Seed multiple forms using local mock data split into batches

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -501,7 +502,21 @@ const ProfilePage = () => {
             <Card className="shadow-elegant">
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
-                <CardDescription>Your role, department, tier, and designation information</CardDescription>
+                <CardDescription>
+                  Your role, department, tier, and designation information
+                  {isInterviewer && isEditing && (
+                    <>
+                      {' '}
+                      — missing options?{' '}
+                      <Link
+                        to="/interviewer/designations"
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        Add departments, tiers, or designations
+                      </Link>
+                    </>
+                  )}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Department */}
@@ -585,13 +600,15 @@ const ProfilePage = () => {
                           value={profile.currentDesignation?.id?.toString() || "NONE"}
                           onValueChange={handleDesignationChange}
                           // ── FIX: gate on selectedTierId, not designation's tier
-                          disabled={!selectedTierId || designationsForSelectedTier.length === 0}
+                          disabled={!selectedTierId}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder={
                               selectedTierId
-                                ? "Select designation"
-                                : "Select tier first"
+                                ? (designationsForSelectedTier.length > 0
+                                  ? 'Select designation'
+                                  : 'No designations yet — add in Designations')
+                                : 'Select tier first'
                             } />
                           </SelectTrigger>
                           <SelectContent>

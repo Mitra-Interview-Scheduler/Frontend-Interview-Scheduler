@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags } from 'lucide-react';
+import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags, ListChecks } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
@@ -17,14 +17,25 @@ import { designationAPI } from '@/services/designationAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
+import ObligatoryQuestionsManager from '@/components/admin/ObligatoryQuestionsManager';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS, formatInterviewTypeLabel } from '@/lib/statusConstants';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'categories' ? 'categories' : 'forms';
+  const tabParam = searchParams.get('tab');
+  const activeTab = tabParam === 'categories'
+    ? 'categories'
+    : tabParam === 'obligatory'
+      ? 'obligatory'
+      : 'forms';
 
   const setActiveTab = (tab) => {
-    setSearchParams(tab === 'categories' ? { tab: 'categories' } : {});
+    if (tab === 'forms') {
+      setSearchParams({});
+      return;
+    }
+    setSearchParams({ tab });
   };
 
   const [loading, setLoading] = useState(true);
@@ -37,6 +48,7 @@ const FeedbackFormsPage = () => {
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [questionCategories, setQuestionCategories] = useState([]);
+  const [obligatoryQuestionCount, setObligatoryQuestionCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
@@ -44,6 +56,7 @@ const FeedbackFormsPage = () => {
     searchTerm: '',
     departmentId: '',
     designationId: '',
+    interviewType: '',
   });
 
   const totalPages = Math.ceil(filteredForms.length / itemsPerPage);
@@ -99,6 +112,18 @@ const FeedbackFormsPage = () => {
   }, [filteredForms]);
 
   useEffect(() => {
+    if (activeTab !== 'obligatory') return;
+
+    feedbackQuestionsAPI.getObligatoryQuestions()
+      .then((data) => {
+        setObligatoryQuestionCount(Array.isArray(data) ? data.length : 0);
+      })
+      .catch(() => {
+        setObligatoryQuestionCount(0);
+      });
+  }, [activeTab]);
+
+  useEffect(() => {
     let result = [...forms];
 
     if (statusFilter === 'active') {
@@ -127,6 +152,13 @@ const FeedbackFormsPage = () => {
     if (filters.designationId) {
       result = result.filter((form) =>
         form.scopes?.designationIds?.includes(Number(filters.designationId))
+      );
+    }
+
+    if (filters.interviewType) {
+      result = result.filter((form) =>
+        !form.scopes?.interviewTypes?.length
+        || form.scopes.interviewTypes.includes(filters.interviewType)
       );
     }
 
@@ -165,6 +197,9 @@ const FeedbackFormsPage = () => {
     }
     if (form.scopes?.designationIds?.length) {
       stats.push(`${form.scopes.designationIds.length} designation(s)`);
+    }
+    if (form.scopes?.interviewTypes?.length) {
+      stats.push(`${form.scopes.interviewTypes.length} interview type(s)`);
     }
     if (form.scopes?.tierIds?.length) {
       stats.push(`${form.scopes.tierIds.length} tier(s)`);
@@ -233,19 +268,22 @@ const FeedbackFormsPage = () => {
           onTabChange={setActiveTab}
           tabs={[
             { value: 'forms', label: 'Forms', icon: FileText, count: forms.length },
+            { value: 'obligatory', label: 'Obligatory Questions', icon: ListChecks, count: obligatoryQuestionCount },
             { value: 'categories', label: 'Categories', icon: Tags, count: questionCategories.length },
           ]}
         />
 
         {activeTab === 'categories' ? (
           <CategoryManager type="question" onCategoriesChange={setQuestionCategories} />
+        ) : activeTab === 'obligatory' ? (
+          <ObligatoryQuestionsManager onQuestionsChange={setObligatoryQuestionCount} />
         ) : (
           <>
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-4">
+          <CardContent className="grid gap-4 md:grid-cols-5">
             <div className="space-y-2">
               <Label>Search</Label>
               <div className="relative">
@@ -293,6 +331,26 @@ const FeedbackFormsPage = () => {
                   {designations.map((desig) => (
                     <SelectItem key={desig.id} value={desig.id.toString()}>
                       {desig.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Interview Type</Label>
+              <Select
+                value={filters.interviewType || 'all'}
+                onValueChange={(value) => setFilters({ ...filters, interviewType: value === 'all' ? '' : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All interview types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All interview types</SelectItem>
+                  {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -413,6 +471,15 @@ const FeedbackFormsPage = () => {
 
                           {form.scopes && (
                             <div className="flex flex-wrap gap-2">
+                              {form.scopes.interviewTypes?.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {form.scopes.interviewTypes.map((interviewType) => (
+                                    <Badge key={`type-${interviewType}`} variant="outline">
+                                      {formatInterviewTypeLabel(interviewType)}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
                               {form.scopes.departmentIds?.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {form.scopes.departmentIds.map((deptId) => (

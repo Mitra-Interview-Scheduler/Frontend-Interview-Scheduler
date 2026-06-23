@@ -16,7 +16,7 @@ import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
-import { InterviewScheduleStatus } from '@/lib/statusConstants';
+import { InterviewScheduleStatus, InterviewType } from '@/lib/statusConstants';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
 import CompleteInterviewDialog from '@/components/CompleteInterviewDialog';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
@@ -140,10 +140,11 @@ function InterviewFeedbackPage() {
       // 3. Extract Department and Role IDs (Prioritize candidate data)
       const deptId = currentCandidate?.departmentId ?? interview?.departmentId ?? null;
       // Handle potential naming variations depending on your candidate object shape
-      const roleId = currentCandidate?.targetDesignationId ?? interview?.targetDesignationId ?? null; 
+      const roleId = currentCandidate?.targetDesignationId ?? interview?.targetDesignationId ?? null;
+      const interviewType = interview?.interviewType || InterviewType.TECHNICAL;
 
-      // 4. Fetch Forms using the extracted IDs
-      const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId);
+      // 4. Fetch forms using the extracted IDs and interview type
+      const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId, interviewType);
       let formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
 
       const existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
@@ -695,7 +696,7 @@ function InterviewFeedbackPage() {
 
                   {forms.length === 0 && (
                     <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
-                      No feedback forms matched this candidate's department or role.
+                      No feedback forms matched this candidate's department, role, or interview type.
                     </div>
                   )}
 

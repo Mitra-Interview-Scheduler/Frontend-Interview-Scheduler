@@ -102,7 +102,7 @@ const App = () => (
             <Route
               path="/admin/feedback-questions"
               element={
-                <PrivateRoute allowedRoles={['ADMIN']}>
+                <PrivateRoute allowedRoles={['ADMIN', 'HR']}>
                   <FeedbackQuestionsPage />
                 </PrivateRoute>
               }
@@ -110,7 +110,7 @@ const App = () => (
             <Route
               path="/admin/feedback-forms"
               element={
-                <PrivateRoute allowedRoles={['ADMIN']}>
+                <PrivateRoute allowedRoles={['ADMIN', 'HR']}>
                   <FeedbackFormsPage />
                 </PrivateRoute>
               }
@@ -228,6 +228,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
                   <PreferencesPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/interviewer/designations"
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <DesignationsPage />
                 </PrivateRoute>
               }
             />

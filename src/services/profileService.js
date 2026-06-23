@@ -51,6 +51,11 @@ export const profileAPI = {
     return response.data;
   },
 
+  createDepartment: async (name, code) => {
+    const response = await api.post('/departments', { name, code: code || null });
+    return response.data;
+  },
+
   // Get all designations
   getDesignations: async () => {
     const response = await api.get('/designations');
