@@ -36,8 +36,10 @@ import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/tec
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
+import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, getDepartmentPalette, BOOKED_TYPE_PALETTES, COMPLETED_EVENT_PALETTE } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import { InterviewScheduleStatus, InterviewType, SlotStatus } from '@/lib/statusConstants';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
 
@@ -53,8 +55,8 @@ const CALENDAR_PAGE_SIZES = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 const resolveInterviewType = (...values) => {
-  const match = values.find((value) => value === 'HR' || value === 'TECHNICAL');
-  return match || 'TECHNICAL';
+  const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
+  return match || InterviewType.TECHNICAL;
 };
 
 const AvailabilityViewPage = () => {
@@ -91,7 +93,7 @@ const AvailabilityViewPage = () => {
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
-  const [interviewType, setInterviewType] = useState('TECHNICAL');
+  const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Panel mode
@@ -107,13 +109,17 @@ const AvailabilityViewPage = () => {
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
   const [requestForm, setRequestForm] = useState({
     candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: 'TECHNICAL',
+    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: InterviewType.TECHNICAL,
+    interviewCoordinatorId: null,
+    interviewCoordinatorDepartmentId: null,
   });
 
   // Cancel booked dialog
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [coordinatorUsers, setCoordinatorUsers] = useState([]);
+  const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
   const techDropdownRef = useRef(null);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
@@ -246,8 +252,52 @@ const AvailabilityViewPage = () => {
         ?? (paramCandidateId ? parseInt(paramCandidateId, 10) : prev.candidateId),
       candidateName: incomingFilter?.candidateName ?? prev.candidateName,
       interviewType: resolvedInterviewType,
+      interviewCoordinatorId: incomingFilter?.interviewCoordinatorId ?? prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: incomingFilter?.interviewCoordinatorDepartmentId
+        ?? prev.interviewCoordinatorDepartmentId,
     }));
   }, [location.state, searchParams]);
+
+  const loadCoordinatorUsers = useCallback(async (departmentId) => {
+    if (!departmentId) {
+      setCoordinatorUsers([]);
+      return;
+    }
+    setCoordinatorUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsersByDepartment(departmentId);
+      setCoordinatorUsers(data || []);
+    } catch (err) {
+      console.error('Failed to load coordinator users:', err);
+      setCoordinatorUsers([]);
+    } finally {
+      setCoordinatorUsersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (requestForm.interviewCoordinatorDepartmentId) {
+      loadCoordinatorUsers(requestForm.interviewCoordinatorDepartmentId);
+    } else {
+      setCoordinatorUsers([]);
+    }
+  }, [requestForm.interviewCoordinatorDepartmentId, loadCoordinatorUsers]);
+
+  const handleCoordinatorDepartmentChange = (value) => {
+    const deptId = value === 'NONE' ? null : parseInt(value, 10);
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorDepartmentId: deptId,
+      interviewCoordinatorId: null,
+    }));
+  };
+
+  const handleCoordinatorUserChange = (value) => {
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorId: value === 'NONE' ? null : parseInt(value, 10),
+    }));
+  };
 
 
   
@@ -513,8 +563,8 @@ const AvailabilityViewPage = () => {
     });
     return;
   }
-    const isBooked = event.resource?.status === 'BOOKED';
-    const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+    const isBooked = event.resource?.status === SlotStatus.BOOKED;
+    const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
 
     if (isBooked && isCompleted) {
       toast({
@@ -595,6 +645,8 @@ const AvailabilityViewPage = () => {
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
         interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
@@ -641,11 +693,22 @@ const AvailabilityViewPage = () => {
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
         interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
       setPanelSlots([]);
-      setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
+      setRequestForm({
+        candidateId: null,
+        candidateName: '',
+        candidateDesignationId: '',
+        requiredTechnologyIds: [],
+        isUrgent: false,
+        notes: '',
+        interviewCoordinatorId: null,
+        interviewCoordinatorDepartmentId: null,
+      });
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -770,12 +833,12 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const availableCount = events.filter((e) => e.resource?.status === 'AVAILABLE').length;
+  const availableCount = events.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
   const bookedCount = events.filter(
-    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus !== 'COMPLETED',
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
   ).length;
   const completedCount = events.filter(
-    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus === 'COMPLETED',
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
 
   const departmentLegend = useMemo(() => {
@@ -811,11 +874,67 @@ const calendarSlotPropGetter = useCallback((date) => {
             <SelectItem value="HR">HR Interview</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {resolveInterviewType(requestForm.interviewType, interviewType) === 'HR'
-            ? 'Candidate status will move to HR Round when this interview is booked.'
-            : 'Candidate status will move to Technical Round when this interview is booked.'}
-        </p>
+        
+      </CardContent>
+    </Card>
+  );
+
+  const renderCoordinatorSection = () => (
+    <Card className="border-slate-200">
+      <CardContent className="p-4 space-y-4">
+        <p className="text-sm font-semibold">Interview Coordinator <span className="font-normal text-muted-foreground">(optional)</span></p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Coordinator Department</Label>
+            <Select
+              value={requestForm.interviewCoordinatorDepartmentId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorDepartmentChange}
+            >
+              <SelectTrigger className="bg-white dark:bg-gray-900">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Select department</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id.toString()}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Interview Coordinator</Label>
+            <Select
+              value={requestForm.interviewCoordinatorId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorUserChange}
+              disabled={!requestForm.interviewCoordinatorDepartmentId || coordinatorUsersLoading}
+            >
+              <SelectTrigger className="bg-white dark:bg-gray-900">
+                <SelectValue
+                  placeholder={
+                    !requestForm.interviewCoordinatorDepartmentId
+                      ? 'Select department first'
+                      : coordinatorUsersLoading
+                        ? 'Loading users...'
+                        : 'Select coordinator'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">No coordinator</SelectItem>
+                {coordinatorUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id.toString()}>
+                    {user.fullName} ({user.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Can be anyone from the selected department who will join and coordinate the interview.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1515,6 +1634,8 @@ const calendarSlotPropGetter = useCallback((date) => {
 
               {renderInterviewTypeSection()}
 
+              {renderCoordinatorSection()}
+
               {/* Candidate + privilege check */}
               {renderCandidateSection(singlePrivilegeError)}
             </div>
@@ -1638,6 +1759,8 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Card>
 
             {renderInterviewTypeSection()}
+
+            {renderCoordinatorSection()}
 
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}

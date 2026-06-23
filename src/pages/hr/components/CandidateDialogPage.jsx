@@ -17,8 +17,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
+import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
+import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { downloadBlobResponse } from '@/lib/documentUtils';
 
 // Reusable Subcomponents
@@ -32,6 +34,7 @@ const EMPTY_FORM = {
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', resourceLink: '', jobReferenceCode: '', location: '',
   notes: '', status: 'NEW', resourceRequestNumber: '',
+  coordinatedHrId: '',
 };
 
 function CandidateDialogPage({ 
@@ -56,6 +59,9 @@ function CandidateDialogPage({
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentFile, setDocumentFile] = useState(null);
   const [documentType, setDocumentType] = useState('CV');
+  const [pendingDocuments, setPendingDocuments] = useState([]);
+  const [hrUsers, setHrUsers] = useState([]);
+  const [hrUsersLoading, setHrUsersLoading] = useState(false);
   
   // Resource Link States
   const [resourceLinks, setResourceLinks] = useState([]);
@@ -117,8 +123,38 @@ function CandidateDialogPage({
     setResourceLinks((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  const loadHrUsers = async () => {
+    setHrUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsers({ role: 'HR' });
+      setHrUsers(data || []);
+    } catch (e) {
+      console.error('Failed to load HR users:', e);
+      setHrUsers([]);
+      setError((prev) => prev || 'Could not load HR users for Coordinated HR selection. Restart the backend if you recently updated.');
+    } finally {
+      setHrUsersLoading(false);
+    }
+  };
+
+  const handleAddPendingDocument = (file, docType) => {
+    setPendingDocuments((prev) => [
+      ...prev,
+      {
+        localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        documentType: docType || 'CV',
+      },
+    ]);
+  };
+
+  const handleRemovePendingDocument = (localId) => {
+    setPendingDocuments((prev) => prev.filter((doc) => doc.localId !== localId));
+  };
+
   useEffect(() => {
     if (!open) return;
+    loadHrUsers();
 
     if (isCreate) {
       setForm(EMPTY_FORM);
@@ -128,6 +164,7 @@ function CandidateDialogPage({
       setDocuments([]);
       setDocumentFile(null);
       setDocumentType('CV');
+      setPendingDocuments([]);
       setResourceLinks([]);
       return;
     }
@@ -150,6 +187,7 @@ function CandidateDialogPage({
       notes:                 candidate.notes || '',
       status:                candidate.status || 'NEW',
       resourceRequestNumber: candidate.resourceRequestNumber || '',
+      coordinatedHrId:       candidate.coordinatedHrId?.toString() || '',
     });
     
     setTiers([]);
@@ -159,6 +197,7 @@ function CandidateDialogPage({
     setDocuments([]);
     setDocumentFile(null);
     setDocumentType('CV');
+    setPendingDocuments([]);
     setResourceLinks(parseResourceLinks(candidate.resourceLink));
     loadDocuments(candidate.id);
 
@@ -280,6 +319,11 @@ function CandidateDialogPage({
       return;
     }
 
+    if (!form.coordinatedHrId) {
+      setError('Coordinated HR is required');
+      return;
+    }
+
     const payload = {
       name:                  form.name.trim(),
       email:                 form.email.trim(),
@@ -294,6 +338,7 @@ function CandidateDialogPage({
       location:              form.location?.trim() || null,
       notes:                 form.notes?.trim() || null,
       resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
+      coordinatedHrId:       parseInt(form.coordinatedHrId),
     };
 
     setSaving(true);
@@ -302,8 +347,17 @@ function CandidateDialogPage({
     try {
       if (isCreate) {
         const createdCandidate = await candidateAPI.createCandidate(payload);
-        if (documentFile) {
-          await candidateAPI.uploadCandidateDocument(createdCandidate.id, documentFile, documentType || 'CV');
+        try {
+          await candidatePipelineAPI.initializePipeline(createdCandidate.id);
+        } catch (pipelineError) {
+          console.error('Failed to initialize candidate pipeline:', pipelineError);
+        }
+        if (pendingDocuments.length > 0) {
+          await Promise.all(
+            pendingDocuments.map((doc) =>
+              candidateAPI.uploadCandidateDocument(createdCandidate.id, doc.file, doc.documentType)
+            )
+          );
         }
         toast({ title: 'Success', description: 'Candidate added successfully' });
       } else {
@@ -329,6 +383,7 @@ function CandidateDialogPage({
     setDocuments([]);
     setDocumentFile(null);
     setDocumentType('CV');
+    setPendingDocuments([]);
     setResourceLinks([]);
     setForm(EMPTY_FORM);
   };
@@ -440,6 +495,36 @@ function CandidateDialogPage({
                 placeholder="REQ-2024-001" 
                 disabled={saving || readOnly} 
               />
+            </div>
+
+            {/* Coordinated HR */}
+            <div className="space-y-2">
+              <Label>Coordinated HR *</Label>
+              {readOnly ? (
+                <Input
+                  value={candidate?.coordinatedHrName || '-'}
+                  disabled
+                  className="bg-gray-50"
+                />
+              ) : (
+                <Select
+                  value={form.coordinatedHrId || 'NONE'}
+                  onValueChange={(v) => setForm({ ...form, coordinatedHrId: v === 'NONE' ? '' : v })}
+                  disabled={saving || hrUsersLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={hrUsersLoading ? 'Loading HR users...' : 'Select coordinated HR'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Select HR user</SelectItem>
+                    {hrUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.fullName} ({user.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {!isCreate && (
@@ -634,13 +719,41 @@ function CandidateDialogPage({
               </Label>
 
               <div className="border border-slate-200 bg-slate-50/60 rounded-lg p-3">
-                {documents.length === 0 && !documentsLoading ? (
+                {isCreate ? (
+                  <>
+                    {pendingDocuments.length > 0 ? (
+                      <div className="space-y-1 mb-3">
+                        {pendingDocuments.map((doc) => (
+                          <div key={doc.localId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border px-3 py-2 bg-white">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{doc.file.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc.documentType} - {(doc.file.size / 1024).toFixed(1)} KB (pending upload)
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => handleRemovePendingDocument(doc.localId)}
+                              disabled={saving}
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Attach one or more documents before saving the candidate.
+                      </p>
+                    )}
+                  </>
+                ) : documents.length === 0 && !documentsLoading ? (
                   <p className="text-xs text-muted-foreground">
-                    {isCreate
-                      ? 'Attach a CV or other document before saving the candidate.'
-                      : readOnly
-                        ? 'No documents stored for this candidate.'
-                        : ''}
+                    {readOnly ? 'No documents stored for this candidate.' : ''}
                   </p>
                 ) : (
                   <div className="space-y-1">
@@ -712,6 +825,7 @@ function CandidateDialogPage({
                   <DocumentDropzone 
                     file={documentFile}
                     onFileSelect={setDocumentFile}
+                    onAddDocument={handleAddPendingDocument}
                     type={documentType}
                     onTypeChange={setDocumentType}
                     disabled={saving}

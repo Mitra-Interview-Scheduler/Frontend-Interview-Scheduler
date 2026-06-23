@@ -11,6 +11,7 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import ProposeTimeDialog from './ProposeTimeDialog';
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
@@ -41,7 +42,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     loadInterviewData();
   }, [open, interviewScheduleId]);
 
-  const isCompleted = interviewDetails?.interviewStatus === 'COMPLETED';
+  const isCompleted = interviewDetails?.interviewStatus === InterviewScheduleStatus.COMPLETED;
 
   const loadInterviewData = async () => {
     try {

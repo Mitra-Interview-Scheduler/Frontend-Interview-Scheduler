@@ -3,16 +3,25 @@ import InterviewSummaryTab from './tabs/InterviewSummaryTab';
 import ScreeningTab from './tabs/ScreeningTab';
 import ProfileActivityTab from './tabs/ProfileActivityTab';
 import InterviewDetailTab from './tabs/InterviewDetailTab';
+import PanelInterviewDetailTab from './tabs/PanelInterviewDetailTab';
 import { formatInterviewTypeLabel } from '@/lib/candidateSteps';
+import { buildInterviewTabEntries, resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
+import {
+  ALL_MASTER_STATUS_KEYS,
+  CLOSING_STATUS_LIST,
+  ClosingStatus,
+  InterviewRequestStatus,
+  InterviewScheduleStatus,
+  MasterStatus,
+} from '@/lib/statusConstants';
 
-const ALL_STATUSES = [
-  'NEW', 'SCREENING', 'TECHNICAL_ROUND', 'HR_ROUND', 'DISPOSITION',
-  'SELECTED', 'REJECTED', 'WITHDRAWN', 'ON_HOLD', 'INTERVIEW_SCHEDULES', 'OFFERED', 'OFFER_PENDING', 'HIRED',
-];
+const ALL_STATUSES = ALL_MASTER_STATUS_KEYS;
 
-const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== 'NEW');
-const AFTER_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== 'NEW' && status !== 'SCREENING');
-const CLOSING_STATUSES = ['SELECTED', 'REJECTED', 'WITHDRAWN', 'ON_HOLD'];
+const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== MasterStatus.NEW);
+const AFTER_SCREENING_STATUSES = ALL_STATUSES.filter(
+  (status) => status !== MasterStatus.NEW && status !== MasterStatus.SCREENING,
+);
+const CLOSING_STATUSES = CLOSING_STATUS_LIST;
 
 export const TABS_CONFIG = [
   {
@@ -27,7 +36,7 @@ export const TABS_CONFIG = [
     label: 'Screening',
     component: ScreeningTab,
     allowedStages: POST_SCREENING_STATUSES,
-    editableStages: ['SCREENING'],
+    editableStages: [MasterStatus.SCREENING],
   },
   {
     value: 'interview-summary',
@@ -45,14 +54,18 @@ export const TABS_CONFIG = [
   },
 ];
 
-const buildInterviewOrderMap = (interviewRequests = []) => {
+const buildInterviewOrderMap = (tabEntries = []) => {
   const countsByType = {};
   const orderMap = new Map();
 
-  interviewRequests.forEach((interview) => {
-    const type = interview?.interviewType || 'INTERVIEW';
+  tabEntries.forEach((entry) => {
+    const type = entry.kind === 'panel'
+      ? `${entry.panelRequests?.[0]?.interviewType || 'INTERVIEW'}_PANEL`
+      : (entry.interview?.interviewType || 'INTERVIEW');
     countsByType[type] = (countsByType[type] || 0) + 1;
-    const key = interview?.interviewScheduleId ?? interview?.id;
+    const key = entry.kind === 'panel'
+      ? `panel-${entry.panel?.id}`
+      : (entry.interview?.interviewScheduleId ?? entry.interview?.id);
     if (key != null) {
       orderMap.set(key, countsByType[type]);
     }
@@ -64,13 +77,24 @@ const buildInterviewOrderMap = (interviewRequests = []) => {
 const getInterviewTabLabel = (interview, orderNumber) => {
   const type = formatInterviewTypeLabel(interview?.interviewType);
   const orderLabel = orderNumber != null ? String(orderNumber) : '1';
-  const status = interview?.interviewStatus || (interview?.status === 'CANCELLED' ? 'CANCELLED' : null);
-  const cancelledSuffix = status === 'CANCELLED' ? ' · Cancelled' : '';
+  const status = interview?.interviewStatus
+    || (interview?.status === InterviewRequestStatus.CANCELLED ? InterviewScheduleStatus.CANCELLED : null);
+  const cancelledSuffix = status === InterviewScheduleStatus.CANCELLED ? ' · Cancelled' : '';
   return `${type} - ${orderLabel}${cancelledSuffix}`;
 };
 
+const getPanelTabLabel = (panelRequests, orderNumber) => {
+  const type = formatInterviewTypeLabel(panelRequests?.[0]?.interviewType);
+  const orderLabel = orderNumber != null ? String(orderNumber) : '1';
+  const allCancelled = panelRequests.every(
+    (request) => resolveInterviewRequestStatus(request) === InterviewScheduleStatus.CANCELLED,
+  );
+  const cancelledSuffix = allCancelled ? ' · Cancelled' : '';
+  return `${type} Panel - ${orderLabel}${cancelledSuffix}`;
+};
+
 /** Profile + screening, then interview tabs, interview summary, profile activity last. */
-export const getCandidateDetailTabs = (candidateStatus, interviewRequests = []) => {
+export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels = []) => {
   if (!candidateStatus) return [];
 
   const staticTabs = TABS_CONFIG.filter((tab) => tab.allowedStages.includes(candidateStatus));
@@ -80,20 +104,35 @@ export const getCandidateDetailTabs = (candidateStatus, interviewRequests = []) 
     (tab) => tab.value !== 'activity' && tab.value !== 'interview-summary',
   );
 
-  const showInterviews = interviewRequests.length > 0
+  const tabEntries = buildInterviewTabEntries(interviews, panels);
+  const showInterviews = tabEntries.length > 0
     && AFTER_SCREENING_STATUSES.includes(candidateStatus);
 
-  const interviewOrderMap = buildInterviewOrderMap(interviewRequests);
+  const interviewOrderMap = buildInterviewOrderMap(tabEntries);
 
   const interviewTabs = showInterviews
-    ? interviewRequests.map((interview) => {
-        const interviewKey = interview.interviewScheduleId ?? interview.id;
+    ? tabEntries.map((entry) => {
+        if (entry.kind === 'panel') {
+          const panelKey = `panel-${entry.panel?.id}`;
+          return {
+            value: panelKey,
+            label: getPanelTabLabel(entry.panelRequests, interviewOrderMap.get(panelKey)),
+            component: PanelInterviewDetailTab,
+            editableStages: [],
+            panel: entry.panel,
+            panelRequests: entry.panelRequests,
+            isPanelTab: true,
+          };
+        }
+
+        const interviewKey = entry.interview.interviewScheduleId ?? entry.interview.id;
         return {
-          value: `interview-${interview.interviewScheduleId}`,
-          label: getInterviewTabLabel(interview, interviewOrderMap.get(interviewKey)),
+          value: `interview-${entry.interview.interviewScheduleId}`,
+          label: getInterviewTabLabel(entry.interview, interviewOrderMap.get(interviewKey)),
           component: InterviewDetailTab,
           editableStages: [],
-          interview,
+          interview: entry.interview,
+          isPanelTab: false,
         };
       })
     : [];
@@ -105,3 +144,5 @@ export const getCandidateDetailTabs = (candidateStatus, interviewRequests = []) 
     ...(activityTab ? [activityTab] : []),
   ];
 };
+
+export { CLOSING_STATUSES, ClosingStatus };

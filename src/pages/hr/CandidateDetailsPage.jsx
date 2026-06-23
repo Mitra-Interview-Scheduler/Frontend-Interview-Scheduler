@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -30,7 +30,7 @@ function CandidateDetailsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [interviewRefreshKey, setInterviewRefreshKey] = useState(0);
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
-  const { interviewRequests, loading: interviewsLoading } = useCandidateInterviews(
+  const { interviewRequests, interviews, panels, loading: interviewsLoading } = useCandidateInterviews(
     candidate?.id,
     interviewRefreshKey,
   );
@@ -250,6 +250,14 @@ function CandidateDetailsPage() {
                   </div>
 
                   <div className="flex items-start gap-2">
+                    <UserCheck className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Coordinated HR</p>
+                      <p className="text-sm text-gray-900">{candidate.coordinatedHrName || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
                     <Briefcase className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-gray-600">Target Designation</p>
@@ -310,7 +318,8 @@ function CandidateDetailsPage() {
               candidate={candidate}
               steps={candidateSteps}
               stepsLoading={stepsLoading}
-              interviewRequests={interviewRequests}
+              interviews={interviews}
+              panels={panels}
               interviewsLoading={interviewsLoading}
               onInterviewsRefresh={refreshInterviews}
               documents={documents}

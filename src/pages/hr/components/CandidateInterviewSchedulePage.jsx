@@ -12,6 +12,8 @@ import {
 import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
+import { departmentUsersAPI } from '@/services/departmentUsersAPI';
+import { InterviewType } from '@/lib/statusConstants';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
@@ -24,9 +26,24 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   };
 
   const [availabilityDate, setAvailabilityDate] = useState(getTodayDate());
-  const [interviewType, setInterviewType] = useState('TECHNICAL'); 
+  const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [hrDepartmentId, setHrDepartmentId] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [coordinatorDepartmentId, setCoordinatorDepartmentId] = useState('');
+  const [coordinatorUserId, setCoordinatorUserId] = useState('');
+  const [coordinatorUsers, setCoordinatorUsers] = useState([]);
+  const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
+
+  const loadDepartments = async () => {
+    try {
+      const data = await DepartmentAPI.getAllDepartments();
+      setDepartments(data || []);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      setDepartments([]);
+    }
+  };
 
   const getHrDepartmentId = () => {
     DepartmentAPI.getDepartmentByName('Human Resources')
@@ -38,14 +55,41 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
       });
   };
 
-  
-  useEffect(() => {
-    if (open) {
-      getHrDepartmentId();
-      setAvailabilityDate(getTodayDate());
-      setInterviewType('TECHNICAL');
+  const loadCoordinatorUsers = async (departmentId) => {
+    if (!departmentId) {
+      setCoordinatorUsers([]);
+      return;
     }
-  }, [open]);
+    setCoordinatorUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsersByDepartment(departmentId);
+      setCoordinatorUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching coordinator users:', error);
+      setCoordinatorUsers([]);
+    } finally {
+      setCoordinatorUsersLoading(false);
+    }
+  };
+
+  const handleCoordinatorDepartmentChange = (value) => {
+    const deptId = value === 'NONE' ? '' : value;
+    setCoordinatorDepartmentId(deptId);
+    setCoordinatorUserId('');
+    loadCoordinatorUsers(deptId);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    loadDepartments();
+    getHrDepartmentId();
+    setAvailabilityDate(getTodayDate());
+    setInterviewType(InterviewType.TECHNICAL);
+    setCoordinatorDepartmentId('');
+    setCoordinatorUserId('');
+    setCoordinatorUsers([]);
+  }, [open, candidate?.id]);
 
   if (!candidate) return null;
 
@@ -54,12 +98,16 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
 
     const filteredData = {
       startDateTime: availabilityDate,
-      departmentId: interviewType === 'HR' ? hrDepartmentId : candidate.departmentId,
+      departmentId: interviewType === InterviewType.HR ? hrDepartmentId : candidate.departmentId,
       minTierOrder: candidate.tierOrder,
-      minLevelOrder: interviewType === 'HR' ? null : candidate.levelOrder,
+      minLevelOrder: interviewType === InterviewType.HR ? null : candidate.levelOrder,
       candidateId: candidate.id,
       candidateName: candidate.name,
       interviewType,
+      interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
+      interviewCoordinatorDepartmentId: coordinatorDepartmentId
+        ? parseInt(coordinatorDepartmentId, 10)
+        : null,
     };
 
     onOpenChange(false);
@@ -184,11 +232,69 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-slate-800">
+                  Coordinator Department <span className="font-normal text-slate-500">(optional)</span>
+                </Label>
+                <Select
+                  value={coordinatorDepartmentId || 'NONE'}
+                  onValueChange={handleCoordinatorDepartmentChange}
+                >
+                  <SelectTrigger className="h-11 text-sm border-slate-200 focus:ring-blue-500 bg-white">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Select department</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id.toString()}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-slate-800">
+                  Interview Coordinator <span className="font-normal text-slate-500">(optional)</span>
+                </Label>
+                <Select
+                  value={coordinatorUserId || 'NONE'}
+                  onValueChange={(value) => setCoordinatorUserId(value === 'NONE' ? '' : value)}
+                  disabled={!coordinatorDepartmentId || coordinatorUsersLoading}
+                >
+                  <SelectTrigger className="h-11 text-sm border-slate-200 focus:ring-blue-500 bg-white">
+                    <SelectValue
+                      placeholder={
+                        !coordinatorDepartmentId
+                          ? 'Select department first'
+                          : coordinatorUsersLoading
+                            ? 'Loading users...'
+                            : 'Select coordinator'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">No coordinator</SelectItem>
+                    {coordinatorUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.fullName} ({user.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">
+                  Can be anyone from the selected department who will join and coordinate the interview.
+                </p>
+              </div>
+            </div>
+
             {/* Warning / Rule Banner */}
             <div className="flex items-start gap-3 text-sm text-blue-700 bg-blue-50/80 p-4 rounded-xl border border-blue-100">
               <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
               <p className="leading-relaxed">
-                {interviewType === 'HR' ? (
+                {interviewType === InterviewType.HR ? (
                   <>Matching interviewers will be from the <strong className="font-semibold">Human Resources</strong> department.</>
                 ) : (
                   <>Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.</>

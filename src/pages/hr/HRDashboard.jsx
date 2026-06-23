@@ -29,6 +29,12 @@ import {
   getCandidateStatusBadgeClass,
   getCandidateStatusLabel,
 } from '@/lib/candidateSteps';
+import {
+  ACTIVE_PANEL_REQUEST_STATUSES,
+  InterviewRequestStatus,
+  InterviewScheduleStatus,
+  TERMINAL_REQUEST_STATUSES,
+} from '@/lib/statusConstants';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,7 +43,7 @@ const safeArray = (v) => (Array.isArray(v) ? v : []);
 // Panels that are cancelled must be excluded — this was the root cause of
 // the item persisting after cancel (backend cancelled it but frontend
 // re-added it from the refresh because there was no status guard).
-const ACTIVE_PANEL_STATUSES = new Set(['SCHEDULED', 'ACCEPTED', 'CONFIRMED', undefined, null]);
+const ACTIVE_PANEL_STATUSES = ACTIVE_PANEL_REQUEST_STATUSES;
 
 const buildScheduleItems = (requests, panels) => {
   const items = [];
@@ -45,11 +51,11 @@ const buildScheduleItems = (requests, panels) => {
   safeArray(panels)
   .filter((p) => {
     const s = (p.status ?? '').toUpperCase();
-    if (s === 'CANCELLED' || s === 'COMPLETED' || s === 'REJECTED') return false;
+    if (TERMINAL_REQUEST_STATUSES.has(s)) return false;
 
     // ← ADD THIS: if every child request is cancelled, the panel is effectively cancelled
     const reqs = safeArray(p.panelRequests);
-    if (reqs.length > 0 && reqs.every((r) => r.status === 'CANCELLED')) return false;
+    if (reqs.length > 0 && reqs.every((r) => r.status === InterviewRequestStatus.CANCELLED)) return false;
 
     return true;
   })
@@ -62,7 +68,7 @@ const buildScheduleItems = (requests, panels) => {
         candidateId: panel.candidate?.id ?? null,
         startDateTime: panel.startDateTime,
         endDateTime: panel.endDateTime,
-        status: 'ACCEPTED',
+        status: InterviewRequestStatus.ACCEPTED,
         isUrgent: panel.isUrgent,
         notes: panel.notes,
         interviewers: safeArray(panel.panelRequests).map((r) => ({
@@ -75,7 +81,7 @@ const buildScheduleItems = (requests, panels) => {
     });
 
   safeArray(requests)
-    .filter((r) => !r.panelId && r.status !== 'CANCELLED' && r.status !== 'REJECTED')
+    .filter((r) => !r.panelId && r.status !== InterviewRequestStatus.CANCELLED && r.status !== InterviewRequestStatus.REJECTED)
     .forEach((req) => {
       items.push({
         id: `req-${req.id}`,
@@ -343,7 +349,7 @@ const HRDashboard = () => {
     return acc;
   }, {});
 
-  const acceptedRequests   = requests.filter((r) => r.status === 'ACCEPTED');
+  const acceptedRequests   = requests.filter((r) => r.status === InterviewRequestStatus.ACCEPTED);
   const todayInterviews    = acceptedRequests.filter((r) => { try { return isToday(parseISO(r.preferredStartDateTime)); } catch { return false; } });
   const tomorrowInterviews = acceptedRequests.filter((r) => { try { return isTomorrow(parseISO(r.preferredStartDateTime)); } catch { return false; } });
   const thisWeekInterviews = acceptedRequests.filter((r) => { try { return isThisWeek(parseISO(r.preferredStartDateTime), { weekStartsOn: 1 }); } catch { return false; } });
@@ -357,7 +363,7 @@ const HRDashboard = () => {
     const end = item.endDateTime
       ? new Date(item.endDateTime)
       : new Date(new Date(item.startDateTime).getTime() + 60 * 60 * 1000);
-    return end > new Date() && item.status === 'ACCEPTED';
+    return end > new Date() && item.status === InterviewRequestStatus.ACCEPTED;
   }).slice(0, 10);
   const recentRequests   = [...requests]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))

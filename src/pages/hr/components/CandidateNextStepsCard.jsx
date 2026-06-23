@@ -11,6 +11,7 @@ import { candidateAPI } from '@/services/candidateAPI';
 import { closingReasonAPI } from '@/services/closingReasonAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { getNextStepsConfig } from '@/lib/nextStepsConfig';
+import { ClosingStatus } from '@/lib/statusConstants';
 import CandidateInterviewSchedulePage from './CandidateInterviewSchedulePage';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +27,7 @@ function CandidateNextStepsCard({
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(initiallyOpen);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [closeStatus, setCloseStatus] = useState('REJECTED');
+  const [closeStatus, setCloseStatus] = useState(ClosingStatus.REJECTED);
   const [closeReasonId, setCloseReasonId] = useState('');
   const [closeComment, setCloseComment] = useState('');
   const [closingReasons, setClosingReasons] = useState([]);
@@ -101,7 +102,7 @@ function CandidateNextStepsCard({
     ? closingSteps
     : getCandidateClosingSteps(steps);
 
-  const isSelectedClose = closeStatus === 'SELECTED';
+  const isSelectedClose = closeStatus === ClosingStatus.SELECTED;
   const canConfirmClose = isSelectedClose
     ? true
     : Boolean(closeReasonId) && closeComment.trim().length > 0;
@@ -126,7 +127,7 @@ function CandidateNextStepsCard({
       setShowRejectDialog(false);
       setCloseComment('');
       setCloseReasonId('');
-      setCloseStatus('REJECTED');
+      setCloseStatus(ClosingStatus.REJECTED);
     } catch (err) {
       toast({
         title: 'Update failed',
@@ -231,7 +232,7 @@ function CandidateNextStepsCard({
                         type="button"
                         onClick={() => {
                           setCloseStatus(statusOption.key);
-                          if (statusOption.key === 'SELECTED') {
+                          if (statusOption.key === ClosingStatus.SELECTED) {
                             setCloseReasonId('');
                           }
                         }}

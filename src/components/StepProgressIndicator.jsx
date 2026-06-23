@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, X, Minus } from 'lucide-react';
 import { normalizeCandidateSteps, applyCancelledInterviewOverrides } from '@/lib/candidateSteps';
+import { PipelineStepStatus } from '@/lib/statusConstants';
 import '@/styles/StepProgressIndicator.css';
 
 const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] }) => {
@@ -8,7 +9,7 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
     normalizeCandidateSteps(steps),
     interviewRequests,
   );
-  const currentPipelineStep = statusSteps.find((s) => s.stepStatus === 'CURRENT');
+  const currentPipelineStep = statusSteps.find((s) => s.stepStatus === PipelineStepStatus.CURRENT);
   const currentStatusObj = currentPipelineStep
     || statusSteps.find((s) => s.key === currentStatus);
 
@@ -24,19 +25,20 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
     return null;
   }
 
-  const getStepColor = (step) => {
-    if (step?.cancelledInterview || step?.stepStatus === 'FAILED') {
+  const getStepColor = (step, { isCurrent } = {}) => {
+    if (!isCurrent && (step?.cancelledInterview || step?.stepStatus === PipelineStepStatus.FAILED)) {
       return '#ef4444';
     }
     return step?.bgColor || '#6366f1';
   };
 
   const getStepState = (pipelineStep, index) => {
-    const isCurrent = pipelineStep.stepStatus === 'CURRENT'
+    const isCurrent = pipelineStep.stepStatus === PipelineStepStatus.CURRENT
       || (!currentPipelineStep && pipelineStep.key === currentStatusObj?.key && index === currentIndex);
-    const isFailed = pipelineStep.stepStatus === 'FAILED';
-    const isSkipped = pipelineStep.stepStatus === 'SKIPPED';
-    const isCompleted = pipelineStep.stepStatus === 'COMPLETED'
+    const isFailed = (pipelineStep.stepStatus === PipelineStepStatus.FAILED || pipelineStep.cancelledInterview)
+      && !isCurrent;
+    const isSkipped = pipelineStep.stepStatus === PipelineStepStatus.SKIPPED;
+    const isCompleted = pipelineStep.stepStatus === PipelineStepStatus.COMPLETED
       || (currentIndex >= 0 && index < currentIndex && !isFailed && !isSkipped);
     const isPending = !isCurrent && !isCompleted && !isFailed && !isSkipped;
     const isActive = isCurrent || isCompleted || isFailed || isSkipped;
@@ -56,8 +58,10 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
     if (index <= 0) return null;
 
     const connectorFilled = index <= currentIndex;
-    const prevColor = getStepColor(displaySteps[index - 1]);
-    const accentColor = getStepColor(displaySteps[index]);
+    const prevState = getStepState(displaySteps[index - 1], index - 1);
+    const prevColor = getStepColor(displaySteps[index - 1], prevState);
+    const currentState = getStepState(displaySteps[index], index);
+    const accentColor = getStepColor(displaySteps[index], currentState);
 
     return (
       <div
@@ -75,8 +79,9 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
       <div className="step-progress-card">
         <div className="step-progress-track horizontal-scroll-friendly">
           {displaySteps.map((pipelineStep, index) => {
-            const { isCurrent, isFailed, isSkipped, isCompleted, isPending, isActive } = getStepState(pipelineStep, index);
-            const accentColor = getStepColor(pipelineStep);
+            const stepState = getStepState(pipelineStep, index);
+            const { isCurrent, isFailed, isSkipped, isCompleted, isPending, isActive } = stepState;
+            const accentColor = getStepColor(pipelineStep, stepState);
 
             return (
               <React.Fragment
@@ -108,8 +113,9 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
 
         <div className="step-progress-labels horizontal-scroll-friendly">
           {displaySteps.map((pipelineStep, index) => {
-            const { isCurrent, isFailed, isActive } = getStepState(pipelineStep, index);
-            const accentColor = getStepColor(pipelineStep);
+            const stepState = getStepState(pipelineStep, index);
+            const { isCurrent, isFailed, isActive } = stepState;
+            const accentColor = getStepColor(pipelineStep, stepState);
 
             return (
               <React.Fragment

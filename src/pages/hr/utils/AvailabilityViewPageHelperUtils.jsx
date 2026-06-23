@@ -1,4 +1,5 @@
 import { INTERVIEWER_PALETTES } from './AvailabilityViewPageUiUtils';
+import { SlotStatus, formatInterviewTypeLabel as formatInterviewTypeLabelFromConstants } from '@/lib/statusConstants';
 
 export {
   calendarLocalizer as localizer,
@@ -47,15 +48,13 @@ export const checkPanelPrivilege = (panelSlots, candidate) => {
     .filter(Boolean);
 };
 
-export const formatInterviewTypeLabel = (interviewType) => {
-  if (interviewType === 'HR') return 'HR Interview';
-  if (interviewType === 'TECHNICAL') return 'Technical Interview';
-  return null;
-};
+export const formatInterviewTypeLabel = (interviewType) => (
+  formatInterviewTypeLabelFromConstants(interviewType) || null
+);
 
 export const formatSlots = (data, colorMap) =>
   data.map((slot) => {
-    const isBooked = slot.status === 'BOOKED';
+    const isBooked = slot.status === SlotStatus.BOOKED;
     const paletteIdx = colorMap[slot.interviewerId] ?? 0;
     const palette = INTERVIEWER_PALETTES[paletteIdx];
     const skills = slot.technologies || [];

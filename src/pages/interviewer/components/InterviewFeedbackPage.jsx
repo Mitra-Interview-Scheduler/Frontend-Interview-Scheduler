@@ -16,14 +16,17 @@ import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
+import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
 import CompleteInterviewDialog from '@/components/CompleteInterviewDialog';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
+import { useAuth } from '@/context/AuthContext';
 
 function InterviewFeedbackPage() {
   const navigate = useNavigate();
   const { interviewScheduleId } = useParams();
+  const { user } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +56,7 @@ function InterviewFeedbackPage() {
   const [loadedResponses, setLoadedResponses] = useState(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [panelPeerFeedback, setPanelPeerFeedback] = useState(false);
 
   // Derive the selected form from the backend-filtered list
   const selectedForm = useMemo(
@@ -121,7 +125,7 @@ function InterviewFeedbackPage() {
       const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
       const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
       setInterviewDetails(interview);
-      setInterviewCompleted(interview?.interviewStatus === 'COMPLETED');
+      setInterviewCompleted(interview?.interviewStatus === InterviewScheduleStatus.COMPLETED);
 
       // 2. Fetch Candidate Details
       let currentCandidate = null;
@@ -144,7 +148,10 @@ function InterviewFeedbackPage() {
 
       const existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
       if (existingFeedback?.responses) {
-        setFeedbackSubmitted(true);
+        const isOwnFeedback = !existingFeedback.interviewerId
+          || Number(existingFeedback.interviewerId) === Number(user?.id);
+        setPanelPeerFeedback(!isOwnFeedback);
+        setFeedbackSubmitted(isOwnFeedback);
         setLoadedResponses(existingFeedback.responses);
         if (existingFeedback.feedbackFormId) {
           const matchedForm = formList.find((form) => form.id === existingFeedback.feedbackFormId);
@@ -162,6 +169,7 @@ function InterviewFeedbackPage() {
         }
       } else {
         setFeedbackSubmitted(false);
+        setPanelPeerFeedback(false);
         setLoadedResponses(null);
       }
 
@@ -274,7 +282,8 @@ function InterviewFeedbackPage() {
     }
   };
 
-  const isFormLocked = submitting || interviewCompleted;
+  const isFormLocked = submitting || interviewCompleted || panelPeerFeedback;
+  const canCompleteInterview = !interviewCompleted && (feedbackSubmitted || panelPeerFeedback);
 
   const handleDownloadDocument = async (document) => {
     if (!candidate?.id || !document?.id) return;
@@ -617,9 +626,11 @@ function InterviewFeedbackPage() {
                   )}
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {selectedForm
-                    ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
-                    : 'No feedback form matched this candidate yet.'}
+                  {panelPeerFeedback
+                    ? 'Another panel interviewer has already submitted feedback for this interview.'
+                    : selectedForm
+                      ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
+                      : 'No feedback form matched this candidate yet.'}
                 </p>
                 {/* Progress Bar */}
                 <div className="space-y-1">
@@ -786,7 +797,7 @@ function InterviewFeedbackPage() {
                   <ArrowLeft className="w-4 h-4" />
                   Back
                 </Button>
-                {!interviewCompleted && (
+                {!interviewCompleted && !panelPeerFeedback && (
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || completing || !selectedForm || questions.length === 0}
@@ -805,7 +816,7 @@ function InterviewFeedbackPage() {
                     )}
                   </Button>
                 )}
-                {feedbackSubmitted && !interviewCompleted && (
+                {canCompleteInterview && (
                   <Button
                     onClick={() => setCompleteDialogOpen(true)}
                     disabled={submitting || completing}
