@@ -83,7 +83,7 @@ const InterviewDetailTab = ({ interview, candidate, isActive = true, embedded = 
   const endTime = interview?.scheduledEndDateTime || interview?.preferredEndDateTime;
   const interviewerRole = getInterviewerDesignationLabel(interview);
   const interviewerName = interview?.assignedInterviewerName || '—';
-  const coordinatorName = interview?.interviewCoordinatorName?.trim() || null;
+  const coordinatorName = interview?.interviewCoordinatorName?.trim() || 'Not mentioned';
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6 pb-6'}>
@@ -123,11 +123,9 @@ const InterviewDetailTab = ({ interview, candidate, isActive = true, embedded = 
                 ? (endTime ? formatDateTimeRange(startTime, endTime) : formatDateTime(startTime))
                 : '—'}
             </DetailField>
-            {coordinatorName && (
-              <DetailField icon={UserCheck} label="Interview Coordinator" iconClassName="text-indigo-600">
-                {coordinatorName}
-              </DetailField>
-            )}
+            <DetailField icon={UserCheck} label="Interview Coordinator" iconClassName="text-indigo-600">
+              {coordinatorName}
+            </DetailField>
             {candidate?.targetDesignationName && (
               <DetailField icon={Briefcase} label="Role" iconClassName="text-indigo-600">
                 {candidate.targetDesignationName}

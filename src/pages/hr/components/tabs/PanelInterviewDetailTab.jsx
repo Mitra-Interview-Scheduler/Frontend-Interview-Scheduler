@@ -72,7 +72,7 @@ const PanelInterviewDetailTab = ({
   const isScheduled = panelStatus === InterviewScheduleStatus.SCHEDULED && !hasFeedback;
 
   const interviewType = requests[0]?.interviewType;
-  const coordinatorName = requests[0]?.interviewCoordinatorName?.trim() || null;
+  const coordinatorName = requests[0]?.interviewCoordinatorName?.trim() || 'Not mentioned';
   const startTime = panel?.startDateTime || requests[0]?.scheduledStartDateTime || requests[0]?.preferredStartDateTime;
   const endTime = panel?.endDateTime || requests[0]?.scheduledEndDateTime || requests[0]?.preferredEndDateTime;
 
@@ -162,11 +162,9 @@ const PanelInterviewDetailTab = ({
                 ? (endTime ? formatDateTimeRange(startTime, endTime) : formatDateTime(startTime))
                 : '—'}
             </DetailField>
-            {coordinatorName && (
-              <DetailField icon={UserCheck} label="Interview Coordinator" iconClassName="text-sky-600">
-                {coordinatorName}
-              </DetailField>
-            )}
+            <DetailField icon={UserCheck} label="Interview Coordinator" iconClassName="text-sky-600">
+              {coordinatorName}
+            </DetailField>
             {candidate?.targetDesignationName && (
               <DetailField icon={Briefcase} label="Candidate role" iconClassName="text-sky-600">
                 {candidate.targetDesignationName}
