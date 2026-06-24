@@ -23,6 +23,10 @@ const QUESTION_TYPES = [
   { value: 'dropdown', label: 'Dropdown' },
 ];
 
+const FEEDBACK_QUESTION_LABEL_MAX = 1000;
+const FEEDBACK_QUESTION_PLACEHOLDER_MAX = 255;
+const FEEDBACK_QUESTION_HELP_TEXT_MAX = 500;
+
 const DEFAULT_DROPDOWN_OPTIONS = [
   'N/A',
   '1 - Poor',
@@ -170,6 +174,15 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
 
   const validateForm = () => {
     if (!form.label.trim()) return 'Question text is required';
+    if (form.label.trim().length > FEEDBACK_QUESTION_LABEL_MAX) {
+      return `Question text must be ${FEEDBACK_QUESTION_LABEL_MAX} characters or fewer`;
+    }
+    if (form.placeholder.trim().length > FEEDBACK_QUESTION_PLACEHOLDER_MAX) {
+      return `Placeholder must be ${FEEDBACK_QUESTION_PLACEHOLDER_MAX} characters or fewer`;
+    }
+    if (form.helpText.trim().length > FEEDBACK_QUESTION_HELP_TEXT_MAX) {
+      return `Help text must be ${FEEDBACK_QUESTION_HELP_TEXT_MAX} characters or fewer`;
+    }
     if (form.type === 'dropdown' && !form.options.some((option) => option.trim())) {
       return 'Add at least one dropdown option';
     }
@@ -310,6 +323,7 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
                   value={form.label}
                   onChange={(e) => updateForm({ label: e.target.value })}
                   placeholder="e.g. Overall Rating"
+                  maxLength={FEEDBACK_QUESTION_LABEL_MAX}
                 />
               </div>
 

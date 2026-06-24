@@ -58,6 +58,21 @@ const FeedbackFormsPage = () => {
     interviewType: '',
   });
 
+  const availableDesignations = useMemo(() => {
+    if (!filters.departmentId) return [];
+    const departmentId = Number(filters.departmentId);
+    return designations.filter((designation) => designation.departmentId === departmentId);
+  }, [designations, filters.departmentId]);
+
+  const handleDepartmentFilterChange = (value) => {
+    const departmentId = value === 'all' ? '' : value;
+    setFilters((current) => ({
+      ...current,
+      departmentId,
+      designationId: '',
+    }));
+  };
+
   const totalPages = Math.ceil(filteredForms.length / itemsPerPage);
   const paginatedForms = filteredForms.slice(
     (currentPage - 1) * itemsPerPage,
@@ -143,9 +158,11 @@ const FeedbackFormsPage = () => {
     }
 
     if (filters.interviewType) {
+      const selectedType = filters.interviewType.toUpperCase();
       result = result.filter((form) =>
-        !form.scopes?.interviewTypes?.length
-        || form.scopes.interviewTypes.includes(filters.interviewType)
+        (form.scopes?.interviewTypes || []).some(
+          (interviewType) => String(interviewType).toUpperCase() === selectedType
+        )
       );
     }
 
@@ -288,7 +305,7 @@ const FeedbackFormsPage = () => {
               <Label>Department</Label>
               <Select 
                 value={filters.departmentId || 'all'} 
-                onValueChange={(value) => setFilters({ ...filters, departmentId: value === 'all' ? '' : value })}
+                onValueChange={handleDepartmentFilterChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All departments" />
@@ -309,13 +326,14 @@ const FeedbackFormsPage = () => {
               <Select 
                 value={filters.designationId || 'all'} 
                 onValueChange={(value) => setFilters({ ...filters, designationId: value === 'all' ? '' : value })}
+                disabled={!filters.departmentId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All designations" />
+                  <SelectValue placeholder={filters.departmentId ? 'All designations' : 'Select department first'} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All designations</SelectItem>
-                  {designations.map((desig) => (
+                  {availableDesignations.map((desig) => (
                     <SelectItem key={desig.id} value={desig.id.toString()}>
                       {desig.name}
                     </SelectItem>

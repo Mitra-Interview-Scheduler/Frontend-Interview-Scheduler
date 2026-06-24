@@ -26,6 +26,10 @@ const QUESTION_TYPES = [
   { value: 'dropdown', label: 'Dropdown' },
 ];
 
+const FEEDBACK_QUESTION_LABEL_MAX = 1000;
+const FEEDBACK_QUESTION_PLACEHOLDER_MAX = 255;
+const FEEDBACK_QUESTION_HELP_TEXT_MAX = 500;
+
 const DEFAULT_DROPDOWN_OPTIONS = [
   'N/A',
   '1 - Poor',
@@ -328,6 +332,15 @@ const FeedbackQuestionsPage = () => {
     if (selectedDesignationIds.length === 0) return 'Select at least one designation from the selected department';
     if (!questions.length) return 'Add at least one question';
     if (questions.some((question) => !question.label.trim())) return 'Every question needs a label';
+    if (questions.some((question) => question.label.trim().length > FEEDBACK_QUESTION_LABEL_MAX)) {
+      return `Question labels must be ${FEEDBACK_QUESTION_LABEL_MAX} characters or fewer`;
+    }
+    if (questions.some((question) => question.placeholder.trim().length > FEEDBACK_QUESTION_PLACEHOLDER_MAX)) {
+      return `Placeholders must be ${FEEDBACK_QUESTION_PLACEHOLDER_MAX} characters or fewer`;
+    }
+    if (questions.some((question) => question.helpText.trim().length > FEEDBACK_QUESTION_HELP_TEXT_MAX)) {
+      return `Help text must be ${FEEDBACK_QUESTION_HELP_TEXT_MAX} characters or fewer`;
+    }
     if (questions.some((question) => !question.categoryId)) return 'Every question needs a category';
     if (questions.some((question) => question.type === 'dropdown' && normalizeMultiLine(question.options.join('\n')).length === 0)) {
       return 'Dropdown questions need at least one option';
@@ -596,6 +609,7 @@ const FeedbackQuestionsPage = () => {
                             value={question.label}
                             onChange={(e) => updateQuestion(question.id, { label: e.target.value })}
                             placeholder="e.g. How strong was the candidate's communication?"
+                            maxLength={FEEDBACK_QUESTION_LABEL_MAX}
                           />
                         </div>
 
