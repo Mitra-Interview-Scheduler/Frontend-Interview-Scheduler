@@ -659,7 +659,10 @@ const handleSelectSlot = ({ start, end }) => {
         interviewScheduleId={selectedInterviewScheduleId}
         onOpenChange={(open) => {
           setIsInterviewStartDialogOpen(open);
-          if (!open) setSelectedInterviewScheduleId(null);
+          if (!open) {
+            setSelectedInterviewScheduleId(null);
+            refreshCalendarAvailability();
+          }
         }}
       />
     </Layout>

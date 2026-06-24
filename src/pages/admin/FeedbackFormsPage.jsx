@@ -48,7 +48,6 @@ const FeedbackFormsPage = () => {
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [questionCategories, setQuestionCategories] = useState([]);
-  const [obligatoryQuestionCount, setObligatoryQuestionCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
@@ -110,18 +109,6 @@ const FeedbackFormsPage = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [filteredForms]);
-
-  useEffect(() => {
-    if (activeTab !== 'obligatory') return;
-
-    feedbackQuestionsAPI.getObligatoryQuestions()
-      .then((data) => {
-        setObligatoryQuestionCount(Array.isArray(data) ? data.length : 0);
-      })
-      .catch(() => {
-        setObligatoryQuestionCount(0);
-      });
-  }, [activeTab]);
 
   useEffect(() => {
     let result = [...forms];
@@ -267,16 +254,16 @@ const FeedbackFormsPage = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           tabs={[
-            { value: 'forms', label: 'Forms', icon: FileText, count: forms.length },
-            { value: 'obligatory', label: 'Obligatory Questions', icon: ListChecks, count: obligatoryQuestionCount },
-            { value: 'categories', label: 'Categories', icon: Tags, count: questionCategories.length },
+            { value: 'forms', label: 'Forms', icon: FileText },
+            { value: 'obligatory', label: 'Obligatory Questions', icon: ListChecks },
+            { value: 'categories', label: 'Categories', icon: Tags },
           ]}
         />
 
         {activeTab === 'categories' ? (
           <CategoryManager type="question" onCategoriesChange={setQuestionCategories} />
         ) : activeTab === 'obligatory' ? (
-          <ObligatoryQuestionsManager onQuestionsChange={setObligatoryQuestionCount} />
+          <ObligatoryQuestionsManager />
         ) : (
           <>
         <Card>

@@ -452,16 +452,32 @@ const DesignationsPage = () => {
     ? tiers 
     : tiers.filter(t => t.departmentId === parseInt(selectedDepartment));
 
-  const filteredDesignationCount = selectedDepartment === 'all'
-    ? designations.length
-    : designations.filter((d) => {
-        const tier = tiers.find((t) => t.id === d.tierId);
-        return tier?.departmentId === parseInt(selectedDepartment);
-      }).length;
-
   const availableTiersForForm = designationForm.departmentId
     ? tiers.filter(t => t.departmentId === parseInt(designationForm.departmentId))
     : [];
+
+  const departmentFilterCard = (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-4">
+          <Label className="whitespace-nowrap">Filter by Department:</Label>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => (
+                <SelectItem key={d.id} value={d.id.toString()}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   if (loading) {
     return (
@@ -488,35 +504,13 @@ const DesignationsPage = () => {
           </div>
         </div>
 
-        {/* Filter */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Label className="whitespace-nowrap">Filter by Department:</Label>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map(d => (
-                    <SelectItem key={d.id} value={d.id.toString()}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
         <AdminSectionTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
           tabs={[
-            { value: 'departments', label: 'Departments', icon: Building2, count: departments.length },
-            { value: 'tiers', label: 'Tiers', icon: Layers, count: filteredTiers.length },
-            { value: 'designations', label: 'Designations', icon: Briefcase, count: filteredDesignationCount },
+            { value: 'departments', label: 'Departments', icon: Building2 },
+            { value: 'tiers', label: 'Tiers', icon: Layers },
+            { value: 'designations', label: 'Designations', icon: Briefcase },
           ]}
         />
 
@@ -560,6 +554,8 @@ const DesignationsPage = () => {
           </div>
         ) : activeTab === 'tiers' ? (
           <div className="space-y-4">
+            {departmentFilterCard}
+
             <div className="flex justify-end">
               {canCreateMasterData && (
                 <Button onClick={handleOpenAddTier} disabled={isMutating}>
@@ -629,6 +625,8 @@ const DesignationsPage = () => {
           </div>
         ) : (
           <div className="space-y-4">
+            {departmentFilterCard}
+
             <div className="flex justify-end">
               {canCreateMasterData && (
                 <Button onClick={handleOpenAddDesignation} disabled={isMutating}>

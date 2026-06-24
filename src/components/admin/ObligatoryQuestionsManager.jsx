@@ -19,6 +19,7 @@ import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
+  { value: 'multiline', label: 'Multiline' },
   { value: 'dropdown', label: 'Dropdown' },
 ];
 
@@ -70,7 +71,7 @@ const buildPayload = (question) => ({
   label: question.label.trim(),
   type: question.type,
   required: question.required,
-  commentsEnabled: question.commentsEnabled,
+  commentsEnabled: question.type === 'multiline' ? false : question.commentsEnabled,
   placeholder: question.placeholder?.trim() || '',
   helpText: question.helpText?.trim() || '',
   options: question.type === 'dropdown'
@@ -137,8 +138,11 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
       if (updates.type === 'dropdown' && current.type !== 'dropdown') {
         next.options = [...DEFAULT_DROPDOWN_OPTIONS];
       }
-      if (updates.type === 'text') {
+      if (updates.type === 'text' || updates.type === 'multiline') {
         next.options = [''];
+      }
+      if (updates.type === 'multiline') {
+        next.commentsEnabled = false;
       }
       return next;
     });
@@ -345,13 +349,15 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
                   >
                     Required
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => updateForm({ commentsEnabled: !form.commentsEnabled })}
-                    className={`inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition-colors ${form.commentsEnabled ? 'border-secondary bg-secondary text-secondary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'}`}
-                  >
-                    Comments
-                  </button>
+                  {form.type !== 'multiline' && (
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ commentsEnabled: !form.commentsEnabled })}
+                      className={`inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition-colors ${form.commentsEnabled ? 'border-secondary bg-secondary text-secondary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'}`}
+                    >
+                      Comments
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -9,6 +9,7 @@ import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, M
 import { motion } from 'framer-motion';
 import { candidateAPI } from '@/services/candidateAPI';
 import { availabilityAPI } from '@/services/availabilityAPI';
+import { feedbackAPI } from '@/services/feedbackAPI';
 import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { InterviewScheduleStatus } from '@/lib/statusConstants';
@@ -20,6 +21,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const [loading, setLoading] = useState(true);
   const [candidate, setCandidate] = useState(null);
   const [interviewDetails, setInterviewDetails] = useState(null);
+  const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState(false);
   const [error, setError] = useState('');
   const [isProposeDialogOpen, setIsProposeDialogOpen] = useState(false);
   const displayCandidateName = candidate?.name || interviewDetails?.candidateName || 'Candidate details unavailable';
@@ -29,6 +31,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
       setLoading(true);
       setCandidate(null);
       setInterviewDetails(null);
+      setHasSubmittedFeedback(false);
       setError('');
       return;
     }
@@ -42,7 +45,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     loadInterviewData();
   }, [open, interviewScheduleId]);
 
-  const isCompleted = interviewDetails?.interviewStatus === InterviewScheduleStatus.COMPLETED;
+  const isCompleted = interviewDetails?.interviewStatus === InterviewScheduleStatus.COMPLETED
+    || hasSubmittedFeedback;
 
   const loadInterviewData = async () => {
     try {
@@ -65,6 +69,13 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
       
       setInterviewDetails(interview);
+
+      try {
+        const feedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
+        setHasSubmittedFeedback(!!feedback);
+      } catch {
+        setHasSubmittedFeedback(false);
+      }
 
       // Fetch candidate details
       if (interview?.candidateId) {

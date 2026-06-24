@@ -143,11 +143,35 @@ function InterviewFeedbackPage() {
       const roleId = currentCandidate?.targetDesignationId ?? interview?.targetDesignationId ?? null;
       const interviewType = interview?.interviewType || InterviewType.TECHNICAL;
 
-      // 4. Fetch forms using the extracted IDs and interview type
-      const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId, interviewType);
-      let formList = Array.isArray(formsData) ? formsData : formsData?.forms || [];
-
+      // Load any existing feedback first so panel peers can view the submitted form.
       const existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
+      let formList = [];
+      let initialSelectedFormId = null;
+
+      if (existingFeedback?.feedbackFormId) {
+        try {
+          const savedForm = existingFeedback.form
+            || await feedbackQuestionsAPI.getById(existingFeedback.feedbackFormId);
+          if (savedForm) {
+            formList = [savedForm];
+            initialSelectedFormId = savedForm.id;
+          }
+        } catch (formError) {
+          console.warn('Could not load saved feedback form:', formError);
+        }
+      }
+
+      // Fetch applicable forms and merge with the saved form when present.
+      const formsData = await feedbackQuestionsAPI.getByDepartmentAndRole(deptId, roleId, interviewType);
+      const matchedForms = Array.isArray(formsData) ? formsData : formsData?.forms || [];
+      const mergedForms = [...formList];
+      matchedForms.forEach((form) => {
+        if (!mergedForms.some((existing) => existing.id === form.id)) {
+          mergedForms.push(form);
+        }
+      });
+      formList = mergedForms;
+
       if (existingFeedback?.responses) {
         const isOwnFeedback = !existingFeedback.interviewerId
           || Number(existingFeedback.interviewerId) === Number(user?.id);
@@ -157,21 +181,17 @@ function InterviewFeedbackPage() {
         if (existingFeedback.feedbackFormId) {
           const matchedForm = formList.find((form) => form.id === existingFeedback.feedbackFormId);
           if (matchedForm) {
-            setSelectedFormId(matchedForm.id);
-          } else {
-            try {
-              const savedForm = await feedbackQuestionsAPI.getById(existingFeedback.feedbackFormId);
-              formList = [savedForm, ...formList];
-              setSelectedFormId(savedForm.id);
-            } catch (formError) {
-              console.warn('Could not load saved feedback form:', formError);
-            }
+            initialSelectedFormId = matchedForm.id;
           }
         }
       } else {
         setFeedbackSubmitted(false);
         setPanelPeerFeedback(false);
         setLoadedResponses(null);
+      }
+
+      if (initialSelectedFormId) {
+        setSelectedFormId(initialSelectedFormId);
       }
 
       setForms(formList);
@@ -345,6 +365,22 @@ function InterviewFeedbackPage() {
           </div>
         );
 
+      case 'multiline':
+        return (
+          <div key={question.order} className="space-y-2 mt-4 px-4 ">
+            <Textarea
+              id={`q-${question.order}`}
+              placeholder={question.placeholder}
+              value={value}
+              onChange={(e) => handleFormChange(question.order, e.target.value)}
+              disabled={isFormLocked}
+              rows={4}
+              className={error ? 'border-red-500' : ''}
+            />
+            {error && <p className="text-xs text-red-500">{error}</p>}
+          </div>
+        );
+
       case 'textarea':
         return (
           <div key={question.order} className="space-y-2 mt-4 px-4 ">
@@ -411,7 +447,7 @@ function InterviewFeedbackPage() {
     return (
       <div className="space-y-4 ">
         {mainField}
-        {question.commentsEnabled && (
+        {question.commentsEnabled && question.type !== 'multiline' && (
           <div className=" mt-4 px-4  ">
             <Label htmlFor={`q-${question.order}-comment`} className="text-sm text-gray-700">
               Comments
@@ -694,9 +730,15 @@ function InterviewFeedbackPage() {
                     </div>
                   )}
 
-                  {forms.length === 0 && (
+                  {forms.length === 0 && !panelPeerFeedback && (
                     <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-600">
                       No feedback forms matched this candidate's department, role, or interview type.
+                    </div>
+                  )}
+
+                  {forms.length === 0 && panelPeerFeedback && (
+                    <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 px-4 py-6 text-sm text-amber-800">
+                      Panel feedback was submitted, but the form definition could not be loaded.
                     </div>
                   )}
 

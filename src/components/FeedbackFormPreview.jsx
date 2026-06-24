@@ -109,11 +109,13 @@ const FeedbackFormPreview = ({
                       })}
                     </SelectContent>
                   </Select>
+                ) : question.type === 'multiline' ? (
+                  <Textarea placeholder={question.placeholder || 'Type your response'} rows={4} />
                 ) : (
                   <Input placeholder={question.placeholder || 'Type your response'} />
                 )}
 
-                {question.commentsEnabled && (
+                {question.commentsEnabled && question.type !== 'multiline' && (
                   <div className="mt-3 space-y-2">
                     <Label className="text-sm">Comments</Label>
                     <Textarea placeholder="Add optional comments..." rows={3} />

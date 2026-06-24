@@ -320,8 +320,8 @@ const TechnologiesPage = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           tabs={[
-            { value: 'technologies', label: 'Technologies', icon: Code2, count: technologies.length },
-            { value: 'categories', label: 'Categories', icon: Tags, count: categories.length },
+            { value: 'technologies', label: 'Technologies', icon: Code2 },
+            { value: 'categories', label: 'Categories', icon: Tags },
           ]}
         />
 
