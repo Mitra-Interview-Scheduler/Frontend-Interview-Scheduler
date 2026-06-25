@@ -24,6 +24,7 @@ import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import HRFilters from './HRFilters';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import {
   getCandidateStep,
   getCandidateStatusBadgeClass,
@@ -60,6 +61,7 @@ const buildScheduleItems = (requests, panels) => {
     return true;
   })
     .forEach((panel) => {
+      const firstReq = safeArray(panel.panelRequests)[0];
       items.push({
         id: `panel-${panel.id}`,
         type: 'panel',
@@ -71,6 +73,9 @@ const buildScheduleItems = (requests, panels) => {
         status: InterviewRequestStatus.ACCEPTED,
         isUrgent: panel.isUrgent,
         notes: panel.notes,
+        interviewType: firstReq?.interviewType ?? null,
+        interviewCoordinatorName: panel.interviewCoordinatorName ?? firstReq?.interviewCoordinatorName ?? null,
+        coordinatedHrName: firstReq?.coordinatedHrName ?? null,
         interviewers: safeArray(panel.panelRequests).map((r) => ({
           name: r.assignedInterviewerName || r.assignedInterviewer?.fullName || '—',
           requestId: r.id,
@@ -94,6 +99,9 @@ const buildScheduleItems = (requests, panels) => {
         status: req.status,
         isUrgent: req.isUrgent,
         notes: req.notes,
+        interviewType: req.interviewType ?? null,
+        interviewCoordinatorName: req.interviewCoordinatorName ?? null,
+        coordinatedHrName: req.coordinatedHrName ?? null,
         interviewers: [{ name: req.assignedInterviewerName || '—', requestId: req.id }],
         technologies: safeArray(req.requiredTechnologies),
       });
@@ -883,6 +891,21 @@ const HRDashboard = () => {
                   ? `${cancelTarget.interviewers.length} interviewers: ${cancelTarget.interviewers.map((i) => i.name).join(', ')}`
                   : `with ${cancelTarget.interviewers[0]?.name}`}
               </p>
+              {formatInterviewTypeLabel(cancelTarget.interviewType) && (
+                <p className="text-sm mt-2">
+                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.interviewType)}</strong>
+                </p>
+              )}
+              {cancelTarget.interviewCoordinatorName && (
+                <p className="text-sm">
+                  Interview Coordinator: <strong>{cancelTarget.interviewCoordinatorName}</strong>
+                </p>
+              )}
+              {cancelTarget.coordinatedHrName && (
+                <p className="text-sm">
+                  HR Coordinator: <strong>{cancelTarget.coordinatedHrName}</strong>
+                </p>
+              )}
               {cancelTarget.type === 'panel' && (
                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-xs text-amber-800 flex items-start gap-1">

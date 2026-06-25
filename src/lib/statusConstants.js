@@ -207,4 +207,7 @@ export const isFinalClosingStage = (status) => {
   return statusKey === ClosingStatus.SELECTED || statusKey === ClosingStatus.REJECTED;
 };
 
+/** Candidates closed as Selected/Rejected must not appear in schedule interview pickers. */
+export const isSchedulableCandidate = (status) => !isFinalClosingStage(status);
+
 export const normalizeSlotStatusKey = (status) => String(status || '').trim().toUpperCase();

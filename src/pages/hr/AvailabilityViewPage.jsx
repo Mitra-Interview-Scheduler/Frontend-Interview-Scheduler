@@ -1,4 +1,4 @@
-import { useLocation, useSearchParams } from 'react-router-dom'; 
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
@@ -37,9 +37,9 @@ import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, getDepartmentPalette, BOOKED_TYPE_PALETTES, COMPLETED_EVENT_PALETTE } from './utils/AvailabilityViewPageUiUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
-import { InterviewScheduleStatus, InterviewType, SlotStatus } from '@/lib/statusConstants';
+import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
 
@@ -59,8 +59,21 @@ const resolveInterviewType = (...values) => {
   return match || InterviewType.TECHNICAL;
 };
 
+const EMPTY_REQUEST_FORM = {
+  candidateId: null,
+  candidateName: '',
+  candidateDesignationId: '',
+  requiredTechnologyIds: [],
+  isUrgent: false,
+  notes: '',
+  interviewType: InterviewType.TECHNICAL,
+  interviewCoordinatorId: null,
+  interviewCoordinatorDepartmentId: null,
+};
+
 const AvailabilityViewPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const calendarFormats = useCalendarFormats();
   const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
@@ -107,12 +120,7 @@ const AvailabilityViewPage = () => {
   const [bookStartTime, setBookStartTime] = useState('');
   const [bookEndTime, setBookEndTime] = useState('');
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
-  const [requestForm, setRequestForm] = useState({
-    candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: InterviewType.TECHNICAL,
-    interviewCoordinatorId: null,
-    interviewCoordinatorDepartmentId: null,
-  });
+  const [requestForm, setRequestForm] = useState(EMPTY_REQUEST_FORM);
 
   // Cancel booked dialog
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -299,9 +307,38 @@ const AvailabilityViewPage = () => {
     }));
   };
 
+  const resetRequestFormState = useCallback(() => {
+    setRequestForm({ ...EMPTY_REQUEST_FORM });
+    setCandidateSearchTerm('');
+    setBookStartTime('');
+    setBookEndTime('');
+  }, []);
+
+  const clearCandidateSchedulingContext = useCallback(() => {
+    setInterviewType(InterviewType.TECHNICAL);
+    setDateRange({ start: null, end: null });
+    setFilterDept([]);
+    setSelectedDeptForDesignation('');
+    setSelectedTierInDept('');
+    setMinDesignationLevel('');
+    setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
+    navigate('/hr/availability', { replace: true, state: null });
+  }, [navigate]);
+
+  const finalizeScheduledInterview = useCallback((cameFromCandidate) => {
+    resetRequestFormState();
+    if (cameFromCandidate) {
+      clearCandidateSchedulingContext();
+    }
+  }, [resetRequestFormState, clearCandidateSchedulingContext]);
+
+  const cameFromCandidateFlow = Boolean(
+    searchParams.get('candidateId') || location.state?.filterData?.candidateId,
+  );
+
 
   
-
   useEffect(() => {
     if (pendingFilter && tiersForSelectedDept.length > 0) {
       const { minTierOrder } = pendingFilter;
@@ -450,6 +487,15 @@ const AvailabilityViewPage = () => {
   useEffect(() => {
     if (requestForm.candidateId && candidates.length > 0) {
       const candidate = candidates.find(c => c.id === requestForm.candidateId);
+      if (candidate && !isSchedulableCandidate(candidate.status)) {
+        setRequestForm((prev) => ({
+          ...prev,
+          candidateId: null,
+          candidateName: '',
+          candidateDesignationId: '',
+        }));
+        return;
+      }
       if (candidate && candidate.targetDesignationId) {
         setRequestForm(prev => ({
           ...prev,
@@ -599,6 +645,8 @@ const AvailabilityViewPage = () => {
       candidateName: prev.candidateName,
       candidateDesignationId: prev.candidateDesignationId,
       interviewType: resolveInterviewType(prev.interviewType, interviewType),
+      interviewCoordinatorId: prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
@@ -613,16 +661,23 @@ const AvailabilityViewPage = () => {
 
 
   // ── Candidate helpers ─────────────────────────────────────────────────────
-  const handleSelectCandidate = (c) =>
-    setRequestForm({ ...requestForm, candidateId: c.id, candidateName: c.name, candidateDesignationId: c.targetDesignationId || '' });
+  const handleSelectCandidate = (c) => {
+    setRequestForm({
+      ...requestForm,
+      candidateId: c.id,
+      candidateName: c.name,
+      candidateDesignationId: c.targetDesignationId || '',
+    });
+    setCandidateSearchTerm('');
+  };
 
   const handleClearCandidate = () =>
     setRequestForm({ ...requestForm, candidateId: null, candidateName: '', candidateDesignationId: '' });
 
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     // Privilege gate
     if (singlePrivilegeError) {
@@ -651,6 +706,7 @@ const AvailabilityViewPage = () => {
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
       setSelectedSlot(null);
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -659,8 +715,8 @@ const AvailabilityViewPage = () => {
 
   // ── Submit panel interview ────────────────────────────────────────────────
   const handleSendPanelRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
@@ -699,16 +755,9 @@ const AvailabilityViewPage = () => {
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
       setPanelSlots([]);
-      setRequestForm({
-        candidateId: null,
-        candidateName: '',
-        candidateDesignationId: '',
-        requiredTechnologyIds: [],
-        isUrgent: false,
-        notes: '',
-        interviewCoordinatorId: null,
-        interviewCoordinatorDepartmentId: null,
-      });
+      setPanelBookStartOverride('');
+      setPanelBookEndOverride('');
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -829,7 +878,12 @@ const calendarSlotPropGetter = useCallback((date) => {
       .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
   }, [technologies, selectedTechCategory, techSearchTerm]);
 
-  const filteredCandidates = candidates.filter((c) =>
+  const schedulableCandidates = useMemo(
+    () => candidates.filter((candidate) => isSchedulableCandidate(candidate.status)),
+    [candidates],
+  );
+
+  const filteredCandidates = schedulableCandidates.filter((c) =>
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
@@ -840,19 +894,6 @@ const calendarSlotPropGetter = useCallback((date) => {
   const completedCount = events.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
-
-  const departmentLegend = useMemo(() => {
-    const seen = new Map();
-    events.forEach((event) => {
-      const department = event.resource?.department;
-      if (department && !seen.has(department)) {
-        seen.set(department, getDepartmentPalette(department));
-      }
-    });
-    return Array.from(seen.entries())
-      .map(([name, palette]) => ({ name, palette }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [events]);
 
   // ── Interview type (shared between single + panel dialogs) ───────────────
   const renderInterviewTypeSection = () => (
@@ -1011,11 +1052,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                 }
               </div>
             )}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Or enter manually</Label>
-              <Input placeholder="Candidate name" value={requestForm.candidateName}
-                onChange={(e) => setRequestForm({ ...requestForm, candidateName: e.target.value })} />
-            </div>
+            {!candidateSearchTerm && (
+              <p className="text-xs text-muted-foreground">Search and select an existing candidate from the list.</p>
+            )}
           </>
         )}
       </div>
@@ -1038,12 +1077,6 @@ const calendarSlotPropGetter = useCallback((date) => {
         <Textarea placeholder="Special requirements…" value={requestForm.notes}
           onChange={(e) => setRequestForm({ ...requestForm, notes: e.target.value })} rows={3} />
       </div>
-
-      <div className="flex items-center gap-2">
-        <input type="checkbox" id="urgent" checked={requestForm.isUrgent}
-          onChange={(e) => setRequestForm({ ...requestForm, isUrgent: e.target.checked })} className="rounded" />
-        <Label htmlFor="urgent" className="cursor-pointer text-sm">Mark as urgent</Label>
-      </div>
     </div>
   );
 
@@ -1065,71 +1098,6 @@ const calendarSlotPropGetter = useCallback((date) => {
           </div>
          
         </motion.div>
-
-        {/* Department color legend */}
-        {departmentLegend.length > 0 && (
-          <div className="hr-interviewer-legend">
-            {departmentLegend.map(({ name, palette }) => (
-              <div
-                key={name}
-                className="hr-interviewer-legend-chip"
-                style={{
-                  borderColor: `${palette.solid}60`,
-                  background: `${palette.solid}12`,
-                  color: palette.solid,
-                }}
-              >
-                <div className="hr-interviewer-legend-dot" style={{ backgroundColor: palette.solid }} />
-                {name}
-              </div>
-            ))}
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#3b82f660', background: '#3b82f612', color: '#2563eb' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: BOOKED_TYPE_PALETTES.TECHNICAL.solid, borderRadius: 2 }}
-              />
-              Booked · Technical
-            </div>
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#ec489960', background: '#ec489912', color: '#db2777' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: BOOKED_TYPE_PALETTES.HR.solid, borderRadius: 2 }}
-              />
-              Booked · HR
-            </div>
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#05966960', background: '#05966912', color: '#047857' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: COMPLETED_EVENT_PALETTE.solid, borderRadius: 2 }}
-              />
-              Completed
-            </div>
-          </div>
-        )}
-
-        {/* Slot counts */}
-        {/* <div className="flex items-center gap-6 px-1 flex-wrap">
-          {[
-            { color: '#6366f1', label: 'Available slots', count: availableCount, textColor: 'text-indigo-600' },
-            { color: '#10b981', label: 'Booked slots',    count: bookedCount,    textColor: 'text-emerald-600' },
-            { color: '#0ea5e9', label: 'Panel selected',  count: panelSlots.length, textColor: 'text-sky-600' },
-          ].map(({ color, label, count, textColor }) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-md shadow-sm" style={{ background: color }} />
-              <span className="text-sm font-medium text-muted-foreground">{label}</span>
-              {count > 0 && <span className={`text-xs font-bold ${textColor} px-1.5 py-0.5 rounded-full`}>{count}</span>}
-            </div>
-          ))}
-        </div> */}
 
         {/* Filters */}
         <Card>
@@ -1400,7 +1368,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                     onClick={() => {
                       setPanelBookStartOverride('');
                       setPanelBookEndOverride('');
-                      setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
+                      setRequestForm(prev => ({
+                        candidateId: prev.candidateId,
+                        candidateName: prev.candidateName,
+                        candidateDesignationId: prev.candidateDesignationId,
+                        interviewType: prev.interviewType,
+                        interviewCoordinatorId: prev.interviewCoordinatorId,
+                        interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
+                        requiredTechnologyIds: [],
+                        isUrgent: false,
+                        notes: '',
+                      }));
                       setCandidateSearchTerm('');
                       setPanelDialogOpen(true);
                     }}
@@ -1512,6 +1490,16 @@ const calendarSlotPropGetter = useCallback((date) => {
               {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
                 <p className="text-sm">
                   Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.interviewCoordinatorName && (
+                <p className="text-sm">
+                  Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.coordinatedHrName && (
+                <p className="text-sm">
+                  HR Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

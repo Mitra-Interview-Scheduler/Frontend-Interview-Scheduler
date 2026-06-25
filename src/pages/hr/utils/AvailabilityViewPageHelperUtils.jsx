@@ -84,6 +84,8 @@ export const formatSlots = (data, colorMap) =>
         interviewType: slot.interviewType ?? null,
         interviewScheduleId: slot.interviewScheduleId ?? null,
         interviewStatus: slot.interviewStatus ?? null,
+        interviewCoordinatorName: slot.interviewCoordinatorName ?? null,
+        coordinatedHrName: slot.coordinatedHrName ?? null,
         palette,
         interviewerTierOrder: slot.interviewerTierOrder ?? null,
         interviewerLevelOrder: slot.interviewerLevelOrder ?? null,

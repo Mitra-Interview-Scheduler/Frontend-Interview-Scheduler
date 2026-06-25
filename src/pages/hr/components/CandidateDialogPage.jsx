@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { 
-  Download, FileText, Hash, Link, Loader2, MapPin, Plus,Award, Trash2, TrendingUp, Upload, CalendarClock, Pencil, ExternalLink 
+  Award, Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -21,10 +21,11 @@ import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
+import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
+import { DocumentDropzone } from '@/components/DocumentDropzone';
 import { downloadBlobResponse } from '@/lib/documentUtils';
 
 // Reusable Subcomponents
-import { DocumentDropzone } from './../../../components/DocumentDropzone'; 
 import { ResourceLinkDialog } from './../../../components/ResourceLinkDialog';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
 
@@ -37,7 +38,24 @@ const EMPTY_FORM = {
   coordinatedHrId: '',
 };
 
-function CandidateDialogPage({ 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getCandidateFieldErrors(form) {
+  const errors = {};
+  if (!form.name.trim()) errors.name = 'Name is required';
+  if (!form.email.trim()) errors.email = 'Email is required';
+  else if (!EMAIL_PATTERN.test(form.email.trim())) errors.email = 'Enter a valid email address';
+  if (!form.phone?.trim()) errors.phone = 'Phone is required';
+  if (!form.coordinatedHrId) errors.coordinatedHrId = 'Coordinated HR is required';
+  return errors;
+}
+
+function FieldError({ message }) {
+  if (!message) return null;
+  return <p className="text-xs text-red-600">{message}</p>;
+}
+
+function CandidateDialogPage({
   open, 
   candidate, 
   departments = [],
@@ -53,13 +71,16 @@ function CandidateDialogPage({
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [touched, setTouched] = useState({});
+  const [formInteracted, setFormInteracted] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [tiers, setTiers] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
-  const [documentFile, setDocumentFile] = useState(null);
-  const [documentType, setDocumentType] = useState('CV');
   const [pendingDocuments, setPendingDocuments] = useState([]);
+  const [pendingDocumentDeleteIds, setPendingDocumentDeleteIds] = useState([]);
+  const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
+  const [documentType, setDocumentType] = useState('CV');
   const [hrUsers, setHrUsers] = useState([]);
   const [hrUsersLoading, setHrUsersLoading] = useState(false);
   
@@ -97,6 +118,86 @@ function CandidateDialogPage({
     }
   };
 
+  const buildPayload = () => ({
+    name:                  form.name.trim(),
+    email:                 form.email.trim(),
+    phone:                 form.phone?.trim(),
+    departmentId:          form.departmentId ? parseInt(form.departmentId) : null,
+    targetDesignationId:   form.targetDesignationId ? parseInt(form.targetDesignationId) : null,
+    status:                form.status,
+    yearsOfExperience:     form.yearsOfExperience ? parseInt(form.yearsOfExperience) : null,
+    jdUrl:                 form.jdUrl?.trim() || null,
+    resourceLink:          serializeResourceLinks(),
+    jobReferenceCode:      form.jobReferenceCode?.trim() || null,
+    location:              form.location?.trim() || null,
+    notes:                 form.notes?.trim() || null,
+    resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
+    coordinatedHrId:       parseInt(form.coordinatedHrId),
+  });
+
+  const fieldErrors = useMemo(() => getCandidateFieldErrors(form), [form]);
+  const isFormValid = Object.keys(fieldErrors).length === 0;
+
+  const showFieldError = (field) => {
+    if (readOnly) return '';
+    if (!formInteracted && !touched[field]) return '';
+    return fieldErrors[field] || '';
+  };
+
+  const touchField = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const updateForm = (patch) => {
+    setFormInteracted(true);
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const resetValidationState = () => {
+    setTouched({});
+    setFormInteracted(false);
+    setError('');
+  };
+
+  const handleDeleteResourceLink = (index) => {
+    setResourceLinks((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddPendingDocument = (file, docType) => {
+    setPendingDocuments((prev) => [
+      ...prev,
+      {
+        localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        documentType: docType || 'CV',
+      },
+    ]);
+    setDocumentType('CV');
+    setIsDocumentModalOpen(false);
+  };
+
+  const handleRemovePendingDocument = (localId) => {
+    setPendingDocuments((prev) => prev.filter((doc) => doc.localId !== localId));
+  };
+
+  const handleMarkDocumentForDelete = (documentId) => {
+    setPendingDocumentDeleteIds((prev) => [...prev, documentId]);
+  };
+
+  const handleDownloadDocument = async (document) => {
+    if (!candidate?.id || !document?.id) return;
+    try {
+      const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
+      downloadBlobResponse(response, document);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to download document');
+    }
+  };
+
+  const visibleSavedDocuments = documents.filter(
+    (doc) => !pendingDocumentDeleteIds.includes(doc.id)
+  );
+
   const handleOpenLinkModal = (index) => {
     setLinkIndexToEdit(index);
     setIsLinkModalOpen(true);
@@ -119,10 +220,6 @@ function CandidateDialogPage({
     setLinkIndexToEdit(null);
   };
 
-  const handleDeleteResourceLink = (index) => {
-    setResourceLinks((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
   const loadHrUsers = async () => {
     setHrUsersLoading(true);
     try {
@@ -137,21 +234,6 @@ function CandidateDialogPage({
     }
   };
 
-  const handleAddPendingDocument = (file, docType) => {
-    setPendingDocuments((prev) => [
-      ...prev,
-      {
-        localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        documentType: docType || 'CV',
-      },
-    ]);
-  };
-
-  const handleRemovePendingDocument = (localId) => {
-    setPendingDocuments((prev) => prev.filter((doc) => doc.localId !== localId));
-  };
-
   useEffect(() => {
     if (!open) return;
     loadHrUsers();
@@ -159,18 +241,19 @@ function CandidateDialogPage({
     if (isCreate) {
       setForm(EMPTY_FORM);
       setTiers([]);
-      setError('');
+      setDesigs([]);
       setSaving(false);
+      resetValidationState();
       setDocuments([]);
-      setDocumentFile(null);
-      setDocumentType('CV');
       setPendingDocuments([]);
+      setPendingDocumentDeleteIds([]);
+      setDocumentType('CV');
       setResourceLinks([]);
       return;
     }
 
     if (!candidate) return;
-    
+
     setForm({
       name:                  candidate.name || '',
       email:                 candidate.email || '',
@@ -189,25 +272,31 @@ function CandidateDialogPage({
       resourceRequestNumber: candidate.resourceRequestNumber || '',
       coordinatedHrId:       candidate.coordinatedHrId?.toString() || '',
     });
-    
+
     setTiers([]);
     setDesigs([]);
-    setError('');
     setSaving(false);
-    setDocuments([]);
-    setDocumentFile(null);
-    setDocumentType('CV');
+    resetValidationState();
     setPendingDocuments([]);
+    setPendingDocumentDeleteIds([]);
+    setDocumentType('CV');
     setResourceLinks(parseResourceLinks(candidate.resourceLink));
-    loadDocuments(candidate.id);
 
     if (candidate.departmentId) {
       loadTiersForDept(candidate.departmentId);
     }
     if (candidate.tierId) {
-        loadDesignsForTier(candidate.tierId);
-      }
+      loadDesignsForTier(candidate.tierId);
+    }
   }, [open, candidate, isCreate]);
+
+  useEffect(() => {
+    if (!open || isCreate || !candidate?.id) {
+      if (!open) setDocuments([]);
+      return;
+    }
+    loadDocuments(candidate.id);
+  }, [open, isCreate, candidate?.id]);
 
   const loadTiersForDept = async (deptId) => {
     if (!deptId) { setTiers([]); return; }
@@ -246,62 +335,6 @@ function CandidateDialogPage({
     }
   };
 
-  const handleUploadDocument = async () => {
-    if (!candidate?.id || !documentFile) return;
-    setSaving(true);
-    setError('');
-    try {
-      await candidateAPI.uploadCandidateDocument(candidate.id, documentFile, documentType || 'OTHER');
-      setDocumentFile(null);
-      await loadDocuments(candidate.id);
-      toast({ title: 'Success', description: 'Document uploaded successfully' });
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to upload document');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReplaceDocument = async (document, file) => {
-    if (!candidate?.id || !document?.id || !file) return;
-    setSaving(true);
-    setError('');
-    try {
-      await candidateAPI.replaceCandidateDocument(candidate.id, document.id, file, document.documentType || 'OTHER');
-      await loadDocuments(candidate.id);
-      toast({ title: 'Success', description: 'Document updated successfully' });
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to update document');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDownloadDocument = async (document) => {
-    if (!candidate?.id || !document?.id) return;
-    try {
-      const response = await candidateAPI.downloadCandidateDocument(candidate.id, document.id);
-      downloadBlobResponse(response, document);
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to download document');
-    }
-  };
-
-  const handleDeleteDocument = async (documentId) => {
-    if (!candidate?.id || !documentId) return;
-    setSaving(true);
-    setError('');
-    try {
-      await candidateAPI.deleteCandidateDocument(candidate.id, documentId);
-      await loadDocuments(candidate.id);
-      toast({ title: 'Success', description: 'Document deleted successfully' });
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to delete document');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleDeptChange = async (val) => {
     setForm((f) => ({ ...f, departmentId: val, tierId: '', targetDesignationId: '' }));
     setDesigs([]);
@@ -314,37 +347,24 @@ function CandidateDialogPage({
     await loadDesignsForTier(val);
   };
   const handleSave = async () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      setError('Name and email are required');
-      return;
-    }
+    setFormInteracted(true);
+    setTouched({
+      name: true,
+      email: true,
+      phone: true,
+      coordinatedHrId: true,
+    });
 
-    if (!form.coordinatedHrId) {
-      setError('Coordinated HR is required');
-      return;
-    }
+    if (!isFormValid) return;
 
-    const payload = {
-      name:                  form.name.trim(),
-      email:                 form.email.trim(),
-      phone:                 form.phone?.trim(),
-      departmentId:          form.departmentId ? parseInt(form.departmentId) : null,
-      targetDesignationId:   form.targetDesignationId ? parseInt(form.targetDesignationId) : null,
-      status:                form.status,
-      yearsOfExperience:     form.yearsOfExperience ? parseInt(form.yearsOfExperience) : null,
-      jdUrl:                 form.jdUrl?.trim() || null,
-      resourceLink:          serializeResourceLinks(),
-      jobReferenceCode:      form.jobReferenceCode?.trim() || null,
-      location:              form.location?.trim() || null,
-      notes:                 form.notes?.trim() || null,
-      resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
-      coordinatedHrId:       parseInt(form.coordinatedHrId),
-    };
+    const payload = buildPayload();
 
     setSaving(true);
     setError('');
 
     try {
+      let savedCandidateId;
+
       if (isCreate) {
         const createdCandidate = await candidateAPI.createCandidate(payload);
         try {
@@ -352,21 +372,35 @@ function CandidateDialogPage({
         } catch (pipelineError) {
           console.error('Failed to initialize candidate pipeline:', pipelineError);
         }
-        if (pendingDocuments.length > 0) {
-          await Promise.all(
-            pendingDocuments.map((doc) =>
-              candidateAPI.uploadCandidateDocument(createdCandidate.id, doc.file, doc.documentType)
-            )
-          );
-        }
+        savedCandidateId = createdCandidate.id;
         toast({ title: 'Success', description: 'Candidate added successfully' });
       } else {
         await candidateAPI.updateCandidate(candidate.id, payload);
-        if (documentFile) {
-          await candidateAPI.uploadCandidateDocument(candidate.id, documentFile, documentType || 'OTHER');
-        }
+        savedCandidateId = candidate.id;
         toast({ title: 'Success', description: 'Candidate updated successfully' });
       }
+
+      for (const documentId of pendingDocumentDeleteIds) {
+        await candidateAPI.deleteCandidateDocument(savedCandidateId, documentId);
+      }
+
+      if (pendingDocuments.length > 0) {
+        const uploadResults = await Promise.allSettled(
+          pendingDocuments.map((doc) =>
+            candidateAPI.uploadCandidateDocument(savedCandidateId, doc.file, doc.documentType)
+          )
+        );
+        const failedUploads = uploadResults.filter((result) => result.status === 'rejected');
+        if (failedUploads.length > 0) {
+          const reason = failedUploads[0].reason?.response?.data?.message
+            || failedUploads[0].reason?.message
+            || 'Document upload failed';
+          throw new Error(
+            `Candidate saved, but ${failedUploads.length} document(s) failed to upload: ${reason}`
+          );
+        }
+      }
+
       onOpenChange(false);
       onSaveSuccess?.();
     } catch (err) {
@@ -378,12 +412,12 @@ function CandidateDialogPage({
 
   const handleClose = () => {
     onOpenChange(false);
-    setError('');
+    resetValidationState();
     setSaving(false);
     setDocuments([]);
-    setDocumentFile(null);
-    setDocumentType('CV');
     setPendingDocuments([]);
+    setPendingDocumentDeleteIds([]);
+    setDocumentType('CV');
     setResourceLinks([]);
     setForm(EMPTY_FORM);
   };
@@ -397,7 +431,7 @@ function CandidateDialogPage({
           </DialogTitle>
           <DialogDescription>
             {isCreate
-              ? 'Fill in candidate details and attach documents before saving.'
+              ? 'Fill in candidate details. Documents and resource links are saved when you click Add Candidate.'
               : readOnly
                 ? 'Review candidate profile, documents, and next actions.'
                 : 'Update candidate information, hierarchy mapping, and documents.'}
@@ -416,10 +450,14 @@ function CandidateDialogPage({
               <Label>Name *</Label>
               <Input 
                 value={form.name} 
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => updateForm({ name: e.target.value })}
+                onBlur={() => touchField('name')}
                 placeholder="Full name" 
-                disabled={saving || readOnly} 
+                disabled={saving || readOnly}
+                aria-invalid={!!showFieldError('name')}
+                className={showFieldError('name') ? 'border-red-500 focus-visible:ring-red-500' : ''}
               />
+              <FieldError message={showFieldError('name')} />
             </div>
 
             {/* Email */}
@@ -428,10 +466,14 @@ function CandidateDialogPage({
               <Input 
                 type="email" 
                 value={form.email} 
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => updateForm({ email: e.target.value })}
+                onBlur={() => touchField('email')}
                 placeholder="email@example.com" 
-                disabled={saving || readOnly} 
+                disabled={saving || readOnly}
+                aria-invalid={!!showFieldError('email')}
+                className={showFieldError('email') ? 'border-red-500 focus-visible:ring-red-500' : ''}
               />
+              <FieldError message={showFieldError('email')} />
             </div>
 
             {/* Phone */}
@@ -439,10 +481,14 @@ function CandidateDialogPage({
               <Label>Phone *</Label>
               <Input 
                 value={form.phone} 
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onChange={(e) => updateForm({ phone: e.target.value })}
+                onBlur={() => touchField('phone')}
                 placeholder="+1234567890" 
-                disabled={saving || readOnly} 
+                disabled={saving || readOnly}
+                aria-invalid={!!showFieldError('phone')}
+                className={showFieldError('phone') ? 'border-red-500 focus-visible:ring-red-500' : ''}
               />
+              <FieldError message={showFieldError('phone')} />
             </div>
 
             {/* Years of experience */}
@@ -507,23 +553,32 @@ function CandidateDialogPage({
                   className="bg-gray-50"
                 />
               ) : (
-                <Select
-                  value={form.coordinatedHrId || 'NONE'}
-                  onValueChange={(v) => setForm({ ...form, coordinatedHrId: v === 'NONE' ? '' : v })}
-                  disabled={saving || hrUsersLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={hrUsersLoading ? 'Loading HR users...' : 'Select coordinated HR'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">Select HR user</SelectItem>
-                    {hrUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.fullName} ({user.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={form.coordinatedHrId || 'NONE'}
+                    onValueChange={(v) => {
+                      touchField('coordinatedHrId');
+                      updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
+                    }}
+                    disabled={saving || hrUsersLoading}
+                  >
+                    <SelectTrigger
+                      aria-invalid={!!showFieldError('coordinatedHrId')}
+                      className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
+                    >
+                      <SelectValue placeholder={hrUsersLoading ? 'Loading HR users...' : 'Select coordinated HR'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Select HR user</SelectItem>
+                      {hrUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.fullName} ({user.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError message={showFieldError('coordinatedHrId')} />
+                </>
               )}
             </div>
 
@@ -598,23 +653,31 @@ function CandidateDialogPage({
             <Label className="flex items-center gap-1">
               <Award className="w-3.5 h-3.5" /> Target Designation
             </Label>
-            <Select 
-              value={form.targetDesignationId || 'NONE'}
-              onValueChange={(v) => setForm({ ...form, targetDesignationId: v === 'NONE' ? '' : v })}
-              disabled={saving || !form.tierId}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={form.tierId ? 'Select designation' : 'Select tier first'} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NONE">None</SelectItem>
-                {desigs.map((d) => (
-                  <SelectItem key={d.id} value={d.id.toString()}>
-                    Level {d.levelOrder} – {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {readOnly ? (
+              <Input
+                value={candidate?.targetDesignationName || '-'}
+                disabled
+                className="bg-gray-50"
+              />
+            ) : (
+              <Select
+                value={form.targetDesignationId || 'NONE'}
+                onValueChange={(v) => setForm({ ...form, targetDesignationId: v === 'NONE' ? '' : v })}
+                disabled={saving || !form.tierId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={form.tierId ? 'Select designation' : 'Select tier first'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">None</SelectItem>
+                  {desigs.map((d) => (
+                    <SelectItem key={d.id} value={d.id.toString()}>
+                      Level {d.levelOrder} – {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
             {/* Job Description */}
@@ -713,128 +776,111 @@ function CandidateDialogPage({
             </div>
             
             {/* Documents Section */}
-            <div className="space-y-2 md:col-span-2">
-              <Label className="flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" /> Documents
-              </Label>
+            {readOnly ? (
+              <div className="md:col-span-2">
+                <CandidateDocumentsPanel
+                  candidateId={candidate?.id}
+                  documents={documents}
+                  documentsLoading={documentsLoading}
+                  onDocumentsRefresh={() => loadDocuments(candidate?.id)}
+                  readOnly
+                  variant="embedded"
+                />
+              </div>
+            ) : (
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" /> Documents
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setIsDocumentModalOpen(true)}
+                  disabled={saving}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Document
+                </Button>
+              </div>
 
-              <div className="border border-slate-200 bg-slate-50/60 rounded-lg p-3">
-                {isCreate ? (
-                  <>
-                    {pendingDocuments.length > 0 ? (
-                      <div className="space-y-1 mb-3">
-                        {pendingDocuments.map((doc) => (
-                          <div key={doc.localId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border px-3 py-2 bg-white">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{doc.file.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {doc.documentType} - {(doc.file.size / 1024).toFixed(1)} KB (pending upload)
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                              onClick={() => handleRemovePendingDocument(doc.localId)}
-                              disabled={saving}
-                              title="Remove"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Attach one or more documents before saving the candidate.
-                      </p>
-                    )}
-                  </>
-                ) : documents.length === 0 && !documentsLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    {readOnly ? 'No documents stored for this candidate.' : ''}
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {documents.map((document) => (
-                      <div key={document.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border px-3 py-2 bg-white">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{document.fileName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {document.documentType} - {(document.fileSize / 1024).toFixed(1)} KB
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleDownloadDocument(document)}
-                            disabled={saving}
-                            title="Download"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </Button>
-                          {!readOnly && (
-                            <>
-                              <Input
-                                id={`replace-document-${document.id}`}
-                                type="file"
-                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleReplaceDocument(document, file);
-                                  e.target.value = '';
-                                }}
-                                disabled={saving}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => window.document.getElementById(`replace-document-${document.id}`)?.click()}
-                                disabled={saving}
-                                title="Replace"
-                              >
-                                <Upload className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                                onClick={() => handleDeleteDocument(document.id)}
-                                disabled={saving}
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                {documentsLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
+                )}
+                {!documentsLoading
+                  && visibleSavedDocuments.length === 0
+                  && pendingDocuments.length === 0 && (
+                  <p className="text-xs text-muted-foreground p-1">No documents attached yet.</p>
+                )}
+                {visibleSavedDocuments.map((document) => (
+                  <div
+                    key={document.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <Badge variant="outline" className="w-28 justify-center rounded-full text-[11px] font-medium shrink-0 truncate">
+                        {document.documentType || 'Document'}
+                      </Badge>
+                      <p className="text-xs font-medium text-gray-900 truncate">{document.fileName}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!isCreate && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => handleDownloadDocument(document)}
+                          disabled={saving}
+                          title="Download"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleMarkDocumentForDelete(document.id)}
+                        disabled={saving}
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                )}
-
-                {!readOnly && (
-                  <DocumentDropzone 
-                    file={documentFile}
-                    onFileSelect={setDocumentFile}
-                    onAddDocument={handleAddPendingDocument}
-                    type={documentType}
-                    onTypeChange={setDocumentType}
-                    disabled={saving}
-                    isCreate={isCreate}
-                    onImmediateUpload={handleUploadDocument}
-                  />
-                )}
+                ))}
+                {pendingDocuments.map((doc) => (
+                  <div
+                    key={doc.localId}
+                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <Badge variant="outline" className="w-28 justify-center rounded-full text-[11px] font-medium shrink-0 truncate">
+                        {doc.documentType}
+                      </Badge>
+                      <p className="text-xs font-medium text-gray-900 truncate">{doc.file.name}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleRemovePendingDocument(doc.localId)}
+                      disabled={saving}
+                      title="Remove"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
+            )}
 
             {/* Notes */}
             <div className="md:col-span-2 pt-1">
@@ -851,7 +897,7 @@ function CandidateDialogPage({
               />
             </div>
 
-            {/* Errors */}
+            {/* Errors — API / server errors only */}
             <AnimatePresence>
               {error && (
                 <motion.p
@@ -895,7 +941,11 @@ function CandidateDialogPage({
               <Button variant="outline" onClick={handleClose} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saving} className="min-w-[110px]">
+              <Button
+                onClick={handleSave}
+                disabled={saving || !isFormValid}
+                className="min-w-[110px]"
+              >
                 {saving ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
@@ -918,6 +968,24 @@ function CandidateDialogPage({
         saving={saving}
         onSave={handleSaveResourceLink}
       />
+
+      <Dialog open={isDocumentModalOpen} onOpenChange={(open) => !saving && setIsDocumentModalOpen(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Document</DialogTitle>
+            <DialogDescription>
+              Select a file and category. It will be uploaded when you save the candidate.
+            </DialogDescription>
+          </DialogHeader>
+          <DocumentDropzone
+            type={documentType}
+            onTypeChange={setDocumentType}
+            onAddDocument={handleAddPendingDocument}
+            disabled={saving}
+            isCreate
+          />
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -16,6 +16,14 @@ api.interceptors.request.use(
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       'UTC';
     config.headers['X-Timezone'] = selectedTimeZone;
+    // Let the browser set multipart boundary; axios must not send application/json.
+    if (config.data instanceof FormData) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else {
+        delete config.headers['Content-Type'];
+      }
+    }
     return config;
   },
   (error) => Promise.reject(error)
