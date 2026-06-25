@@ -21,6 +21,12 @@ import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
 import CompleteInterviewDialog from '@/components/CompleteInterviewDialog';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
+import {
+  getQuestionCommentKey,
+  getQuestionResponseKey,
+  readCommentValue,
+  readResponseValue,
+} from '@/lib/feedbackResponseKeys';
 import { useAuth } from '@/context/AuthContext';
 
 function InterviewFeedbackPage() {
@@ -64,10 +70,17 @@ function InterviewFeedbackPage() {
     [forms, selectedFormId]
   );
 
-  const completedCount = useMemo(
-    () => Object.values(formResponses).filter((value) => value && value.toString().trim() !== '').length,
-    [formResponses]
+  const requiredQuestions = useMemo(
+    () => [...questions, ...obligatoryQuestions].filter((question) => question.required),
+    [questions, obligatoryQuestions],
   );
+
+  const completedCount = useMemo(() => (
+    requiredQuestions.filter((question) => {
+      const value = formResponses[getQuestionResponseKey(question)];
+      return value != null && value.toString().trim() !== '';
+    }).length
+  ), [formResponses, requiredQuestions]);
 
   // Initialize on mount
   useEffect(() => {
@@ -104,11 +117,11 @@ function InterviewFeedbackPage() {
     const initialResponses = {};
     const allQuestions = [...selectedQuestions, ...(selectedForm.obligatoryQuestions || [])];
     allQuestions.forEach((question) => {
-      const savedValue = loadedResponses?.[question.order];
-      initialResponses[question.order] = savedValue != null ? String(savedValue) : '';
+      const responseKey = getQuestionResponseKey(question);
+      const commentKey = getQuestionCommentKey(question);
+      initialResponses[responseKey] = readResponseValue(loadedResponses, question);
       if (question.commentsEnabled) {
-        const savedComment = loadedResponses?.[`${question.order}_comment`];
-        initialResponses[`${question.order}_comment`] = savedComment != null ? String(savedComment) : '';
+        initialResponses[commentKey] = readCommentValue(loadedResponses, question);
       }
     });
 
@@ -218,15 +231,15 @@ function InterviewFeedbackPage() {
     }
   };
 
-  const handleFormChange = (questionOrder, value) => {
+  const handleFormChange = (responseKey, value) => {
     setFormResponses((prev) => ({
       ...prev,
-      [questionOrder]: value,
+      [responseKey]: value,
     }));
-    if (validationErrors[questionOrder]) {
+    if (validationErrors[responseKey]) {
       setValidationErrors((prev) => {
         const newErrors = { ...prev };
-        delete newErrors[questionOrder];
+        delete newErrors[responseKey];
         return newErrors;
       });
     }
@@ -234,15 +247,10 @@ function InterviewFeedbackPage() {
 
   const validateForm = () => {
     const errors = {};
-    questions.forEach((q) => {
-      if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
-        errors[q.order] = `${q.label} is required`;
-      }
-    });
-    
-    obligatoryQuestions.forEach((q) => {
-      if (q.required && (!formResponses[q.order] || formResponses[q.order].toString().trim() === '')) {
-        errors[q.order] = `${q.label} is required`;
+    [...questions, ...obligatoryQuestions].forEach((q) => {
+      const responseKey = getQuestionResponseKey(q);
+      if (q.required && (!formResponses[responseKey] || formResponses[responseKey].toString().trim() === '')) {
+        errors[responseKey] = `${q.label} is required`;
       }
     });
     setValidationErrors(errors);
@@ -343,21 +351,23 @@ function InterviewFeedbackPage() {
   };
 
   const renderFormField = (question) => {
-    const value = formResponses[question.order] || '';
-    const commentValue = formResponses[`${question.order}_comment`] || '';
-    const error = validationErrors[question.order];
+    const responseKey = getQuestionResponseKey(question);
+    const commentKey = getQuestionCommentKey(question);
+    const value = formResponses[responseKey] || '';
+    const commentValue = formResponses[commentKey] || '';
+    const error = validationErrors[responseKey];
 
     const mainField = (() => {
     switch (question.type) {
       case 'text':
         return (
-          <div key={question.order} className="space-y-2 mt-4 px-4 ">
+          <div key={question.id ?? question.order} className="space-y-2 mt-4 px-4 ">
             <Input
               id={`q-${question.order}`}
               type="text"
               placeholder={question.placeholder}
               value={value}
-              onChange={(e) => handleFormChange(question.order, e.target.value)}
+              onChange={(e) => handleFormChange(responseKey, e.target.value)}
               disabled={isFormLocked}
               className={error ? 'border-red-500' : ''}
             /> 
@@ -367,12 +377,12 @@ function InterviewFeedbackPage() {
 
       case 'multiline':
         return (
-          <div key={question.order} className="space-y-2 mt-4 px-4 ">
+          <div key={question.id ?? question.order} className="space-y-2 mt-4 px-4 ">
             <Textarea
               id={`q-${question.order}`}
               placeholder={question.placeholder}
               value={value}
-              onChange={(e) => handleFormChange(question.order, e.target.value)}
+              onChange={(e) => handleFormChange(responseKey, e.target.value)}
               disabled={isFormLocked}
               rows={4}
               className={error ? 'border-red-500' : ''}
@@ -383,12 +393,12 @@ function InterviewFeedbackPage() {
 
       case 'textarea':
         return (
-          <div key={question.order} className="space-y-2 mt-4 px-4 ">
+          <div key={question.id ?? question.order} className="space-y-2 mt-4 px-4 ">
             <Textarea
               id={`q-${question.order}`}
               placeholder={question.placeholder}
               value={value}
-              onChange={(e) => handleFormChange(question.order, e.target.value)}
+              onChange={(e) => handleFormChange(responseKey, e.target.value)}
               disabled={isFormLocked}
               rows={4}
               className={error ? 'border-red-500' : ''}
@@ -400,8 +410,8 @@ function InterviewFeedbackPage() {
       case 'dropdown':
       case 'select':
         return (
-          <div key={question.order} className="space-y-2 mt-4 px-4 ">
-            <Select value={value} onValueChange={(v) => handleFormChange(question.order, v)} disabled={isFormLocked}>
+          <div key={question.id ?? question.order} className="space-y-2 mt-4 px-4 ">
+            <Select value={value} onValueChange={(v) => handleFormChange(responseKey, v)} disabled={isFormLocked}>
               <SelectTrigger className={error ? 'border-red-500' : ''}>
                 <SelectValue placeholder={question.placeholder || 'Select an option'} />
               </SelectTrigger>
@@ -419,7 +429,7 @@ function InterviewFeedbackPage() {
 
       case 'rating':
         return (
-          <div key={question.order} className="space-y-3 mt-4 px-4 ">
+          <div key={question.id ?? question.order} className="space-y-3 mt-4 px-4 ">
             <div className="flex gap-2">
               {question.options?.map((opt) => (
                 <Button
@@ -427,7 +437,7 @@ function InterviewFeedbackPage() {
                   type="button"
                   variant={value === opt.value.toString() ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => handleFormChange(question.order, opt.value.toString())}
+                  onClick={() => handleFormChange(responseKey, opt.value.toString())}
                   disabled={isFormLocked}
                   className={error ? 'border-red-500' : ''}
                 >
@@ -456,7 +466,7 @@ function InterviewFeedbackPage() {
               id={`q-${question.order}-comment`}
               placeholder="Add any additional comments about this response..."
               value={commentValue}
-              onChange={(e) => handleFormChange(`${question.order}_comment`, e.target.value)}
+              onChange={(e) => handleFormChange(commentKey, e.target.value)}
               disabled={isFormLocked}
               rows={3}
               className="mt-2 text-sm"
@@ -674,15 +684,15 @@ function InterviewFeedbackPage() {
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-600">Progress</span>
                     <span className="font-semibold text-blue-600">
-                      {completedCount} / {questions.length + obligatoryQuestions.length} completed
+                      {completedCount} / {requiredQuestions.length} completed
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{
-                        width: (questions.length + obligatoryQuestions.length) > 0 
-                          ? `${(completedCount / (questions.length + obligatoryQuestions.length)) * 100}%`
+                        width: requiredQuestions.length > 0
+                          ? `${(completedCount / requiredQuestions.length) * 100}%`
                           : '0%'
                       }}
                     />
@@ -746,7 +756,7 @@ function InterviewFeedbackPage() {
                   <div className="space-y-4 p-4">
                     {questions.map((question, index) => (
                       <motion.div
-                        key={question.order}
+                        key={question.id ?? question.order}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
@@ -782,7 +792,7 @@ function InterviewFeedbackPage() {
                     <p className="text-sm text-gray-600 uppercase font-semibold mb-3">Obligatory Questions</p>
                     {obligatoryQuestions.map((question, index) => (
                       <motion.div
-                        key={question.order}
+                        key={question.id ?? question.order}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
@@ -844,7 +854,7 @@ function InterviewFeedbackPage() {
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || completing || !selectedForm || questions.length === 0}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[44px]"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[48px] text-base font-semibold"
                   >
                     {submitting ? (
                       <>
@@ -863,7 +873,7 @@ function InterviewFeedbackPage() {
                   <Button
                     onClick={() => setCompleteDialogOpen(true)}
                     disabled={submitting || completing}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-h-[44px]"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-h-[48px] text-base font-semibold"
                   >
                     Complete Interview
                   </Button>

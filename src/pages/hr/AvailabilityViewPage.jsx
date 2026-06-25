@@ -1499,7 +1499,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               )}
               {cancelTarget.resource.coordinatedHrName && (
                 <p className="text-sm">
-                  HR Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
+                  Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

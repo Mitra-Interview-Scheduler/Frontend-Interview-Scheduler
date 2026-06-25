@@ -903,7 +903,7 @@ const HRDashboard = () => {
               )}
               {cancelTarget.coordinatedHrName && (
                 <p className="text-sm">
-                  HR Coordinator: <strong>{cancelTarget.coordinatedHrName}</strong>
+                  Candidate Coordinator: <strong>{cancelTarget.coordinatedHrName}</strong>
                 </p>
               )}
               {cancelTarget.type === 'panel' && (

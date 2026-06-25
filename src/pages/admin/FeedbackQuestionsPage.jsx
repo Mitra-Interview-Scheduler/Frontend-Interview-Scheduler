@@ -19,6 +19,7 @@ import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
+import { isObligatoryFormQuestion } from '@/lib/feedbackResponseKeys';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
@@ -130,7 +131,9 @@ const FeedbackQuestionsPage = () => {
               setSelectedDepartmentId(String((form.scopes?.departmentIds || [])[0] || ''));
               setSelectedDesignationIds((form.scopes?.designationIds || []).map(String));
               setSelectedInterviewType((form.scopes?.interviewTypes || [])[0] || '');
-              const questionsData = (form.questions || []).map((q) => ({
+              const questionsData = (form.questions || [])
+                .filter((q) => !isObligatoryFormQuestion(q))
+                .map((q) => ({
                 id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
                 label: q.label || '',
                 categoryId: String(q.categoryId || defaultCategoryId || ''),
@@ -537,6 +540,7 @@ const FeedbackQuestionsPage = () => {
                     </div>
                   )}
 
+                  {/* 
                   {(selectedDepartmentId || selectedDesignationIds.length > 0 || selectedInterviewType) && (
                     <div className="rounded-lg border bg-primary/5 p-3">
                       <p className="text-xs font-medium text-foreground mb-2">Selected Scope:</p>
@@ -560,6 +564,7 @@ const FeedbackQuestionsPage = () => {
                       </div>
                     </div>
                   )}
+                  */}
                 </div>
               </CardContent>
             </CollapsibleContent>

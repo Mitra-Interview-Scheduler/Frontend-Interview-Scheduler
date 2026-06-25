@@ -35,6 +35,7 @@ const EMPTY_FORM = {
   yearsOfExperience: '',
   resumeUrl: '', jdUrl: '', resourceLink: '', jobReferenceCode: '', location: '',
   notes: '', status: 'NEW', resourceRequestNumber: '',
+  coordinatorDepartmentId: '',
   coordinatedHrId: '',
 };
 
@@ -46,7 +47,8 @@ function getCandidateFieldErrors(form) {
   if (!form.email.trim()) errors.email = 'Email is required';
   else if (!EMAIL_PATTERN.test(form.email.trim())) errors.email = 'Enter a valid email address';
   if (!form.phone?.trim()) errors.phone = 'Phone is required';
-  if (!form.coordinatedHrId) errors.coordinatedHrId = 'Coordinated HR is required';
+  if (!form.coordinatedHrId) errors.coordinatedHrId = 'Candidate coordinator is required';
+  if (!form.coordinatorDepartmentId) errors.coordinatorDepartmentId = 'Coordinator department is required';
   return errors;
 }
 
@@ -81,8 +83,8 @@ function CandidateDialogPage({
   const [pendingDocumentDeleteIds, setPendingDocumentDeleteIds] = useState([]);
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [documentType, setDocumentType] = useState('CV');
-  const [hrUsers, setHrUsers] = useState([]);
-  const [hrUsersLoading, setHrUsersLoading] = useState(false);
+  const [coordinatorUsers, setCoordinatorUsers] = useState([]);
+  const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
   
   // Resource Link States
   const [resourceLinks, setResourceLinks] = useState([]);
@@ -220,26 +222,37 @@ function CandidateDialogPage({
     setLinkIndexToEdit(null);
   };
 
-  const loadHrUsers = async () => {
-    setHrUsersLoading(true);
-    try {
-      const data = await departmentUsersAPI.getUsers({ role: 'HR' });
-      setHrUsers(data || []);
-    } catch (e) {
-      console.error('Failed to load HR users:', e);
-      setHrUsers([]);
-      setError((prev) => prev || 'Could not load HR users for Coordinated HR selection. Restart the backend if you recently updated.');
-    } finally {
-      setHrUsersLoading(false);
+  const loadCoordinatorUsers = async (departmentId) => {
+    if (!departmentId) {
+      setCoordinatorUsers([]);
+      return;
     }
+    setCoordinatorUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsersByDepartment(parseInt(departmentId, 10));
+      setCoordinatorUsers(data || []);
+    } catch (e) {
+      console.error('Failed to load coordinator users:', e);
+      setCoordinatorUsers([]);
+      setError((prev) => prev || 'Could not load users for the selected coordinator department.');
+    } finally {
+      setCoordinatorUsersLoading(false);
+    }
+  };
+
+  const handleCoordinatorDepartmentChange = (value) => {
+    const deptId = value === 'NONE' ? '' : value;
+    touchField('coordinatorDepartmentId');
+    updateForm({ coordinatorDepartmentId: deptId, coordinatedHrId: '' });
+    loadCoordinatorUsers(deptId);
   };
 
   useEffect(() => {
     if (!open) return;
-    loadHrUsers();
 
     if (isCreate) {
       setForm(EMPTY_FORM);
+      setCoordinatorUsers([]);
       setTiers([]);
       setDesigs([]);
       setSaving(false);
@@ -270,8 +283,15 @@ function CandidateDialogPage({
       notes:                 candidate.notes || '',
       status:                candidate.status || 'NEW',
       resourceRequestNumber: candidate.resourceRequestNumber || '',
+      coordinatorDepartmentId: candidate.coordinatedHrDepartmentId?.toString() || '',
       coordinatedHrId:       candidate.coordinatedHrId?.toString() || '',
     });
+
+    if (candidate.coordinatedHrDepartmentId) {
+      loadCoordinatorUsers(candidate.coordinatedHrDepartmentId);
+    } else {
+      setCoordinatorUsers([]);
+    }
 
     setTiers([]);
     setDesigs([]);
@@ -353,6 +373,7 @@ function CandidateDialogPage({
       email: true,
       phone: true,
       coordinatedHrId: true,
+      coordinatorDepartmentId: true,
     });
 
     if (!isFormValid) return;
@@ -543,9 +564,9 @@ function CandidateDialogPage({
               />
             </div>
 
-            {/* Coordinated HR */}
-            <div className="space-y-2">
-              <Label>Coordinated HR *</Label>
+            {/* Candidate Coordinator */}
+            <div className="space-y-2 md:col-span-2">
+              <Label>Candidate Coordinator *</Label>
               {readOnly ? (
                 <Input
                   value={candidate?.coordinatedHrName || '-'}
@@ -553,32 +574,68 @@ function CandidateDialogPage({
                   className="bg-gray-50"
                 />
               ) : (
-                <>
-                  <Select
-                    value={form.coordinatedHrId || 'NONE'}
-                    onValueChange={(v) => {
-                      touchField('coordinatedHrId');
-                      updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
-                    }}
-                    disabled={saving || hrUsersLoading}
-                  >
-                    <SelectTrigger
-                      aria-invalid={!!showFieldError('coordinatedHrId')}
-                      className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Coordinator Department</Label>
+                    <Select
+                      value={form.coordinatorDepartmentId || 'NONE'}
+                      onValueChange={handleCoordinatorDepartmentChange}
+                      disabled={saving}
                     >
-                      <SelectValue placeholder={hrUsersLoading ? 'Loading HR users...' : 'Select coordinated HR'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NONE">Select HR user</SelectItem>
-                      {hrUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.fullName} ({user.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldError message={showFieldError('coordinatedHrId')} />
-                </>
+                      <SelectTrigger
+                        aria-invalid={!!showFieldError('coordinatorDepartmentId')}
+                        className={showFieldError('coordinatorDepartmentId') ? 'border-red-500 focus:ring-red-500' : ''}
+                      >
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">Select department</SelectItem>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id.toString()}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError message={showFieldError('coordinatorDepartmentId')} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Coordinator</Label>
+                    <Select
+                      value={form.coordinatedHrId || 'NONE'}
+                      onValueChange={(v) => {
+                        touchField('coordinatedHrId');
+                        updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
+                      }}
+                      disabled={saving || coordinatorUsersLoading || !form.coordinatorDepartmentId}
+                    >
+                      <SelectTrigger
+                        aria-invalid={!!showFieldError('coordinatedHrId')}
+                        className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
+                      >
+                        <SelectValue
+                          placeholder={
+                            !form.coordinatorDepartmentId
+                              ? 'Select department first'
+                              : coordinatorUsersLoading
+                                ? 'Loading users...'
+                                : 'Select candidate coordinator'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">Select coordinator</SelectItem>
+                        {coordinatorUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.fullName} ({user.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError message={showFieldError('coordinatedHrId')} />
+                  </div>
+                </div>
               )}
             </div>
 
