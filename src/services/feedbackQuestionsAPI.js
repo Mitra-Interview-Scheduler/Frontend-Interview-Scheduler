@@ -1,5 +1,4 @@
 import api from './api';
-import mockFeedbackQuestions from '@/data/mockFeedbackQuestions.json';
 
 export const feedbackQuestionsAPI = {
   // List all forms
@@ -64,43 +63,6 @@ export const feedbackQuestionsAPI = {
 
   deleteObligatoryQuestion: async (id) => {
     await api.delete(`/feedback/obligatory-questions/${id}`);
-  },
-
-  // Seed multiple forms using local mock data split into batches
-  seedMock: async (overrides = {}) => {
-    const totalForms = overrides.totalForms || 5;
-    const questions = Array.isArray(mockFeedbackQuestions.questions) ? mockFeedbackQuestions.questions : [];
-    const questionsPerForm = Math.max(1, Math.ceil(questions.length / totalForms));
-
-    const createdForms = [];
-
-    for (let index = 0; index < totalForms; index += 1) {
-      const start = index * questionsPerForm;
-      const end = start + questionsPerForm;
-      const batchQuestions = questions.slice(start, end);
-
-      if (batchQuestions.length === 0) {
-        continue;
-      }
-
-      const payload = {
-        ...mockFeedbackQuestions,
-        ...overrides,
-        name: `${mockFeedbackQuestions.name} ${index + 1}`,
-        description: `${mockFeedbackQuestions.description} - Part ${index + 1}`,
-        questions: batchQuestions.map((question, questionIndex) => ({
-          ...question,
-          order: questionIndex + 1,
-        })),
-      };
-
-      delete payload.totalForms;
-
-      const response = await api.post('/feedback/forms', payload);
-      createdForms.push(response.data);
-    }
-
-    return createdForms;
   },
 };
 

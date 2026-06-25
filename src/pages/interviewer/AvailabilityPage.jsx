@@ -25,7 +25,7 @@ import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
-import { calendarLocalizer } from '@/lib/calendarUtils';
+import { calendarLocalizer, computeSlotDurationHours } from '@/lib/calendarUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
 
 
@@ -184,7 +184,7 @@ const AvailabilityPage = () => {
       candidateName: slot.candidateName,
       interviewScheduleId: slot.interviewScheduleId,
       interviewStatus: slot.interviewStatus,
-      durationHours: slot.durationHours,
+      durationHours: computeSlotDurationHours(slot.startDateTime, slot.endDateTime, slot.durationHours),
       recurrenceGroupId: slot.recurrenceGroupId,
       isRecurring: slot.isRecurring,
     };

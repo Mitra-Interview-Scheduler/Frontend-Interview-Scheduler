@@ -63,12 +63,27 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
     setError('');
   };
 
+  const resetForm = () => {
+    if (!user) return;
+    const userRoles = user.roles || (user.role ? [user.role] : []);
+    setForm({
+      roles: Array.isArray(userRoles) ? [...userRoles] : [],
+      active: user.active !== false,
+    });
+    setError('');
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+    setEditing(false);
+  };
+
   const handleSave = async () => {
     if (!user?.id) return;
 
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const rolesChanged =
-      JSON.stringify(form.roles.sort()) !== JSON.stringify(userRoles.sort());
+      JSON.stringify([...form.roles].sort()) !== JSON.stringify([...userRoles].sort());
     const statusChanged = form.active !== (user.active !== false);
 
     if (!rolesChanged && !statusChanged) {
@@ -234,8 +249,8 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
            <Button
             size="sm"
-            variant={editing ? 'secondary' : ''}
-            onClick={() => setEditing((v) => !v)}
+            variant={editing ? 'secondary' : 'default'}
+            onClick={() => (editing ? handleCancelEdit() : setEditing(true))}
             disabled={saving || !user}
             className="min-w-[110px]"
           >

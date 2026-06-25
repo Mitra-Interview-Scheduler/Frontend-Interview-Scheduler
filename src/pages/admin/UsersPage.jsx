@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Plus, Search, Trash2, UserX, UserCheck,
+  Plus, Search, Trash2, UserX, UserCheck, Pencil,
   Loader2, RefreshCw, ShieldAlert, User, Mail, Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -534,7 +534,11 @@ export default function UsersPage() {
                 </TableHeader>
                 <TableBody>
                   {displayedUsers.map((user) => (
-                    <TableRow key={user.id} className="group">
+                    <TableRow
+                      key={user.id}
+                      className="group cursor-pointer hover:bg-muted/40"
+                      onClick={() => openDetails(user)}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3 min-w-0">
                           <Avatar className="h-9 w-9 border shrink-0">
@@ -571,6 +575,15 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={(e) => { e.stopPropagation(); openDetails(user); }}
+                            title="Edit User"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -645,6 +658,15 @@ export default function UsersPage() {
                           ))}
                         </div>
                         <div className="col-span-12 md:col-span-2 flex justify-end items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={(e) => { e.stopPropagation(); openDetails(user); }}
+                            title="Edit User"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

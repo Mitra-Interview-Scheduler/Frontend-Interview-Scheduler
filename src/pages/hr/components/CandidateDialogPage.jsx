@@ -151,7 +151,6 @@ function CandidateDialogPage({
   };
 
   const updateForm = (patch) => {
-    setFormInteracted(true);
     setForm((prev) => ({ ...prev, ...patch }));
   };
 
@@ -564,81 +563,6 @@ function CandidateDialogPage({
               />
             </div>
 
-            {/* Candidate Coordinator */}
-            <div className="space-y-2 md:col-span-2">
-              <Label>Candidate Coordinator *</Label>
-              {readOnly ? (
-                <Input
-                  value={candidate?.coordinatedHrName || '-'}
-                  disabled
-                  className="bg-gray-50"
-                />
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Coordinator Department</Label>
-                    <Select
-                      value={form.coordinatorDepartmentId || 'NONE'}
-                      onValueChange={handleCoordinatorDepartmentChange}
-                      disabled={saving}
-                    >
-                      <SelectTrigger
-                        aria-invalid={!!showFieldError('coordinatorDepartmentId')}
-                        className={showFieldError('coordinatorDepartmentId') ? 'border-red-500 focus:ring-red-500' : ''}
-                      >
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NONE">Select department</SelectItem>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id.toString()}>
-                            {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldError message={showFieldError('coordinatorDepartmentId')} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Coordinator</Label>
-                    <Select
-                      value={form.coordinatedHrId || 'NONE'}
-                      onValueChange={(v) => {
-                        touchField('coordinatedHrId');
-                        updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
-                      }}
-                      disabled={saving || coordinatorUsersLoading || !form.coordinatorDepartmentId}
-                    >
-                      <SelectTrigger
-                        aria-invalid={!!showFieldError('coordinatedHrId')}
-                        className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
-                      >
-                        <SelectValue
-                          placeholder={
-                            !form.coordinatorDepartmentId
-                              ? 'Select department first'
-                              : coordinatorUsersLoading
-                                ? 'Loading users...'
-                                : 'Select candidate coordinator'
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NONE">Select coordinator</SelectItem>
-                        {coordinatorUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
-                            {user.fullName} ({user.email})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldError message={showFieldError('coordinatedHrId')} />
-                  </div>
-                </div>
-              )}
-            </div>
-
             {!isCreate && (
               <div className="space-y-2">
                 <Label>Status</Label>
@@ -736,6 +660,84 @@ function CandidateDialogPage({
               </Select>
             )}
           </div>
+
+            <div className="md:col-span-2 pt-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Candidate Coordinator</p>
+            </div>
+
+            {readOnly ? (
+              <div className="space-y-2 md:col-span-2">
+                <Label>Coordinator</Label>
+                <Input
+                  value={candidate?.coordinatedHrName || '-'}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Department *</Label>
+                  <Select
+                    value={form.coordinatorDepartmentId || 'NONE'}
+                    onValueChange={handleCoordinatorDepartmentChange}
+                    disabled={saving}
+                  >
+                    <SelectTrigger
+                      aria-invalid={!!showFieldError('coordinatorDepartmentId')}
+                      className={showFieldError('coordinatorDepartmentId') ? 'border-red-500 focus:ring-red-500' : ''}
+                    >
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Select department</SelectItem>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id.toString()}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError message={showFieldError('coordinatorDepartmentId')} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Coordinator *</Label>
+                  <Select
+                    value={form.coordinatedHrId || 'NONE'}
+                    onValueChange={(v) => {
+                      touchField('coordinatedHrId');
+                      updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
+                    }}
+                    disabled={saving || coordinatorUsersLoading || !form.coordinatorDepartmentId}
+                  >
+                    <SelectTrigger
+                      aria-invalid={!!showFieldError('coordinatedHrId')}
+                      className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
+                    >
+                      <SelectValue
+                        placeholder={
+                          !form.coordinatorDepartmentId
+                            ? 'Select department first'
+                            : coordinatorUsersLoading
+                              ? 'Loading users...'
+                              : 'Select coordinator'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Select coordinator</SelectItem>
+                      {coordinatorUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.fullName} ({user.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError message={showFieldError('coordinatedHrId')} />
+                </div>
+              </>
+            )}
 
             {/* Job Description */}
             <div className="md:col-span-2 pt-1">

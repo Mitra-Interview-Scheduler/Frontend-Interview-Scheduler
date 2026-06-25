@@ -18,7 +18,7 @@ import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
 import ObligatoryQuestionsManager from '@/components/admin/ObligatoryQuestionsManager';
-import { FEEDBACK_INTERVIEW_TYPE_OPTIONS, formatInterviewTypeLabel } from '@/lib/statusConstants';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
@@ -191,26 +191,6 @@ const FeedbackFormsPage = () => {
     }
   };
 
-  const getFormStats = (form) => {
-    const stats = [];
-    if (form.questions?.length) {
-      stats.push(`${form.questions.length} question(s)`);
-    }
-    if (form.scopes?.departmentIds?.length) {
-      stats.push(`${form.scopes.departmentIds.length} department(s)`);
-    }
-    if (form.scopes?.designationIds?.length) {
-      stats.push(`${form.scopes.designationIds.length} designation(s)`);
-    }
-    if (form.scopes?.interviewTypes?.length) {
-      stats.push(`${form.scopes.interviewTypes.length} interview type(s)`);
-    }
-    if (form.scopes?.tierIds?.length) {
-      stats.push(`${form.scopes.tierIds.length} tier(s)`);
-    }
-    return stats.join(' • ');
-  };
-
   const getDepartmentName = (id) => {
     return departments.find((d) => d.id === id)?.name || `Dept #${id}`;
   };
@@ -237,33 +217,9 @@ const FeedbackFormsPage = () => {
           </div>
 
           {activeTab === 'forms' && (
-          <div className="flex gap-2">
             <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
               <Plus className="w-4 h-4" /> New Form
             </Button>
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  setLoading(true);
-                  const createdForms = await feedbackQuestionsAPI.seedMock({ totalForms: 5 });
-                  toast({
-                    title: 'Seeded',
-                    description: `${createdForms.length} mock feedback forms created from the template questions.`,
-                  });
-                  await refreshData();
-                } catch (err) {
-                  console.error('Seed failed', err);
-                  toast({ title: 'Seed failed', description: err.response?.data?.message || err.message || 'Unable to seed mock form', variant: 'destructive' });
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="gap-2 w-fit"
-            >
-              Seed 5 Mock Forms
-            </Button>
-          </div>
           )}
         </div>
 
@@ -440,7 +396,6 @@ const FeedbackFormsPage = () => {
                                 >
                                   {form.isActive ? 'Active' : 'Inactive'}
                                 </Badge>
-                                <span>{getFormStats(form)}</span>
                               </div>
                             </div>
 
@@ -473,38 +428,6 @@ const FeedbackFormsPage = () => {
                               </Button>
                             </div>
                           </div>
-
-                          {form.scopes && (
-                            <div className="flex flex-wrap gap-2">
-                              {form.scopes.interviewTypes?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {form.scopes.interviewTypes.map((interviewType) => (
-                                    <Badge key={`type-${interviewType}`} variant="outline">
-                                      {formatInterviewTypeLabel(interviewType)}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {form.scopes.departmentIds?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {form.scopes.departmentIds.map((deptId) => (
-                                    <Badge key={`dept-${deptId}`} variant="secondary">
-                                      {getDepartmentName(deptId)}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {form.scopes.designationIds?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {form.scopes.designationIds.map((desigId) => (
-                                    <Badge key={`desig-${desigId}`} variant="outline">
-                                      {getDesignationName(desigId)}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </CardContent>
                     </Card>

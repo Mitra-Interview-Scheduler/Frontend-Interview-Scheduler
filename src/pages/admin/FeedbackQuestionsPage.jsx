@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,8 +73,19 @@ const normalizeQuestionOptions = (options) => {
   return labels.length ? labels : [''];
 };
 
+const EMPTY_FORM_STATE = {
+  formName: '',
+  formDescription: '',
+  selectedDepartmentId: '',
+  selectedDesignationIds: [],
+  selectedInterviewType: '',
+  questions: [],
+};
+
 const FeedbackQuestionsPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('id');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -105,8 +116,20 @@ const FeedbackQuestionsPage = () => {
     );
   }, [formName, formDescription, selectedDepartmentId, selectedDesignationIds, selectedInterviewType, questions, initialData]);
 
+  const applyNewFormState = (defaultCategoryId) => {
+    const nextQuestions = defaultCategoryId ? [createQuestion(defaultCategoryId)] : [];
+    setFormName(EMPTY_FORM_STATE.formName);
+    setFormDescription(EMPTY_FORM_STATE.formDescription);
+    setSelectedDepartmentId(EMPTY_FORM_STATE.selectedDepartmentId);
+    setSelectedDesignationIds(EMPTY_FORM_STATE.selectedDesignationIds);
+    setSelectedInterviewType(EMPTY_FORM_STATE.selectedInterviewType);
+    setDepartmentDesignations([]);
+    setQuestions(nextQuestions);
+    setInitialData(null);
+  };
+
   useEffect(() => {
-    const loadLookups = async () => {
+    const loadFormEditor = async () => {
       try {
         setLoading(true);
         const [deptData, designationData, categoryData] = await Promise.all([
@@ -119,21 +142,17 @@ const FeedbackQuestionsPage = () => {
         const categories = categoryData || [];
         setQuestionCategories(categories);
         const defaultCategoryId = categories[0]?.id;
-        // Prefill when editing existing form via ?id=
-        const params = new URLSearchParams(window.location.search);
-        const editId = params.get('id');
+
         if (editId) {
           try {
             const form = await feedbackQuestionsAPI.getById(editId);
-            if (form) {
-              setFormName(form.name || '');
-              setFormDescription(form.description || '');
-              setSelectedDepartmentId(String((form.scopes?.departmentIds || [])[0] || ''));
-              setSelectedDesignationIds((form.scopes?.designationIds || []).map(String));
-              setSelectedInterviewType((form.scopes?.interviewTypes || [])[0] || '');
-              const questionsData = (form.questions || [])
-                .filter((q) => !isObligatoryFormQuestion(q))
-                .map((q) => ({
+            if (!form) {
+              throw new Error('Feedback form not found.');
+            }
+
+            const questionsData = (form.questions || [])
+              .filter((q) => !isObligatoryFormQuestion(q))
+              .map((q) => ({
                 id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
                 label: q.label || '',
                 categoryId: String(q.categoryId || defaultCategoryId || ''),
@@ -144,21 +163,39 @@ const FeedbackQuestionsPage = () => {
                 helpText: q.helpText || '',
                 options: normalizeQuestionOptions(q.options),
               }));
-              setQuestions(questionsData);
-              setInitialData({
-                formName: form.name || '',
-                formDescription: form.description || '',
-                selectedDepartmentId: String((form.scopes?.departmentIds || [])[0] || ''),
-                selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
-                selectedInterviewType: (form.scopes?.interviewTypes || [])[0] || '',
-                questions: questionsData,
-              });
-            }
+
+            const nextState = {
+              formName: form.name || '',
+              formDescription: form.description || '',
+              selectedDepartmentId: String((form.scopes?.departmentIds || [])[0] || ''),
+              selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
+              selectedInterviewType: (form.scopes?.interviewTypes || [])[0] || '',
+              questions: questionsData.length
+                ? questionsData
+                : (defaultCategoryId ? [createQuestion(defaultCategoryId)] : []),
+            };
+
+            setFormName(nextState.formName);
+            setFormDescription(nextState.formDescription);
+            setSelectedDepartmentId(nextState.selectedDepartmentId);
+            setSelectedDesignationIds(nextState.selectedDesignationIds);
+            setSelectedInterviewType(nextState.selectedInterviewType);
+            setQuestions(nextState.questions);
+            setInitialData({
+              ...nextState,
+              questions: nextState.questions.map((question) => ({ ...question })),
+            });
           } catch (err) {
             console.warn('Failed to load form for editing:', err);
+            applyNewFormState(defaultCategoryId);
+            toast({
+              title: 'Unable to open form',
+              description: err.response?.data?.message || err.message || 'This feedback form could not be loaded.',
+              variant: 'destructive',
+            });
           }
-        } else if (defaultCategoryId) {
-          setQuestions([createQuestion(defaultCategoryId)]);
+        } else {
+          applyNewFormState(defaultCategoryId);
         }
       } catch (error) {
         toast({
@@ -171,8 +208,8 @@ const FeedbackQuestionsPage = () => {
       }
     };
 
-    loadLookups();
-  }, []);
+    loadFormEditor();
+  }, [editId]);
 
   // Load designations for the selected department
   useEffect(() => {
@@ -333,6 +370,9 @@ const FeedbackQuestionsPage = () => {
     if (!selectedInterviewType) return 'Interview type is required';
     if (!selectedDepartmentId) return 'Department is required';
     if (selectedDesignationIds.length === 0) return 'Select at least one designation from the selected department';
+    if (questionCategories.length === 0) {
+      return 'Add at least one question category on the Feedback Forms page before creating a form.';
+    }
     if (!questions.length) return 'Add at least one question';
     if (questions.some((question) => !question.label.trim())) return 'Every question needs a label';
     if (questions.some((question) => question.label.trim().length > FEEDBACK_QUESTION_LABEL_MAX)) {
@@ -361,8 +401,6 @@ const FeedbackQuestionsPage = () => {
     try {
       setSaving(true);
       const payload = buildPayload();
-      const params = new URLSearchParams(window.location.search);
-      const editId = params.get('id');
       if (editId) {
         await feedbackQuestionsAPI.update(editId, payload);
       } else {
@@ -399,12 +437,14 @@ const FeedbackQuestionsPage = () => {
             <Button variant="outline" onClick={() => setPreviewOpen(true)} className="gap-2" disabled={loading}>
               <Eye className="w-4 h-4" /> Preview
             </Button>
-            {hasChanges && (
-              <Button onClick={handleSave} className="gap-2" disabled={saving || loading}>
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Form
-              </Button>
-            )}
+            <Button
+              onClick={handleSave}
+              className="gap-2"
+              disabled={saving || loading || (Boolean(editId) && !hasChanges)}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {editId ? 'Save Changes' : 'Create Form'}
+            </Button>
             <Button variant="outline" onClick={() => navigate('/admin/feedback-forms')} className="gap-2">
               Close
             </Button>
@@ -455,7 +495,10 @@ const FeedbackQuestionsPage = () => {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Interview Type *</Label>
-                      <Select value={selectedInterviewType} onValueChange={setSelectedInterviewType}>
+                      <Select
+                        value={selectedInterviewType || undefined}
+                        onValueChange={setSelectedInterviewType}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select interview type" />
                         </SelectTrigger>
@@ -471,7 +514,10 @@ const FeedbackQuestionsPage = () => {
 
                     <div className="space-y-2">
                       <Label>Department *</Label>
-                      <Select value={selectedDepartmentId} onValueChange={handleDepartmentChange}>
+                      <Select
+                        value={selectedDepartmentId || undefined}
+                        onValueChange={handleDepartmentChange}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select department" />
                         </SelectTrigger>
@@ -621,7 +667,7 @@ const FeedbackQuestionsPage = () => {
                         <div className="space-y-2">
                           <Label>Category</Label>
                           <Select
-                            value={question.categoryId}
+                            value={question.categoryId || undefined}
                             onValueChange={(value) => updateQuestion(question.id, { categoryId: value })}
                           >
                             <SelectTrigger>

@@ -50,3 +50,20 @@ export const parseTimeOnDate = (timeStr, referenceDate) => {
   date.setHours(hours, minutes, 0, 0);
   return date;
 };
+
+/** Duration in hours from API value or start/end timestamps. */
+export const computeSlotDurationHours = (start, end, durationHours) => {
+  if (Number.isFinite(durationHours) && durationHours > 0) {
+    return durationHours;
+  }
+  if (!start || !end) return 0;
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  return ms > 0 ? ms / (1000 * 60 * 60) : 0;
+};
+
+export const formatSlotTotalHours = (hours) => {
+  if (!Number.isFinite(hours) || hours <= 0) return '0';
+  const capped = Math.min(hours, 9999);
+  const rounded = Math.round(capped * 10) / 10;
+  return rounded % 1 === 0 ? String(Math.round(rounded)) : rounded.toFixed(1);
+};

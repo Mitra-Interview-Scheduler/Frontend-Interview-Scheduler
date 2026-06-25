@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import { computeSlotDurationHours, formatSlotTotalHours } from '@/lib/calendarUtils';
 
 const UPCOMING_SLOTS_PER_PAGE = 10;
 
@@ -73,15 +74,11 @@ const UpcomingCard = ({
   );
 
   const totalUpcomingHours = upcomingEvents.reduce(
-    (sum, e) => sum + (e.durationHours || 0), 0
+    (sum, e) => sum + computeSlotDurationHours(e.start, e.end, e.durationHours),
+    0,
   );
 
-  const formatTotalHours = (hours) => {
-    if (!Number.isFinite(hours)) return '0';
-    const capped = Math.min(hours, 9999);
-    const wholeHours = Math.floor(capped);
-    return String(wholeHours).slice(0, 4) || '0';
-  };
+  const formatTotalHours = formatSlotTotalHours;
 
   return (
     <Card className="shadow-lg border-t-4 border-indigo-500 h-full flex flex-col overflow-hidden">
