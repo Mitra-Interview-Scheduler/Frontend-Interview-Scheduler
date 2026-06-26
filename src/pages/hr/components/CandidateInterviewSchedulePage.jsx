@@ -9,6 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
@@ -259,31 +260,27 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                 <Label className="text-sm font-semibold text-slate-800">
                   Interview Coordinator <span className="font-normal text-slate-500">(optional)</span>
                 </Label>
-                <Select
+                <SearchableSelect
                   value={coordinatorUserId || 'NONE'}
                   onValueChange={(value) => setCoordinatorUserId(value === 'NONE' ? '' : value)}
                   disabled={!coordinatorDepartmentId || coordinatorUsersLoading}
-                >
-                  <SelectTrigger className="h-11 text-sm border-slate-200 focus:ring-blue-500 bg-white">
-                    <SelectValue
-                      placeholder={
-                        !coordinatorDepartmentId
-                          ? 'Select department first'
-                          : coordinatorUsersLoading
-                            ? 'Loading users...'
-                            : 'Select coordinator'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">No coordinator</SelectItem>
-                    {coordinatorUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.fullName} ({user.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  className="h-11 text-sm border-slate-200 focus-visible:ring-blue-500 bg-white"
+                  label="Coordinator"
+                  placeholder={
+                    !coordinatorDepartmentId
+                      ? 'Select department first'
+                      : coordinatorUsersLoading
+                        ? 'Loading users...'
+                        : undefined
+                  }
+                  searchPlaceholder="Search coordinators..."
+                  emptyOption={{ value: 'NONE', label: 'No coordinator' }}
+                  options={coordinatorUsers.map((user) => ({
+                    value: user.id.toString(),
+                    label: `${user.fullName} (${user.email})`,
+                    keywords: `${user.fullName} ${user.email}`,
+                  }))}
+                />
                 <p className="text-xs text-slate-500">
                   Can be anyone from the selected department who will join and coordinate the interview.
                 </p>

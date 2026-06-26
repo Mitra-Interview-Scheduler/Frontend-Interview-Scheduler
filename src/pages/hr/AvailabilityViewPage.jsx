@@ -9,6 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -21,10 +22,11 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
 import { format, startOfDay } from 'date-fns';
+import { useGoogleLogin } from '@react-oauth/google';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, CalendarPlus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
@@ -37,6 +39,12 @@ import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
+import {
+  createMockCalendarEvent,
+  getStoredCalendarAccessToken,
+  GOOGLE_CALENDAR_EVENTS_SCOPE,
+  storeCalendarAccessToken,
+} from '@/services/googleCalendarAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
@@ -128,6 +136,57 @@ const AvailabilityViewPage = () => {
   const [cancelling, setCancelling] = useState(false);
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
+  const [creatingGoogleEvent, setCreatingGoogleEvent] = useState(false);
+
+  const createGoogleEventWithToken = useCallback(async (accessToken) => {
+    const event = await createMockCalendarEvent(accessToken);
+    const start = new Date(event.start?.dateTime || event.start?.date);
+    toast({
+      title: 'Mock event created',
+      description: `Added to Google Calendar for ${format(start, 'PPp')}.`,
+    });
+  }, []);
+
+  const requestCalendarAccess = useGoogleLogin({
+    scope: GOOGLE_CALENDAR_EVENTS_SCOPE,
+    onSuccess: async (tokenResponse) => {
+      try {
+        storeCalendarAccessToken(tokenResponse.access_token);
+        await createGoogleEventWithToken(tokenResponse.access_token);
+      } catch (error) {
+        toast({
+          title: 'Failed to create event',
+          description: error.message || 'Could not create the Google Calendar event.',
+          variant: 'destructive',
+        });
+      } finally {
+        setCreatingGoogleEvent(false);
+      }
+    },
+    onError: () => {
+      toast({
+        title: 'Calendar permission required',
+        description: 'Allow Google Calendar access to create the mock event.',
+        variant: 'destructive',
+      });
+      setCreatingGoogleEvent(false);
+    },
+  });
+
+  const handleCreateEventNow = async () => {
+    setCreatingGoogleEvent(true);
+    const storedToken = getStoredCalendarAccessToken();
+    if (storedToken) {
+      try {
+        await createGoogleEventWithToken(storedToken);
+        setCreatingGoogleEvent(false);
+        return;
+      } catch {
+        // Token expired or revoked — request a fresh one below.
+      }
+    }
+    requestCalendarAccess();
+  };
 
   const techDropdownRef = useRef(null);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
@@ -946,31 +1005,27 @@ const calendarSlotPropGetter = useCallback((date) => {
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Interview Coordinator</Label>
-            <Select
+            <SearchableSelect
               value={requestForm.interviewCoordinatorId?.toString() || 'NONE'}
               onValueChange={handleCoordinatorUserChange}
               disabled={!requestForm.interviewCoordinatorDepartmentId || coordinatorUsersLoading}
-            >
-              <SelectTrigger className="bg-white dark:bg-gray-900">
-                <SelectValue
-                  placeholder={
-                    !requestForm.interviewCoordinatorDepartmentId
-                      ? 'Select department first'
-                      : coordinatorUsersLoading
-                        ? 'Loading users...'
-                        : 'Select coordinator'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NONE">No coordinator</SelectItem>
-                {coordinatorUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>
-                    {user.fullName} ({user.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              className="bg-white dark:bg-gray-900"
+              label="Coordinator"
+              placeholder={
+                !requestForm.interviewCoordinatorDepartmentId
+                  ? 'Select department first'
+                  : coordinatorUsersLoading
+                    ? 'Loading users...'
+                    : undefined
+              }
+              searchPlaceholder="Search coordinators..."
+              emptyOption={{ value: 'NONE', label: 'No coordinator' }}
+              options={coordinatorUsers.map((user) => ({
+                value: user.id.toString(),
+                label: `${user.fullName} (${user.email})`,
+                keywords: `${user.fullName} ${user.email}`,
+              }))}
+            />
             <p className="text-xs text-muted-foreground">
               Can be anyone from the selected department who will join and coordinate the interview.
             </p>
@@ -1464,6 +1519,21 @@ const calendarSlotPropGetter = useCallback((date) => {
                 </motion.div>
               )}
             </AnimatePresence>
+            <div className="pt-4 px-2 border-t border-slate-100 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={creatingGoogleEvent}
+                onClick={handleCreateEventNow}
+              >
+                <CalendarPlus className="w-4 h-4" />
+                {creatingGoogleEvent ? 'Creating event…' : 'Create Event Now'}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Creates a mock Google Calendar event starting 10 minutes from now.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

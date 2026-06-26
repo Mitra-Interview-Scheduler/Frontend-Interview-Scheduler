@@ -11,6 +11,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { 
   Award, Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
 } from 'lucide-react';
@@ -701,39 +702,32 @@ function CandidateDialogPage({
                   <FieldError message={showFieldError('coordinatorDepartmentId')} />
                 </div>
 
-                <div className="space-y-2">
+                <div className="relative space-y-2 overflow-visible">
                   <Label>Coordinator *</Label>
-                  <Select
+                  <SearchableSelect
                     value={form.coordinatedHrId || 'NONE'}
                     onValueChange={(v) => {
                       touchField('coordinatedHrId');
                       updateForm({ coordinatedHrId: v === 'NONE' ? '' : v });
                     }}
                     disabled={saving || coordinatorUsersLoading || !form.coordinatorDepartmentId}
-                  >
-                    <SelectTrigger
-                      aria-invalid={!!showFieldError('coordinatedHrId')}
-                      className={showFieldError('coordinatedHrId') ? 'border-red-500 focus:ring-red-500' : ''}
-                    >
-                      <SelectValue
-                        placeholder={
-                          !form.coordinatorDepartmentId
-                            ? 'Select department first'
-                            : coordinatorUsersLoading
-                              ? 'Loading users...'
-                              : 'Select coordinator'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NONE">Select coordinator</SelectItem>
-                      {coordinatorUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.fullName} ({user.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    aria-invalid={!!showFieldError('coordinatedHrId')}
+                    className={showFieldError('coordinatedHrId') ? 'border-red-500 focus-visible:ring-red-500' : ''}
+                    label="Coordinator"
+                    placeholder={
+                      !form.coordinatorDepartmentId
+                        ? 'Select department first'
+                        : coordinatorUsersLoading
+                          ? 'Loading users...'
+                          : undefined
+                    }
+                    searchPlaceholder="Search coordinators..."
+                    options={coordinatorUsers.map((user) => ({
+                      value: user.id.toString(),
+                      label: `${user.fullName} (${user.email})`,
+                      keywords: `${user.fullName} ${user.email}`,
+                    }))}
+                  />
                   <FieldError message={showFieldError('coordinatedHrId')} />
                 </div>
               </>
