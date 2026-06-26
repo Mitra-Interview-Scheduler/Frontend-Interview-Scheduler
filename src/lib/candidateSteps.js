@@ -1,4 +1,4 @@
-import { resolveInterviewRequestStatus, collectCandidateInterviewRequests, getInterviewerDesignationLabel, compareInterviewCreationOrder } from '@/lib/candidateInterviews';
+import { resolveInterviewRequestStatus, resolveInterviewRoundStatus, collectInterviewRoundsForPipeline, getInterviewerDesignationLabel, compareInterviewCreationOrder, compareInterviewRoundCreationOrder } from '@/lib/candidateInterviews';
 import {
   ActivityStepStatus,
   InterviewRequestStatus,
@@ -111,10 +111,12 @@ export const getCandidateClosingSteps = (steps) => normalizeCandidateSteps(steps
   (step) => step.isClosingStep && step.isVisible !== false,
 );
 
-const dedupeInterviewRequests = (requests) => {
+const dedupeInterviewRounds = (rounds) => {
   const seen = new Set();
-  return requests.filter((request) => {
-    const id = request?.interviewScheduleId ?? request?.id;
+  return rounds.filter((round) => {
+    const id = round?.kind === 'panel'
+      ? `panel-${round.panel?.id ?? round.id}`
+      : (round?.interviewScheduleId ?? round?.id);
     if (!id || seen.has(id)) return false;
     seen.add(id);
     return true;
@@ -187,19 +189,19 @@ export const applyCancelledInterviewOverrides = (
   let overrides = [...steps];
 
   if (Array.isArray(interviewRequests) && interviewRequests.length > 0) {
-    const uniqueRequests = dedupeInterviewRequests(interviewRequests);
+    const uniqueRounds = dedupeInterviewRounds(interviewRequests);
 
     const requestsByRoundKey = {};
-    uniqueRequests.forEach((request) => {
-      const roundKey = resolveRoundKeyForInterview(request);
+    uniqueRounds.forEach((round) => {
+      const roundKey = resolveRoundKeyForInterview(round);
       if (!requestsByRoundKey[roundKey]) {
         requestsByRoundKey[roundKey] = [];
       }
-      requestsByRoundKey[roundKey].push(request);
+      requestsByRoundKey[roundKey].push(round);
     });
 
-    Object.values(requestsByRoundKey).forEach((requests) => {
-      requests.sort(compareInterviewCreationOrder);
+    Object.values(requestsByRoundKey).forEach((rounds) => {
+      rounds.sort(compareInterviewRoundCreationOrder);
     });
 
     const roundStepIndexes = {};
@@ -217,8 +219,8 @@ export const applyCancelledInterviewOverrides = (
 
       indexes.forEach((stepIndex, roundIndex) => {
         const step = overrides[stepIndex];
-        const linkedRequest = requests[roundIndex];
-        const linkedStatus = linkedRequest ? resolveInterviewRequestStatus(linkedRequest) : null;
+        const linkedRound = requests[roundIndex];
+        const linkedStatus = linkedRound ? resolveInterviewRoundStatus(linkedRound) : null;
 
         if (linkedStatus === InterviewScheduleStatus.CANCELLED) {
           overrides[stepIndex] = {
@@ -549,7 +551,7 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
 };
 
 export const buildCandidateActivityHistory = (steps, candidate = null, interviews = [], panels = []) => {
-  const interviewRequests = collectCandidateInterviewRequests(interviews, panels);
+  const interviewRequests = collectInterviewRoundsForPipeline(interviews, panels);
   const normalized = applyCancelledInterviewOverrides(
     normalizeCandidateSteps(steps),
     interviewRequests,
