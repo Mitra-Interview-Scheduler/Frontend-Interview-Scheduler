@@ -1019,7 +1019,11 @@ const calendarSlotPropGetter = useCallback((date) => {
                     : undefined
               }
               searchPlaceholder="Search coordinators..."
-              emptyOption={{ value: 'NONE', label: 'No coordinator' }}
+              emptyMessage={
+                coordinatorUsers.length === 0
+                  ? 'No user found for selected department'
+                  : 'No matching users found'
+              }
               options={coordinatorUsers.map((user) => ({
                 value: user.id.toString(),
                 label: `${user.fullName} (${user.email})`,
@@ -1519,6 +1523,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                 </motion.div>
               )}
             </AnimatePresence>
+
+
+            {/* ------- commented out for now ---- */}
             <div className="pt-4 px-2 border-t border-slate-100 mt-2">
               <Button
                 type="button"
@@ -1534,6 +1541,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                 Creates a mock Google Calendar event starting 10 minutes from now.
               </p>
             </div>
+
+            {/* ------- commented out for now ---- */}
+
           </CardContent>
         </Card>
       </div>

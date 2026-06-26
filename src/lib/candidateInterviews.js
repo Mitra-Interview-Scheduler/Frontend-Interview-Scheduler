@@ -6,9 +6,13 @@ import {
 
 const hasCandidateInterviewRecord = (request) => Boolean(request?.interviewScheduleId);
 
-const getInterviewSortTime = (request) => (
-  new Date(request?.scheduledStartDateTime || request?.preferredStartDateTime || 0).getTime()
-);
+const getInterviewSortTime = (request) => {
+  if (request?.createdAt) {
+    const created = new Date(request.createdAt).getTime();
+    if (!Number.isNaN(created)) return created;
+  }
+  return new Date(request?.scheduledStartDateTime || request?.preferredStartDateTime || 0).getTime();
+};
 
 export const resolveInterviewRequestStatus = (request) => {
   if (!request) return InterviewScheduleStatus.SCHEDULED;
@@ -17,6 +21,21 @@ export const resolveInterviewRequestStatus = (request) => {
     return InterviewScheduleStatus.CANCELLED;
   }
   return InterviewScheduleStatus.SCHEDULED;
+};
+
+/** Orders interviews by when they were created (1st scheduled = 1st pipeline round). */
+export const getInterviewCreationOrderTimestamp = (request) => {
+  if (request?.createdAt) {
+    const time = new Date(request.createdAt).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+  return Number(request?.id ?? 0);
+};
+
+export const compareInterviewCreationOrder = (a, b) => {
+  const delta = getInterviewCreationOrderTimestamp(a) - getInterviewCreationOrderTimestamp(b);
+  if (delta !== 0) return delta;
+  return Number(a?.id ?? 0) - Number(b?.id ?? 0);
 };
 
 export const getInterviewerDesignationLabel = (request) => (
@@ -37,9 +56,7 @@ export const collectCandidateInterviewRequests = (interviews = [], panels = []) 
       && !panelScheduleIds.has(request.interviewScheduleId),
   );
 
-  return [...singleEntries, ...panelEntries].sort(
-    (a, b) => getInterviewSortTime(a) - getInterviewSortTime(b),
-  );
+  return [...singleEntries, ...panelEntries].sort(compareInterviewCreationOrder);
 };
 
 /**
@@ -73,7 +90,11 @@ export const buildInterviewTabEntries = (interviews = [], panels = []) => {
     });
   });
 
-  return entries.sort((a, b) => a.sortTime - b.sortTime);
+  return entries.sort((a, b) => {
+    const left = a.kind === 'panel' ? a.panelRequests?.[0] : a.interview;
+    const right = b.kind === 'panel' ? b.panelRequests?.[0] : b.interview;
+    return compareInterviewCreationOrder(left, right);
+  });
 };
 
 export { getInterviewStatusMeta };

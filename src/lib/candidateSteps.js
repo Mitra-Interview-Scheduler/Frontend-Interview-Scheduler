@@ -1,4 +1,4 @@
-import { resolveInterviewRequestStatus, collectCandidateInterviewRequests, getInterviewerDesignationLabel } from '@/lib/candidateInterviews';
+import { resolveInterviewRequestStatus, collectCandidateInterviewRequests, getInterviewerDesignationLabel, compareInterviewCreationOrder } from '@/lib/candidateInterviews';
 import {
   ActivityStepStatus,
   InterviewRequestStatus,
@@ -7,8 +7,9 @@ import {
   MasterStatus,
   PipelineStepStatus,
   REPEATABLE_ROUND_KEYS,
-  ROUND_KEY_BY_INTERVIEW_TYPE,
   INTERVIEW_TYPE_BY_ROUND_KEY,
+  resolveRoundKeyForInterview,
+  normalizeInterviewType,
   ACTIVITY_STATUS_META,
   INTERVIEW_STATUS_META,
   formatInterviewTypeLabel,
@@ -121,84 +122,138 @@ const dedupeInterviewRequests = (requests) => {
 };
 
 const getInterviewRequestTimestamp = (request) => {
-  const raw = request?.scheduledStartDateTime || request?.preferredStartDateTime || request?.createdAt;
-  if (!raw) return 0;
+  const raw = request?.createdAt || request?.scheduledStartDateTime || request?.preferredStartDateTime;
+  if (!raw) return Number(request?.id ?? 0);
   const time = new Date(raw).getTime();
-  return Number.isNaN(time) ? 0 : time;
+  return Number.isNaN(time) ? Number(request?.id ?? 0) : time;
+};
+
+const enforceCancelledStepState = (steps) => steps.map((step) => (
+  step.cancelledInterview
+    ? { ...step, stepStatus: PipelineStepStatus.FAILED }
+    : step
+));
+
+/**
+ * Aligns pipeline CURRENT with the candidate's macro status when the backend
+ * reset status (e.g. SCREENING after cancel) without updating pipeline rows.
+ */
+const syncPipelineWithMacroStatus = (steps, currentStatus) => {
+  if (!currentStatus || !Array.isArray(steps) || steps.length === 0) return steps;
+
+  const result = steps.map((step) => ({ ...step }));
+  const hasMatchingCurrent = result.some(
+    (step) => step.key === currentStatus
+      && step.stepStatus === PipelineStepStatus.CURRENT
+      && !step.cancelledInterview,
+  );
+  if (hasMatchingCurrent) {
+    return enforceCancelledStepState(result);
+  }
+
+  let targetIndex = -1;
+  for (let index = result.length - 1; index >= 0; index -= 1) {
+    const step = result[index];
+    if (step.key === currentStatus && !step.cancelledInterview) {
+      targetIndex = index;
+      break;
+    }
+  }
+  if (targetIndex === -1) return enforceCancelledStepState(result);
+
+  return enforceCancelledStepState(result.map((step, index) => {
+    if (index === targetIndex) {
+      return { ...step, stepStatus: PipelineStepStatus.CURRENT };
+    }
+    if (step.stepStatus === PipelineStepStatus.CURRENT) {
+      return { ...step, stepStatus: PipelineStepStatus.COMPLETED };
+    }
+    return step;
+  }));
 };
 
 /**
  * Marks pipeline round steps as FAILED when their chronologically matched interview
- * was cancelled. Active CURRENT steps and later re-scheduled rounds are left alone.
+ * was cancelled, including the round that was CURRENT before status reset.
+ * Later re-scheduled rounds on the same key are left alone.
  */
-export const applyCancelledInterviewOverrides = (steps, interviewRequests = []) => {
+export const applyCancelledInterviewOverrides = (
+  steps,
+  interviewRequests = [],
+  currentStatus = null,
+) => {
   if (!Array.isArray(steps) || steps.length === 0) return steps;
-  if (!Array.isArray(interviewRequests) || interviewRequests.length === 0) return steps;
 
-  const uniqueRequests = dedupeInterviewRequests(interviewRequests);
+  let overrides = [...steps];
 
-  const requestsByRoundKey = {};
-  uniqueRequests.forEach((request) => {
-    const roundKey = ROUND_KEY_BY_INTERVIEW_TYPE[request.interviewType] || MasterStatus.TECHNICAL_ROUND;
-    if (!requestsByRoundKey[roundKey]) {
-      requestsByRoundKey[roundKey] = [];
-    }
-    requestsByRoundKey[roundKey].push(request);
-  });
+  if (Array.isArray(interviewRequests) && interviewRequests.length > 0) {
+    const uniqueRequests = dedupeInterviewRequests(interviewRequests);
 
-  Object.values(requestsByRoundKey).forEach((requests) => {
-    requests.sort((a, b) => getInterviewRequestTimestamp(a) - getInterviewRequestTimestamp(b));
-  });
-
-  const roundStepIndexes = {};
-  steps.forEach((step, index) => {
-    if (REPEATABLE_ROUND_KEYS.has(step.key)) {
-      if (!roundStepIndexes[step.key]) {
-        roundStepIndexes[step.key] = [];
+    const requestsByRoundKey = {};
+    uniqueRequests.forEach((request) => {
+      const roundKey = resolveRoundKeyForInterview(request);
+      if (!requestsByRoundKey[roundKey]) {
+        requestsByRoundKey[roundKey] = [];
       }
-      roundStepIndexes[step.key].push(index);
-    }
-  });
+      requestsByRoundKey[roundKey].push(request);
+    });
 
-  const overrides = [...steps];
+    Object.values(requestsByRoundKey).forEach((requests) => {
+      requests.sort(compareInterviewCreationOrder);
+    });
 
-  Object.entries(roundStepIndexes).forEach(([roundKey, indexes]) => {
-    const requests = requestsByRoundKey[roundKey] || [];
-
-    indexes.forEach((stepIndex, roundIndex) => {
-      const step = overrides[stepIndex];
-      const linkedRequest = requests[roundIndex];
-      const linkedStatus = linkedRequest ? resolveInterviewRequestStatus(linkedRequest) : null;
-
-      if (step.stepStatus === PipelineStepStatus.CURRENT) {
-        return;
-      }
-
-      if (linkedStatus === InterviewScheduleStatus.CANCELLED) {
-        overrides[stepIndex] = {
-          ...step,
-          stepStatus: PipelineStepStatus.FAILED,
-          cancelledInterview: true,
-        };
-        return;
-      }
-
-      if (
-        linkedStatus === InterviewScheduleStatus.SCHEDULED
-        || linkedStatus === InterviewScheduleStatus.COMPLETED
-      ) {
-        if (step.stepStatus === PipelineStepStatus.FAILED || step.cancelledInterview) {
-          overrides[stepIndex] = {
-            ...step,
-            stepStatus: PipelineStepStatus.COMPLETED,
-            cancelledInterview: false,
-          };
+    const roundStepIndexes = {};
+    overrides.forEach((step, index) => {
+      if (REPEATABLE_ROUND_KEYS.has(step.key)) {
+        if (!roundStepIndexes[step.key]) {
+          roundStepIndexes[step.key] = [];
         }
+        roundStepIndexes[step.key].push(index);
       }
     });
-  });
 
-  return overrides;
+    Object.entries(roundStepIndexes).forEach(([roundKey, indexes]) => {
+      const requests = requestsByRoundKey[roundKey] || [];
+
+      indexes.forEach((stepIndex, roundIndex) => {
+        const step = overrides[stepIndex];
+        const linkedRequest = requests[roundIndex];
+        const linkedStatus = linkedRequest ? resolveInterviewRequestStatus(linkedRequest) : null;
+
+        if (linkedStatus === InterviewScheduleStatus.CANCELLED) {
+          overrides[stepIndex] = {
+            ...step,
+            stepStatus: PipelineStepStatus.FAILED,
+            cancelledInterview: true,
+          };
+          return;
+        }
+
+        if (step.stepStatus === PipelineStepStatus.CURRENT) {
+          return;
+        }
+
+        if (
+          linkedStatus === InterviewScheduleStatus.SCHEDULED
+          || linkedStatus === InterviewScheduleStatus.COMPLETED
+        ) {
+          if (step.stepStatus === PipelineStepStatus.FAILED || step.cancelledInterview) {
+            overrides[stepIndex] = {
+              ...step,
+              stepStatus: PipelineStepStatus.COMPLETED,
+              cancelledInterview: false,
+            };
+          }
+        }
+      });
+    });
+  }
+
+  if (currentStatus) {
+    overrides = syncPipelineWithMacroStatus(overrides, currentStatus);
+  }
+
+  return enforceCancelledStepState(overrides);
 };
 
 const ROUND_STAGE_KEYS = REPEATABLE_ROUND_KEYS;
@@ -266,7 +321,8 @@ const buildPanelInterviewerDetail = (panelRequests = []) => (
 const getInterviewStatus = (request) => resolveInterviewRequestStatus(request);
 
 const createInterviewPreludeEntry = (request) => {
-  const typeLabel = formatInterviewTypeLabel(request.interviewType);
+  const interviewType = normalizeInterviewType(request.interviewType);
+  const typeLabel = formatInterviewTypeLabel(interviewType);
   const interviewStatus = getInterviewStatus(request);
   const meta = INTERVIEW_STATUS_META[interviewStatus] || INTERVIEW_STATUS_META[InterviewScheduleStatus.SCHEDULED];
   const sortTimestamp = getInterviewRequestTimestamp(request);
@@ -280,15 +336,15 @@ const createInterviewPreludeEntry = (request) => {
     id: `interview-prelude-${request.interviewScheduleId || request.id}`,
     kind: 'INTERVIEW_PRELUDE',
     stepLabel,
-    stepKey: request.interviewType,
+    stepKey: interviewType,
     stepStatus: interviewStatus,
     sequenceOrder: 1000 + Number(request.id ?? 0),
     timestamp: request.scheduledStartDateTime || request.preferredStartDateTime || request.createdAt || null,
     endTimestamp: request.scheduledEndDateTime || request.preferredEndDateTime || null,
-    bgColor: request.interviewType === InterviewType.HR ? '#ec4899' : '#3b82f6',
+    bgColor: interviewType === InterviewType.HR ? '#ec4899' : '#3b82f6',
     actionLabel: meta.action,
     statusBadgeClass: meta.badgeClass,
-    interviewType: request.interviewType,
+    interviewType,
     interviewRequest: request,
     detail: formatInterviewerDetail(request),
   }, sortTimestamp, INTERVIEW_GROUP_ORDER.PRELUDE);
@@ -304,7 +360,7 @@ const mapPanelToActivityEntries = (panel) => {
   const statuses = activityRequests.map((request) => getInterviewStatus(request));
   const aggregateStatus = deriveAggregateInterviewStatus(statuses);
   const meta = INTERVIEW_STATUS_META[aggregateStatus] || INTERVIEW_STATUS_META[InterviewScheduleStatus.SCHEDULED];
-  const interviewType = activityRequests[0]?.interviewType;
+  const interviewType = normalizeInterviewType(activityRequests[0]?.interviewType);
   const sortTimestamp = getInterviewRequestTimestamp(activityRequests[0]) || getInterviewRequestTimestamp(panel);
   const typeLabel = formatInterviewTypeLabel(interviewType);
   const stepLabel = aggregateStatus === InterviewScheduleStatus.CANCELLED
@@ -375,9 +431,8 @@ const toPipelineSortKey = (sequenceOrder, subOrder = 0) => (
 );
 
 const sortInterviewPreludes = (preludes = []) => [...preludes].sort((a, b) => {
-  const timeA = a.sortTimestamp ?? getInterviewRequestTimestamp(a.interviewRequest);
-  const timeB = b.sortTimestamp ?? getInterviewRequestTimestamp(b.interviewRequest);
-  if (timeA !== timeB) return timeA - timeB;
+  const delta = compareInterviewCreationOrder(a.interviewRequest, b.interviewRequest);
+  if (delta !== 0) return delta;
   return Number(a.interviewRequest?.id ?? 0) - Number(b.interviewRequest?.id ?? 0);
 });
 
@@ -434,10 +489,16 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
 
   const preludeQueues = {
     [InterviewType.TECHNICAL]: sortInterviewPreludes(
-      interviewEntries.filter((entry) => entry.kind === 'INTERVIEW_PRELUDE' && entry.interviewType === InterviewType.TECHNICAL),
+      interviewEntries.filter(
+        (entry) => entry.kind === 'INTERVIEW_PRELUDE'
+          && normalizeInterviewType(entry.interviewType) === InterviewType.TECHNICAL,
+      ),
     ),
     [InterviewType.HR]: sortInterviewPreludes(
-      interviewEntries.filter((entry) => entry.kind === 'INTERVIEW_PRELUDE' && entry.interviewType === InterviewType.HR),
+      interviewEntries.filter(
+        (entry) => entry.kind === 'INTERVIEW_PRELUDE'
+          && normalizeInterviewType(entry.interviewType) === InterviewType.HR,
+      ),
     ),
   };
 
@@ -492,6 +553,7 @@ export const buildCandidateActivityHistory = (steps, candidate = null, interview
   const normalized = applyCancelledInterviewOverrides(
     normalizeCandidateSteps(steps),
     interviewRequests,
+    candidate?.status ?? null,
   );
   const entries = normalized
     .filter((step) => step.stepStatus && step.stepStatus !== PipelineStepStatus.PENDING)

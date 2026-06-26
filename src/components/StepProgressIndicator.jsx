@@ -8,8 +8,11 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
   const statusSteps = applyCancelledInterviewOverrides(
     normalizeCandidateSteps(steps),
     interviewRequests,
+    currentStatus,
   );
-  const currentPipelineStep = statusSteps.find((s) => s.stepStatus === PipelineStepStatus.CURRENT);
+  const currentPipelineStep = statusSteps.find(
+    (step) => step.stepStatus === PipelineStepStatus.CURRENT && !step.cancelledInterview,
+  );
   const currentStatusObj = currentPipelineStep
     || statusSteps.find((s) => s.key === currentStatus);
 
@@ -25,18 +28,20 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
     return null;
   }
 
-  const getStepColor = (step, { isCurrent } = {}) => {
-    if (!isCurrent && (step?.cancelledInterview || step?.stepStatus === PipelineStepStatus.FAILED)) {
+  const getStepColor = (step, { isCurrent, isFailed } = {}) => {
+    if (isFailed || step?.cancelledInterview || step?.stepStatus === PipelineStepStatus.FAILED) {
       return '#ef4444';
     }
     return step?.bgColor || '#6366f1';
   };
 
   const getStepState = (pipelineStep, index) => {
-    const isCurrent = pipelineStep.stepStatus === PipelineStepStatus.CURRENT
-      || (!currentPipelineStep && pipelineStep.key === currentStatusObj?.key && index === currentIndex);
-    const isFailed = (pipelineStep.stepStatus === PipelineStepStatus.FAILED || pipelineStep.cancelledInterview)
-      && !isCurrent;
+    const isFailed = pipelineStep.stepStatus === PipelineStepStatus.FAILED
+      || Boolean(pipelineStep.cancelledInterview);
+    const isCurrent = !isFailed && (
+      pipelineStep.stepStatus === PipelineStepStatus.CURRENT
+      || (!currentPipelineStep && pipelineStep.key === currentStatusObj?.key && index === currentIndex)
+    );
     const isSkipped = pipelineStep.stepStatus === PipelineStepStatus.SKIPPED;
     const isCompleted = pipelineStep.stepStatus === PipelineStepStatus.COMPLETED
       || (currentIndex >= 0 && index < currentIndex && !isFailed && !isSkipped);
@@ -131,9 +136,13 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
                       isFailed && 'is-failed',
                     ].filter(Boolean).join(' ')}
                     style={{ color: isActive ? accentColor : undefined }}
-                    title={pipelineStep.label}
+                    title={pipelineStep.cancelledInterview
+                      ? `${pipelineStep.label} · Cancelled`
+                      : pipelineStep.label}
                   >
-                    {pipelineStep.label}
+                    {pipelineStep.cancelledInterview
+                      ? `${pipelineStep.label} · Cancelled`
+                      : pipelineStep.label}
                   </p>
                 </div>
               </React.Fragment>

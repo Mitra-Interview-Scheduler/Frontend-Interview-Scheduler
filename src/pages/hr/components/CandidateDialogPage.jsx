@@ -722,6 +722,11 @@ function CandidateDialogPage({
                           : undefined
                     }
                     searchPlaceholder="Search coordinators..."
+                    emptyMessage={
+                      coordinatorUsers.length === 0
+                        ? 'No user found for selected department'
+                        : 'No matching users found'
+                    }
                     options={coordinatorUsers.map((user) => ({
                       value: user.id.toString(),
                       label: `${user.fullName} (${user.email})`,

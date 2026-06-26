@@ -13,14 +13,12 @@ import {
   InterviewRequestStatus,
   InterviewScheduleStatus,
   MasterStatus,
+  normalizeInterviewType,
 } from '@/lib/statusConstants';
 
 const ALL_STATUSES = ALL_MASTER_STATUS_KEYS;
 
 const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== MasterStatus.NEW);
-const AFTER_SCREENING_STATUSES = ALL_STATUSES.filter(
-  (status) => status !== MasterStatus.NEW && status !== MasterStatus.SCREENING,
-);
 const CLOSING_STATUSES = CLOSING_STATUS_LIST;
 
 export const TABS_CONFIG = [
@@ -59,9 +57,10 @@ const buildInterviewOrderMap = (tabEntries = []) => {
   const orderMap = new Map();
 
   tabEntries.forEach((entry) => {
-    const type = entry.kind === 'panel'
-      ? `${entry.panelRequests?.[0]?.interviewType || 'INTERVIEW'}_PANEL`
-      : (entry.interview?.interviewType || 'INTERVIEW');
+    const rawType = entry.kind === 'panel'
+      ? entry.panelRequests?.[0]?.interviewType
+      : entry.interview?.interviewType;
+    const type = `${normalizeInterviewType(rawType)}${entry.kind === 'panel' ? '_PANEL' : ''}`;
     countsByType[type] = (countsByType[type] || 0) + 1;
     const key = entry.kind === 'panel'
       ? `panel-${entry.panel?.id}`
@@ -105,8 +104,9 @@ export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels 
   );
 
   const tabEntries = buildInterviewTabEntries(interviews, panels);
+  // Include post-screening stages so cancelled interviews remain visible after cancel resets status.
   const showInterviews = tabEntries.length > 0
-    && AFTER_SCREENING_STATUSES.includes(candidateStatus);
+    && POST_SCREENING_STATUSES.includes(candidateStatus);
 
   const interviewOrderMap = buildInterviewOrderMap(tabEntries);
 

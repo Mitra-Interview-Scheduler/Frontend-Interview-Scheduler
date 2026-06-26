@@ -187,9 +187,18 @@ export const getInterviewStatusMeta = (status) => (
   INTERVIEW_STATUS_META[status] || INTERVIEW_STATUS_META[InterviewScheduleStatus.SCHEDULED]
 );
 
+export const normalizeInterviewType = (value) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  return normalized === InterviewType.HR ? InterviewType.HR : InterviewType.TECHNICAL;
+};
+
+export const resolveRoundKeyForInterview = (request) => (
+  ROUND_KEY_BY_INTERVIEW_TYPE[normalizeInterviewType(request?.interviewType)]
+);
+
 export const formatInterviewTypeLabel = (interviewType) => {
-  if (interviewType === InterviewType.HR) return 'HR Interview';
-  if (interviewType === InterviewType.TECHNICAL) return 'Technical Interview';
+  if (normalizeInterviewType(interviewType) === InterviewType.HR) return 'HR Interview';
+  if (normalizeInterviewType(interviewType) === InterviewType.TECHNICAL) return 'Technical Interview';
   return 'Interview';
 };
 
