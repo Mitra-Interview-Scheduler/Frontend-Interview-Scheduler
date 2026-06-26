@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Activity, LayoutList, ListTree, Loader2, Table2 } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
-import { buildCandidateActivityHistory } from '@/lib/candidateSteps';
+import { buildCandidateActivityHistory, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { InterviewScheduleStatus, PipelineStepStatus } from '@/lib/statusConstants';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
+import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import '@/styles/ProfileActivityTab.css';
 
 const VIEW_MODES = [
@@ -15,9 +16,15 @@ const VIEW_MODES = [
   { id: 'table', label: 'Table', icon: Table2 },
 ];
 
+const formatStatusKeyLabel = (statusKey) => String(statusKey || '')
+  .trim()
+  .replace(/_/g, ' ')
+  .toLowerCase()
+  .replace(/\b\w/g, (char) => char.toUpperCase());
+
 const isInterviewActivity = (entry) => (
   entry.kind === 'INTERVIEW_PRELUDE'
-  || Boolean(entry.interviewRequest || entry.panel || entry.detail)
+  || Boolean(entry.interviewRequest || entry.panel)
 );
 
 const InterviewActivityPrelude = ({ entry, formatDateTime, formatDateTimeRange }) => {
@@ -56,6 +63,27 @@ const formatActivityWhen = (entry, formatDateTime, formatDateTimeRange) => {
 };
 
 const ActivityEntryDetails = ({ entry, formatDateTime, formatDateTimeRange }) => {
+  if (entry.kind === 'STATUS_AUDIT') {
+    return (
+      <>
+        {entry.detail && (
+          <p className="mt-0.5 text-xs font-medium text-slate-700">{entry.detail}</p>
+        )}
+        {entry.previousStatusKey && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            From {formatStatusKeyLabel(entry.previousStatusKey)}
+          </p>
+        )}
+        {entry.notes && (
+          <p className="mt-0.5 text-xs text-slate-600">{entry.notes}</p>
+        )}
+        <p className="mt-1 text-xs text-slate-500">
+          {formatActivityWhen(entry, formatDateTime, formatDateTimeRange)}
+        </p>
+      </>
+    );
+  }
+
   if (isInterviewActivity(entry)) {
     return (
       <InterviewActivityPrelude
@@ -97,6 +125,11 @@ const ActivityBadges = ({ entry }) => {
       {entry.cancelledInterview && (
         <Badge variant="outline" className="rounded-full text-[10px] border-red-200 text-red-700 bg-red-50">
           Interview cancelled
+        </Badge>
+      )}
+      {entry.kind === 'STATUS_AUDIT' && (
+        <Badge variant="outline" className="rounded-full text-[10px] border-violet-200 text-violet-700 bg-violet-50">
+          Audit
         </Badge>
       )}
       {isInterviewActivity(entry) && entry.stepStatus === InterviewScheduleStatus.SCHEDULED && (
@@ -291,12 +324,14 @@ const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isAct
   const [viewMode, setViewMode] = useState('feed');
   const [interviews, setInterviews] = useState([]);
   const [panels, setPanels] = useState([]);
+  const [statusEvents, setStatusEvents] = useState([]);
   const [interviewsLoading, setInterviewsLoading] = useState(false);
 
   useEffect(() => {
     if (!candidate?.id) {
       setInterviews([]);
       setPanels([]);
+      setStatusEvents([]);
       return undefined;
     }
 
@@ -310,17 +345,20 @@ const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isAct
     Promise.all([
       hrAvailabilityAPI.getInterviewsForCandidate(candidate.id),
       hrAvailabilityAPI.getPanelsByCandidateId(candidate.id),
+      candidatePipelineAPI.getPipelineStatusEvents(candidate.id).catch(() => []),
     ])
-      .then(([interviewData, panelData]) => {
+      .then(([interviewData, panelData, auditData]) => {
         if (!active) return;
         setInterviews(Array.isArray(interviewData) ? interviewData : []);
         setPanels(Array.isArray(panelData) ? panelData : []);
+        setStatusEvents(Array.isArray(auditData) ? auditData : []);
       })
       .catch((error) => {
         console.error('Failed to load candidate interview activity:', error);
         if (!active) return;
         setInterviews([]);
         setPanels([]);
+        setStatusEvents([]);
       })
       .finally(() => {
         if (active) setInterviewsLoading(false);
@@ -332,8 +370,15 @@ const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isAct
   }, [isActive, candidate?.id, candidate?.status, steps]);
 
   const activities = useMemo(
-    () => buildCandidateActivityHistory(steps, candidate, interviews, panels),
-    [steps, candidate, interviews, panels],
+    () => buildCandidateActivityHistory(
+      steps,
+      candidate,
+      interviews,
+      panels,
+      statusEvents,
+      (statusKey) => getCandidateStatusLabel(steps, statusKey),
+    ),
+    [steps, candidate, interviews, panels, statusEvents],
   );
 
   const loading = stepsLoading || interviewsLoading;
