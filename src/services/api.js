@@ -33,6 +33,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.config?._skipAuthRedirect) {
+      // Caller opted out of the global 401 logout/redirect (see _skipAuthRedirect on request config).
       return Promise.reject(error);
     }
     // Only expired/invalid sessions should force re-login. A 403 means the user

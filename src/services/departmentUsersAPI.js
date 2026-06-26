@@ -11,6 +11,7 @@ export const departmentUsersAPI = {
     if (departmentId) params.departmentId = departmentId;
     const response = await api.get('/hr/department-users', {
       params,
+      // Optional picker call: on 401, reject locally instead of global logout + /login redirect (see api.js interceptor).
       _skipAuthRedirect: true,
     });
     return response.data;

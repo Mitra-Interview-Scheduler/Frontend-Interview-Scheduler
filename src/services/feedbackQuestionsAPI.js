@@ -46,6 +46,7 @@ export const feedbackQuestionsAPI = {
 
   getObligatoryQuestions: async () => {
     const response = await api.get('/feedback/obligatory-questions', {
+      // Optional load: don't force full re-login if this secondary request returns 401.
       _skipAuthRedirect: true,
     });
     return response.data;
