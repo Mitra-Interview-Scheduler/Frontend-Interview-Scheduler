@@ -58,7 +58,14 @@ const feedbackAPI = {
   async getFeedbackForInterview(interviewScheduleId) {
     try {
       const response = await api.get(`/feedback/responses/${interviewScheduleId}`);
-      return response.data;
+      const payload = response.data;
+      if (payload?.response) {
+        return {
+          ...payload.response,
+          form: payload.form || null,
+        };
+      }
+      return payload;
     } catch (error) {
       if (error.response?.status === 404) {
         return null; // No feedback yet

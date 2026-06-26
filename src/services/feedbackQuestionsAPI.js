@@ -1,5 +1,4 @@
 import api from './api';
-import mockFeedbackQuestions from '@/data/mockFeedbackQuestions.json';
 
 export const feedbackQuestionsAPI = {
   // List all forms
@@ -8,11 +7,12 @@ export const feedbackQuestionsAPI = {
     return response.data;
   },
 
-  getByDepartmentAndRole: async (departmentId, designationId) => {
+  getByDepartmentAndRole: async (departmentId, designationId, interviewType) => {
   const response = await api.get('/feedback/candidateforms', {
     params: {
-      departmentId: departmentId,
-      designationId: designationId
+      departmentId,
+      designationId,
+      interviewType,
     }
   });
   return response.data;
@@ -44,41 +44,25 @@ export const feedbackQuestionsAPI = {
     await api.delete(`/feedback/forms/${id}`);
   },
 
-  // Seed multiple forms using local mock data split into batches
-  seedMock: async (overrides = {}) => {
-    const totalForms = overrides.totalForms || 5;
-    const questions = Array.isArray(mockFeedbackQuestions.questions) ? mockFeedbackQuestions.questions : [];
-    const questionsPerForm = Math.max(1, Math.ceil(questions.length / totalForms));
+  getObligatoryQuestions: async () => {
+    const response = await api.get('/feedback/obligatory-questions', {
+      _skipAuthRedirect: true,
+    });
+    return response.data;
+  },
 
-    const createdForms = [];
+  createObligatoryQuestion: async (payload) => {
+    const response = await api.post('/feedback/obligatory-questions', payload);
+    return response.data;
+  },
 
-    for (let index = 0; index < totalForms; index += 1) {
-      const start = index * questionsPerForm;
-      const end = start + questionsPerForm;
-      const batchQuestions = questions.slice(start, end);
+  updateObligatoryQuestion: async (id, payload) => {
+    const response = await api.put(`/feedback/obligatory-questions/${id}`, payload);
+    return response.data;
+  },
 
-      if (batchQuestions.length === 0) {
-        continue;
-      }
-
-      const payload = {
-        ...mockFeedbackQuestions,
-        ...overrides,
-        name: `${mockFeedbackQuestions.name} ${index + 1}`,
-        description: `${mockFeedbackQuestions.description} - Part ${index + 1}`,
-        questions: batchQuestions.map((question, questionIndex) => ({
-          ...question,
-          order: questionIndex + 1,
-        })),
-      };
-
-      delete payload.totalForms;
-
-      const response = await api.post('/feedback/forms', payload);
-      createdForms.push(response.data);
-    }
-
-    return createdForms;
+  deleteObligatoryQuestion: async (id) => {
+    await api.delete(`/feedback/obligatory-questions/${id}`);
   },
 };
 

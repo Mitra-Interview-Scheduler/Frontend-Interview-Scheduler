@@ -2,13 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getCandidateDetailTabs } from './candidateDetailsTabsConfig';
 import { resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
+import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { cn } from '@/lib/utils';
 
 const CandidateDetailsTabs = ({
   candidate,
   steps = [],
   stepsLoading = false,
-  interviewRequests = [],
+  interviews = [],
+  panels = [],
   interviewsLoading = false,
   onInterviewsRefresh = () => {},
   documents = [],
@@ -19,8 +21,8 @@ const CandidateDetailsTabs = ({
   onCandidateUpdated = () => {},
 }) => {
   const visibleTabs = useMemo(
-    () => getCandidateDetailTabs(candidate?.status, interviewRequests),
-    [candidate?.status, interviewRequests],
+    () => getCandidateDetailTabs(candidate?.status, interviews, panels),
+    [candidate?.status, interviews, panels],
   );
 
   const [activeTab, setActiveTab] = useState('');
@@ -71,9 +73,13 @@ const CandidateDetailsTabs = ({
             className="candidate-tabs-scroll horizontal-scroll-friendly relative flex h-auto w-full min-w-0 items-center justify-start gap-1.5 overflow-x-auto scroll-smooth rounded-xl border border-blue-200 bg-white p-1.5 pb-2 shadow-sm"
           >
             {visibleTabs.map((tab) => {
-              const isInterviewTab = Boolean(tab.interview);
-              const isCancelled = isInterviewTab
-                && resolveInterviewRequestStatus(tab.interview) === 'CANCELLED';
+              const isInterviewTab = Boolean(tab.interview || tab.isPanelTab);
+              const isCancelled = tab.isPanelTab
+                ? (tab.panelRequests || []).every(
+                  (request) => resolveInterviewRequestStatus(request) === InterviewScheduleStatus.CANCELLED,
+                )
+                : isInterviewTab
+                  && resolveInterviewRequestStatus(tab.interview) === InterviewScheduleStatus.CANCELLED;
 
               return (
                 <TabsTrigger
@@ -85,7 +91,8 @@ const CandidateDetailsTabs = ({
                     isCancelled
                       ? 'text-red-700 data-[state=inactive]:border data-[state=inactive]:border-red-200 data-[state=inactive]:bg-red-50/80 data-[state=active]:bg-red-50 data-[state=active]:text-red-800 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-red-200'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200',
-                    isInterviewTab && !isCancelled && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
+                    isInterviewTab && !isCancelled && tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-sky-200 data-[state=inactive]:bg-sky-50/50 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-900 data-[state=active]:ring-sky-200',
+                    isInterviewTab && !isCancelled && !tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
                   )}
                 >
                   {tab.label}
@@ -103,6 +110,8 @@ const CandidateDetailsTabs = ({
             <TabComponent
               candidate={candidate}
               interview={tab.interview}
+              panel={tab.panel}
+              panelRequests={tab.panelRequests}
               steps={steps}
               stepsLoading={stepsLoading || interviewsLoading}
               isActive={activeTab === tab.value}

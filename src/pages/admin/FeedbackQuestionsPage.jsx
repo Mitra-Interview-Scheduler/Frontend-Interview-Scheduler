@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,11 +18,18 @@ import { designationAPI } from '@/services/designationAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
+import { isObligatoryFormQuestion } from '@/lib/feedbackResponseKeys';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
+  { value: 'multiline', label: 'Multiline' },
   { value: 'dropdown', label: 'Dropdown' },
 ];
+
+const FEEDBACK_QUESTION_LABEL_MAX = 1000;
+const FEEDBACK_QUESTION_PLACEHOLDER_MAX = 255;
+const FEEDBACK_QUESTION_HELP_TEXT_MAX = 500;
 
 const DEFAULT_DROPDOWN_OPTIONS = [
   'N/A',
@@ -66,17 +73,29 @@ const normalizeQuestionOptions = (options) => {
   return labels.length ? labels : [''];
 };
 
+const EMPTY_FORM_STATE = {
+  formName: '',
+  formDescription: '',
+  selectedDepartmentId: '',
+  selectedDesignationIds: [],
+  selectedInterviewType: '',
+  questions: [],
+};
+
 const FeedbackQuestionsPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('id');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
-  const [selectedDepartmentIds, setSelectedDepartmentIds] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
   const [selectedDesignationIds, setSelectedDesignationIds] = useState([]);
-  const [designationsByDepartment, setDesignationsByDepartment] = useState({});
+  const [selectedInterviewType, setSelectedInterviewType] = useState('');
+  const [departmentDesignations, setDepartmentDesignations] = useState([]);
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [questionCategories, setQuestionCategories] = useState([]);
@@ -90,14 +109,27 @@ const FeedbackQuestionsPage = () => {
     return (
       formName !== initialData.formName ||
       formDescription !== initialData.formDescription ||
-      JSON.stringify(selectedDepartmentIds) !== JSON.stringify(initialData.selectedDepartmentIds) ||
+      JSON.stringify(selectedDepartmentId) !== JSON.stringify(initialData.selectedDepartmentId) ||
       JSON.stringify(selectedDesignationIds) !== JSON.stringify(initialData.selectedDesignationIds) ||
+      selectedInterviewType !== initialData.selectedInterviewType ||
       JSON.stringify(questions) !== JSON.stringify(initialData.questions)
     );
-  }, [formName, formDescription, selectedDepartmentIds, selectedDesignationIds, questions, initialData]);
+  }, [formName, formDescription, selectedDepartmentId, selectedDesignationIds, selectedInterviewType, questions, initialData]);
+
+  const applyNewFormState = (defaultCategoryId) => {
+    const nextQuestions = defaultCategoryId ? [createQuestion(defaultCategoryId)] : [];
+    setFormName(EMPTY_FORM_STATE.formName);
+    setFormDescription(EMPTY_FORM_STATE.formDescription);
+    setSelectedDepartmentId(EMPTY_FORM_STATE.selectedDepartmentId);
+    setSelectedDesignationIds(EMPTY_FORM_STATE.selectedDesignationIds);
+    setSelectedInterviewType(EMPTY_FORM_STATE.selectedInterviewType);
+    setDepartmentDesignations([]);
+    setQuestions(nextQuestions);
+    setInitialData(null);
+  };
 
   useEffect(() => {
-    const loadLookups = async () => {
+    const loadFormEditor = async () => {
       try {
         setLoading(true);
         const [deptData, designationData, categoryData] = await Promise.all([
@@ -110,18 +142,17 @@ const FeedbackQuestionsPage = () => {
         const categories = categoryData || [];
         setQuestionCategories(categories);
         const defaultCategoryId = categories[0]?.id;
-        // Prefill when editing existing form via ?id=
-        const params = new URLSearchParams(window.location.search);
-        const editId = params.get('id');
+
         if (editId) {
           try {
             const form = await feedbackQuestionsAPI.getById(editId);
-            if (form) {
-              setFormName(form.name || '');
-              setFormDescription(form.description || '');
-              setSelectedDepartmentIds((form.scopes?.departmentIds || []).map(String));
-              setSelectedDesignationIds((form.scopes?.designationIds || []).map(String));
-              const questionsData = (form.questions || []).map((q) => ({
+            if (!form) {
+              throw new Error('Feedback form not found.');
+            }
+
+            const questionsData = (form.questions || [])
+              .filter((q) => !isObligatoryFormQuestion(q))
+              .map((q) => ({
                 id: q.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
                 label: q.label || '',
                 categoryId: String(q.categoryId || defaultCategoryId || ''),
@@ -132,20 +163,39 @@ const FeedbackQuestionsPage = () => {
                 helpText: q.helpText || '',
                 options: normalizeQuestionOptions(q.options),
               }));
-              setQuestions(questionsData);
-              setInitialData({
-                formName: form.name || '',
-                formDescription: form.description || '',
-                selectedDepartmentIds: (form.scopes?.departmentIds || []).map(String),
-                selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
-                questions: questionsData,
-              });
-            }
+
+            const nextState = {
+              formName: form.name || '',
+              formDescription: form.description || '',
+              selectedDepartmentId: String((form.scopes?.departmentIds || [])[0] || ''),
+              selectedDesignationIds: (form.scopes?.designationIds || []).map(String),
+              selectedInterviewType: (form.scopes?.interviewTypes || [])[0] || '',
+              questions: questionsData.length
+                ? questionsData
+                : (defaultCategoryId ? [createQuestion(defaultCategoryId)] : []),
+            };
+
+            setFormName(nextState.formName);
+            setFormDescription(nextState.formDescription);
+            setSelectedDepartmentId(nextState.selectedDepartmentId);
+            setSelectedDesignationIds(nextState.selectedDesignationIds);
+            setSelectedInterviewType(nextState.selectedInterviewType);
+            setQuestions(nextState.questions);
+            setInitialData({
+              ...nextState,
+              questions: nextState.questions.map((question) => ({ ...question })),
+            });
           } catch (err) {
             console.warn('Failed to load form for editing:', err);
+            applyNewFormState(defaultCategoryId);
+            toast({
+              title: 'Unable to open form',
+              description: err.response?.data?.message || err.message || 'This feedback form could not be loaded.',
+              variant: 'destructive',
+            });
           }
-        } else if (defaultCategoryId) {
-          setQuestions([createQuestion(defaultCategoryId)]);
+        } else {
+          applyNewFormState(defaultCategoryId);
         }
       } catch (error) {
         toast({
@@ -158,34 +208,33 @@ const FeedbackQuestionsPage = () => {
       }
     };
 
-    loadLookups();
-  }, []);
+    loadFormEditor();
+  }, [editId]);
 
-  // Load designations for each selected department
+  // Load designations for the selected department
   useEffect(() => {
     const loadDesignations = async () => {
-      const result = {};
-      for (const deptId of selectedDepartmentIds) {
-        try {
-          const desigs = await designationAPI.getDesignationsByDepartment(Number(deptId));
-          // Sort designations by tierOrder (ascending). Null/undefined tierOrder go last,
-          // then fallback to name for deterministic ordering.
-          const sorted = (desigs || []).slice().sort((a, b) => {
-            const ta = a?.tierOrder ?? Number.MAX_SAFE_INTEGER;
-            const tb = b?.tierOrder ?? Number.MAX_SAFE_INTEGER;
-            if (ta !== tb) return ta - tb;
-            return String(a?.name || '').localeCompare(String(b?.name || ''));
-          });
-          result[deptId] = sorted;
-        } catch (error) {
-          console.error(`Failed to load designations for department ${deptId}:`, error);
-          result[deptId] = [];
-        }
+      if (!selectedDepartmentId) {
+        setDepartmentDesignations([]);
+        return;
       }
-      setDesignationsByDepartment(result);
+
+      try {
+        const desigs = await designationAPI.getDesignationsByDepartment(Number(selectedDepartmentId));
+        const sorted = (desigs || []).slice().sort((a, b) => {
+          const ta = a?.tierOrder ?? Number.MAX_SAFE_INTEGER;
+          const tb = b?.tierOrder ?? Number.MAX_SAFE_INTEGER;
+          if (ta !== tb) return ta - tb;
+          return String(a?.name || '').localeCompare(String(b?.name || ''));
+        });
+        setDepartmentDesignations(sorted);
+      } catch (error) {
+        console.error(`Failed to load designations for department ${selectedDepartmentId}:`, error);
+        setDepartmentDesignations([]);
+      }
     };
     loadDesignations();
-  }, [selectedDepartmentIds]);
+  }, [selectedDepartmentId]);
 
   useEffect(() => {
     if (!scrollToQuestionId) return;
@@ -196,16 +245,9 @@ const FeedbackQuestionsPage = () => {
     }
   }, [scrollToQuestionId, questions.length]);
 
-  const toggleDepartment = (departmentId) => {
-    const id = departmentId.toString();
-    setSelectedDepartmentIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    );
-    // Clear designations from removed department
-    setSelectedDesignationIds((current) => {
-      const desigIdsInDept = (designationsByDepartment[id] || []).map((d) => d.id.toString());
-      return current.filter((dId) => !desigIdsInDept.includes(dId));
-    });
+  const handleDepartmentChange = (departmentId) => {
+    setSelectedDepartmentId(departmentId);
+    setSelectedDesignationIds([]);
   };
 
   const toggleDesignation = (designationId) => {
@@ -215,16 +257,13 @@ const FeedbackQuestionsPage = () => {
     );
   };
 
-  const selectAllDesignationsForDepartment = (departmentId) => {
-    const desigs = designationsByDepartment[departmentId] || [];
-    const allIds = desigs.map((d) => d.id.toString());
-    setSelectedDesignationIds((current) => [...new Set([...current, ...allIds])]);
+  const selectAllDesignations = () => {
+    const allIds = departmentDesignations.map((d) => d.id.toString());
+    setSelectedDesignationIds(allIds);
   };
 
-  const clearDesignationsForDepartment = (departmentId) => {
-    const desigs = designationsByDepartment[departmentId] || [];
-    const desigIdsInDept = desigs.map((d) => d.id.toString());
-    setSelectedDesignationIds((current) => current.filter((id) => !desigIdsInDept.includes(id)));
+  const clearDesignations = () => {
+    setSelectedDesignationIds([]);
   };
 
   const updateQuestion = (questionId, patch) => {
@@ -238,8 +277,12 @@ const FeedbackQuestionsPage = () => {
           nextQuestion.options = getDefaultOptionsForType('dropdown');
         }
 
-        if (patch.type === 'text' && question.type === 'dropdown') {
+        if ((patch.type === 'text' || patch.type === 'multiline') && question.type === 'dropdown') {
           nextQuestion.options = [''];
+        }
+
+        if (patch.type === 'multiline') {
+          nextQuestion.commentsEnabled = false;
         }
 
         return nextQuestion;
@@ -300,8 +343,9 @@ const FeedbackQuestionsPage = () => {
     name: formName.trim(),
     description: formDescription.trim(),
     scopes: {
-      departmentIds: selectedDepartmentIds.map((value) => Number(value)),
+      departmentIds: selectedDepartmentId ? [Number(selectedDepartmentId)] : [],
       designationIds: selectedDesignationIds.map((value) => Number(value)),
+      interviewTypes: selectedInterviewType ? [selectedInterviewType] : [],
     },
     questions: questions.map((question, index) => ({
       order: index + 1,
@@ -309,7 +353,7 @@ const FeedbackQuestionsPage = () => {
       categoryId: Number(question.categoryId),
       type: question.type,
       required: question.required,
-      commentsEnabled: question.commentsEnabled,
+      commentsEnabled: question.type === 'multiline' ? false : question.commentsEnabled,
       placeholder: question.placeholder.trim(),
       helpText: question.helpText.trim(),
       options: question.type === 'dropdown'
@@ -323,10 +367,23 @@ const FeedbackQuestionsPage = () => {
 
   const validate = () => {
     if (!formName.trim()) return 'Form name is required';
-    if (selectedDepartmentIds.length === 0) return 'Select at least one department';
+    if (!selectedInterviewType) return 'Interview type is required';
+    if (!selectedDepartmentId) return 'Department is required';
     if (selectedDesignationIds.length === 0) return 'Select at least one designation from the selected department';
+    if (questionCategories.length === 0) {
+      return 'Add at least one question category on the Feedback Forms page before creating a form.';
+    }
     if (!questions.length) return 'Add at least one question';
     if (questions.some((question) => !question.label.trim())) return 'Every question needs a label';
+    if (questions.some((question) => question.label.trim().length > FEEDBACK_QUESTION_LABEL_MAX)) {
+      return `Question labels must be ${FEEDBACK_QUESTION_LABEL_MAX} characters or fewer`;
+    }
+    if (questions.some((question) => question.placeholder.trim().length > FEEDBACK_QUESTION_PLACEHOLDER_MAX)) {
+      return `Placeholders must be ${FEEDBACK_QUESTION_PLACEHOLDER_MAX} characters or fewer`;
+    }
+    if (questions.some((question) => question.helpText.trim().length > FEEDBACK_QUESTION_HELP_TEXT_MAX)) {
+      return `Help text must be ${FEEDBACK_QUESTION_HELP_TEXT_MAX} characters or fewer`;
+    }
     if (questions.some((question) => !question.categoryId)) return 'Every question needs a category';
     if (questions.some((question) => question.type === 'dropdown' && normalizeMultiLine(question.options.join('\n')).length === 0)) {
       return 'Dropdown questions need at least one option';
@@ -344,8 +401,6 @@ const FeedbackQuestionsPage = () => {
     try {
       setSaving(true);
       const payload = buildPayload();
-      const params = new URLSearchParams(window.location.search);
-      const editId = params.get('id');
       if (editId) {
         await feedbackQuestionsAPI.update(editId, payload);
       } else {
@@ -379,21 +434,17 @@ const FeedbackQuestionsPage = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" className="gap-2">
-              <Link to="/admin/feedback-forms?tab=categories">
-                <Tags className="w-4 h-4" />
-                Manage Categories
-              </Link>
-            </Button>
             <Button variant="outline" onClick={() => setPreviewOpen(true)} className="gap-2" disabled={loading}>
               <Eye className="w-4 h-4" /> Preview
             </Button>
-            {hasChanges && (
-              <Button onClick={handleSave} className="gap-2" disabled={saving || loading}>
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Form
-              </Button>
-            )}
+            <Button
+              onClick={handleSave}
+              className="gap-2"
+              disabled={saving || loading || (Boolean(editId) && !hasChanges)}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {editId ? 'Save Changes' : 'Create Form'}
+            </Button>
             <Button variant="outline" onClick={() => navigate('/admin/feedback-forms')} className="gap-2">
               Close
             </Button>
@@ -405,7 +456,7 @@ const FeedbackQuestionsPage = () => {
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div className="space-y-1">
                 <CardTitle>Form Scope</CardTitle>
-                <CardDescription>Select departments and their relevant designations for this form.</CardDescription>
+                <CardDescription>Select interview type, department, and designations for this form.</CardDescription>
               </div>
               <Button
                 type="button"
@@ -441,112 +492,125 @@ const FeedbackQuestionsPage = () => {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Department Selection */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-base font-semibold">Departments</Label>
-                      <Badge variant="secondary">Optional</Badge>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Interview Type *</Label>
+                      <Select
+                        value={selectedInterviewType || undefined}
+                        onValueChange={setSelectedInterviewType}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select interview type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {departments.map((department) => (
-                        <label
-                          key={department.id}
-                          className="flex items-center gap-3 rounded-lg border p-3 text-sm hover:bg-muted/30 cursor-pointer"
-                        >
-                          <Checkbox
-                            checked={selectedDepartmentIds.includes(department.id.toString())}
-                            onCheckedChange={() => toggleDepartment(department.id)}
-                          />
-                          <span className="flex-1 font-medium">{department.name}</span>
-                        </label>
-                      ))}
+
+                    <div className="space-y-2">
+                      <Label>Department *</Label>
+                      <Select
+                        value={selectedDepartmentId || undefined}
+                        onValueChange={handleDepartmentChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((department) => (
+                            <SelectItem key={department.id} value={department.id.toString()}>
+                              {department.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       {departments.length === 0 && (
-                        <p className="text-xs text-muted-foreground col-span-full">No departments available</p>
+                        <p className="text-xs text-muted-foreground">No departments available</p>
                       )}
                     </div>
                   </div>
 
-                  {/* Designations by Department - Show for each selected department */}
-                  {selectedDepartmentIds.length > 0 && (
+                  {selectedDepartmentId && (
                     <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
-                      <Label className="text-base font-semibold">Designations by Department</Label>
-                      <div className="space-y-4">
-                        {selectedDepartmentIds.map((deptId) => {
-                          const dept = departments.find((d) => d.id.toString() === deptId);
-                          const desigs = designationsByDepartment[deptId] || [];
-                          return (
-                            <div key={deptId} className="rounded-lg border bg-background p-3">
-                              <div className="flex items-center justify-between gap-3 mb-3">
-                                <p className="font-medium text-sm">{dept?.name}</p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => selectAllDesignationsForDepartment(deptId)}
-                                    className="text-xs"
-                                  >
-                                    Select All
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => clearDesignationsForDepartment(deptId)}
-                                    className="text-xs"
-                                  >
-                                    Clear
-                                  </Button>
-                                </div>
-                              </div>
-                              {desigs.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No designations available for this department</p>
-                              ) : (
-                                <div className="grid gap-2 sm:grid-cols-3">
-                                  {desigs.map((designation) => (
-                                    <label
-                                      key={designation.id}
-                                      className="flex items-center gap-3 rounded-md border bg-background p-2 text-sm hover:bg-muted/30 cursor-pointer"
-                                    >
-                                      <Checkbox
-                                        checked={selectedDesignationIds.includes(designation.id.toString())}
-                                        onCheckedChange={() => toggleDesignation(designation.id)}
-                                      />
-                                      <span className="flex-1">
-                                        {designation.name}
-                                        {designation.tierOrder != null && (
-                                          <span className="ml-1 text-xs text-muted-foreground"> (Tier - {designation.tierOrder})</span>
-                                        )}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div className="flex items-center justify-between gap-3">
+                        <Label className="text-base font-semibold">Designations *</Label>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={selectAllDesignations}
+                            className="text-xs"
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearDesignations}
+                            className="text-xs"
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </div>
+                      {departmentDesignations.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No designations available for this department</p>
+                      ) : (
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {departmentDesignations.map((designation) => (
+                            <label
+                              key={designation.id}
+                              className="flex items-center gap-3 rounded-md border bg-background p-2 text-sm hover:bg-muted/30 cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={selectedDesignationIds.includes(designation.id.toString())}
+                                onCheckedChange={() => toggleDesignation(designation.id)}
+                              />
+                              <span className="flex-1">
+                                {designation.name}
+                                {designation.tierOrder != null && (
+                                  <span className="ml-1 text-xs text-muted-foreground"> (Tier - {designation.tierOrder})</span>
+                                )}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Selected Summary */}
-                  {(selectedDepartmentIds.length > 0 || selectedDesignationIds.length > 0) && (
+                  {/* 
+                  {(selectedDepartmentId || selectedDesignationIds.length > 0 || selectedInterviewType) && (
                     <div className="rounded-lg border bg-primary/5 p-3">
                       <p className="text-xs font-medium text-foreground mb-2">Selected Scope:</p>
                       <div className="flex flex-wrap gap-2">
-                        {selectedDepartmentIds.map((deptId) => (
-                          <Badge key={`dept-${deptId}`} variant="default">
-                            {departments.find((d) => d.id.toString() === deptId)?.name}
+                        {selectedInterviewType && (
+                          <Badge variant="outline">
+                            {FEEDBACK_INTERVIEW_TYPE_OPTIONS.find((option) => option.value === selectedInterviewType)?.label || selectedInterviewType}
                           </Badge>
-                        ))}
+                        )}
+                        {selectedDepartmentId && (
+                          <Badge variant="default">
+                            {departments.find((d) => d.id.toString() === selectedDepartmentId)?.name}
+                          </Badge>
+                        )}
                         {selectedDesignationIds.map((desigId) => (
                           <Badge key={`desig-${desigId}`} variant="outline">
-                            {designations.find((d) => d.id.toString() === desigId)?.name}
+                            {designations.find((d) => d.id.toString() === desigId)?.name
+                              || departmentDesignations.find((d) => d.id.toString() === desigId)?.name}
                           </Badge>
                         ))}
                       </div>
                     </div>
                   )}
+                  */}
                 </div>
               </CardContent>
             </CollapsibleContent>
@@ -596,13 +660,14 @@ const FeedbackQuestionsPage = () => {
                             value={question.label}
                             onChange={(e) => updateQuestion(question.id, { label: e.target.value })}
                             placeholder="e.g. How strong was the candidate's communication?"
+                            maxLength={FEEDBACK_QUESTION_LABEL_MAX}
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>Category</Label>
                           <Select
-                            value={question.categoryId}
+                            value={question.categoryId || undefined}
                             onValueChange={(value) => updateQuestion(question.id, { categoryId: value })}
                           >
                             <SelectTrigger>
@@ -647,13 +712,15 @@ const FeedbackQuestionsPage = () => {
                             >
                               Required
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => updateQuestion(question.id, { commentsEnabled: !question.commentsEnabled })}
-                              className={`inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition-colors ${question.commentsEnabled ? 'border-secondary bg-secondary text-secondary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'}`}
-                            >
-                              Comments
-                            </button>
+                            {question.type !== 'multiline' && (
+                              <button
+                                type="button"
+                                onClick={() => updateQuestion(question.id, { commentsEnabled: !question.commentsEnabled })}
+                                className={`inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition-colors ${question.commentsEnabled ? 'border-secondary bg-secondary text-secondary-foreground' : 'border-border bg-background text-foreground hover:bg-muted'}`}
+                              >
+                                Comments
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -716,8 +783,10 @@ const FeedbackQuestionsPage = () => {
                         <div className="text-xs text-muted-foreground">
                           {question.type === 'dropdown'
                             ? `${question.options.filter(Boolean).length} dropdown option(s)`
-                            : 'Text response'}
-                          {question.commentsEnabled && ' · comments enabled'}
+                            : question.type === 'multiline'
+                              ? 'Multiline response'
+                              : 'Text response'}
+                          {question.commentsEnabled && question.type !== 'multiline' && ' · comments enabled'}
                         </div>
 
                         <div className="flex items-center gap-2">

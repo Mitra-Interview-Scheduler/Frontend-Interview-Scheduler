@@ -669,15 +669,17 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
           <h3 className="text-sm font-semibold text-blue-900">Profile Screening</h3>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4 items-end">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-600">Screened By</Label>
-              <Input 
-                value={localFormData.screenedBy || ''} 
-                className="h-9 bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200 select-none font-medium" 
-                readOnly 
-              />
-            </div>
+          <div className={`grid gap-4 items-end ${localFormData.screenedBy?.trim() ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {localFormData.screenedBy?.trim() && (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-gray-600">Screened By</Label>
+                <Input 
+                  value={localFormData.screenedBy} 
+                  className="h-9 bg-gray-50 text-gray-500 cursor-not-allowed border-gray-200 select-none font-medium" 
+                  readOnly 
+                />
+              </div>
+            )}
 
             <div className="text-xs text-gray-400 font-medium px-1 pb-2.5">
               <span>Last Saved State: {localFormData.modifiedAt ? new Date(localFormData.modifiedAt).toLocaleString() : "Not modified yet"}</span>

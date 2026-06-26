@@ -1,4 +1,4 @@
-import { useLocation, useSearchParams } from 'react-router-dom'; 
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
@@ -9,6 +9,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -21,10 +22,11 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
 import { format, startOfDay } from 'date-fns';
+import { useGoogleLogin } from '@react-oauth/google';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, CalendarPlus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
@@ -36,8 +38,16 @@ import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/tec
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
-import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, getDepartmentPalette, BOOKED_TYPE_PALETTES, COMPLETED_EVENT_PALETTE } from './utils/AvailabilityViewPageUiUtils';
+import { departmentUsersAPI } from '@/services/departmentUsersAPI';
+import {
+  createMockCalendarEvent,
+  getStoredCalendarAccessToken,
+  GOOGLE_CALENDAR_EVENTS_SCOPE,
+  storeCalendarAccessToken,
+} from '@/services/googleCalendarAPI';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
 
@@ -53,12 +63,25 @@ const CALENDAR_PAGE_SIZES = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 const resolveInterviewType = (...values) => {
-  const match = values.find((value) => value === 'HR' || value === 'TECHNICAL');
-  return match || 'TECHNICAL';
+  const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
+  return match || InterviewType.TECHNICAL;
+};
+
+const EMPTY_REQUEST_FORM = {
+  candidateId: null,
+  candidateName: '',
+  candidateDesignationId: '',
+  requiredTechnologyIds: [],
+  isUrgent: false,
+  notes: '',
+  interviewType: InterviewType.TECHNICAL,
+  interviewCoordinatorId: null,
+  interviewCoordinatorDepartmentId: null,
 };
 
 const AvailabilityViewPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const calendarFormats = useCalendarFormats();
   const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
@@ -91,7 +114,7 @@ const AvailabilityViewPage = () => {
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
-  const [interviewType, setInterviewType] = useState('TECHNICAL');
+  const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Panel mode
@@ -105,15 +128,65 @@ const AvailabilityViewPage = () => {
   const [bookStartTime, setBookStartTime] = useState('');
   const [bookEndTime, setBookEndTime] = useState('');
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
-  const [requestForm, setRequestForm] = useState({
-    candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '', interviewType: 'TECHNICAL',
-  });
+  const [requestForm, setRequestForm] = useState(EMPTY_REQUEST_FORM);
 
   // Cancel booked dialog
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [coordinatorUsers, setCoordinatorUsers] = useState([]);
+  const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
+  const [creatingGoogleEvent, setCreatingGoogleEvent] = useState(false);
+
+  const createGoogleEventWithToken = useCallback(async (accessToken) => {
+    const event = await createMockCalendarEvent(accessToken);
+    const start = new Date(event.start?.dateTime || event.start?.date);
+    toast({
+      title: 'Mock event created',
+      description: `Added to Google Calendar for ${format(start, 'PPp')}.`,
+    });
+  }, []);
+
+  const requestCalendarAccess = useGoogleLogin({
+    scope: GOOGLE_CALENDAR_EVENTS_SCOPE,
+    onSuccess: async (tokenResponse) => {
+      try {
+        storeCalendarAccessToken(tokenResponse.access_token);
+        await createGoogleEventWithToken(tokenResponse.access_token);
+      } catch (error) {
+        toast({
+          title: 'Failed to create event',
+          description: error.message || 'Could not create the Google Calendar event.',
+          variant: 'destructive',
+        });
+      } finally {
+        setCreatingGoogleEvent(false);
+      }
+    },
+    onError: () => {
+      toast({
+        title: 'Calendar permission required',
+        description: 'Allow Google Calendar access to create the mock event.',
+        variant: 'destructive',
+      });
+      setCreatingGoogleEvent(false);
+    },
+  });
+
+  const handleCreateEventNow = async () => {
+    setCreatingGoogleEvent(true);
+    const storedToken = getStoredCalendarAccessToken();
+    if (storedToken) {
+      try {
+        await createGoogleEventWithToken(storedToken);
+        setCreatingGoogleEvent(false);
+        return;
+      } catch {
+        // Token expired or revoked — request a fresh one below.
+      }
+    }
+    requestCalendarAccess();
+  };
 
   const techDropdownRef = useRef(null);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
@@ -246,12 +319,85 @@ const AvailabilityViewPage = () => {
         ?? (paramCandidateId ? parseInt(paramCandidateId, 10) : prev.candidateId),
       candidateName: incomingFilter?.candidateName ?? prev.candidateName,
       interviewType: resolvedInterviewType,
+      interviewCoordinatorId: incomingFilter?.interviewCoordinatorId ?? prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: incomingFilter?.interviewCoordinatorDepartmentId
+        ?? prev.interviewCoordinatorDepartmentId,
     }));
   }, [location.state, searchParams]);
 
+  const loadCoordinatorUsers = useCallback(async (departmentId) => {
+    if (!departmentId) {
+      setCoordinatorUsers([]);
+      return;
+    }
+    setCoordinatorUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsersByDepartment(departmentId);
+      setCoordinatorUsers(data || []);
+    } catch (err) {
+      console.error('Failed to load coordinator users:', err);
+      setCoordinatorUsers([]);
+    } finally {
+      setCoordinatorUsersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (requestForm.interviewCoordinatorDepartmentId) {
+      loadCoordinatorUsers(requestForm.interviewCoordinatorDepartmentId);
+    } else {
+      setCoordinatorUsers([]);
+    }
+  }, [requestForm.interviewCoordinatorDepartmentId, loadCoordinatorUsers]);
+
+  const handleCoordinatorDepartmentChange = (value) => {
+    const deptId = value === 'NONE' ? null : parseInt(value, 10);
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorDepartmentId: deptId,
+      interviewCoordinatorId: null,
+    }));
+  };
+
+  const handleCoordinatorUserChange = (value) => {
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorId: value === 'NONE' ? null : parseInt(value, 10),
+    }));
+  };
+
+  const resetRequestFormState = useCallback(() => {
+    setRequestForm({ ...EMPTY_REQUEST_FORM });
+    setCandidateSearchTerm('');
+    setBookStartTime('');
+    setBookEndTime('');
+  }, []);
+
+  const clearCandidateSchedulingContext = useCallback(() => {
+    setInterviewType(InterviewType.TECHNICAL);
+    setDateRange({ start: null, end: null });
+    setFilterDept([]);
+    setSelectedDeptForDesignation('');
+    setSelectedTierInDept('');
+    setMinDesignationLevel('');
+    setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
+    navigate('/hr/availability', { replace: true, state: null });
+  }, [navigate]);
+
+  const finalizeScheduledInterview = useCallback((cameFromCandidate) => {
+    resetRequestFormState();
+    if (cameFromCandidate) {
+      clearCandidateSchedulingContext();
+    }
+  }, [resetRequestFormState, clearCandidateSchedulingContext]);
+
+  const cameFromCandidateFlow = Boolean(
+    searchParams.get('candidateId') || location.state?.filterData?.candidateId,
+  );
+
 
   
-
   useEffect(() => {
     if (pendingFilter && tiersForSelectedDept.length > 0) {
       const { minTierOrder } = pendingFilter;
@@ -400,6 +546,15 @@ const AvailabilityViewPage = () => {
   useEffect(() => {
     if (requestForm.candidateId && candidates.length > 0) {
       const candidate = candidates.find(c => c.id === requestForm.candidateId);
+      if (candidate && !isSchedulableCandidate(candidate.status)) {
+        setRequestForm((prev) => ({
+          ...prev,
+          candidateId: null,
+          candidateName: '',
+          candidateDesignationId: '',
+        }));
+        return;
+      }
       if (candidate && candidate.targetDesignationId) {
         setRequestForm(prev => ({
           ...prev,
@@ -513,8 +668,8 @@ const AvailabilityViewPage = () => {
     });
     return;
   }
-    const isBooked = event.resource?.status === 'BOOKED';
-    const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+    const isBooked = event.resource?.status === SlotStatus.BOOKED;
+    const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
 
     if (isBooked && isCompleted) {
       toast({
@@ -549,6 +704,8 @@ const AvailabilityViewPage = () => {
       candidateName: prev.candidateName,
       candidateDesignationId: prev.candidateDesignationId,
       interviewType: resolveInterviewType(prev.interviewType, interviewType),
+      interviewCoordinatorId: prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
@@ -563,16 +720,23 @@ const AvailabilityViewPage = () => {
 
 
   // ── Candidate helpers ─────────────────────────────────────────────────────
-  const handleSelectCandidate = (c) =>
-    setRequestForm({ ...requestForm, candidateId: c.id, candidateName: c.name, candidateDesignationId: c.targetDesignationId || '' });
+  const handleSelectCandidate = (c) => {
+    setRequestForm({
+      ...requestForm,
+      candidateId: c.id,
+      candidateName: c.name,
+      candidateDesignationId: c.targetDesignationId || '',
+    });
+    setCandidateSearchTerm('');
+  };
 
   const handleClearCandidate = () =>
     setRequestForm({ ...requestForm, candidateId: null, candidateName: '', candidateDesignationId: '' });
 
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     // Privilege gate
     if (singlePrivilegeError) {
@@ -595,10 +759,13 @@ const AvailabilityViewPage = () => {
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
         interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
       setSelectedSlot(null);
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -607,8 +774,8 @@ const AvailabilityViewPage = () => {
 
   // ── Submit panel interview ────────────────────────────────────────────────
   const handleSendPanelRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
@@ -641,11 +808,15 @@ const AvailabilityViewPage = () => {
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
         interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
       setPanelSlots([]);
-      setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
+      setPanelBookStartOverride('');
+      setPanelBookEndOverride('');
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -766,30 +937,22 @@ const calendarSlotPropGetter = useCallback((date) => {
       .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
   }, [technologies, selectedTechCategory, techSearchTerm]);
 
-  const filteredCandidates = candidates.filter((c) =>
+  const schedulableCandidates = useMemo(
+    () => candidates.filter((candidate) => isSchedulableCandidate(candidate.status)),
+    [candidates],
+  );
+
+  const filteredCandidates = schedulableCandidates.filter((c) =>
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const availableCount = events.filter((e) => e.resource?.status === 'AVAILABLE').length;
+  const availableCount = events.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
   const bookedCount = events.filter(
-    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus !== 'COMPLETED',
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
   ).length;
   const completedCount = events.filter(
-    (e) => e.resource?.status === 'BOOKED' && e.resource?.interviewStatus === 'COMPLETED',
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
-
-  const departmentLegend = useMemo(() => {
-    const seen = new Map();
-    events.forEach((event) => {
-      const department = event.resource?.department;
-      if (department && !seen.has(department)) {
-        seen.set(department, getDepartmentPalette(department));
-      }
-    });
-    return Array.from(seen.entries())
-      .map(([name, palette]) => ({ name, palette }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [events]);
 
   // ── Interview type (shared between single + panel dialogs) ───────────────
   const renderInterviewTypeSection = () => (
@@ -811,11 +974,67 @@ const calendarSlotPropGetter = useCallback((date) => {
             <SelectItem value="HR">HR Interview</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {resolveInterviewType(requestForm.interviewType, interviewType) === 'HR'
-            ? 'Candidate status will move to HR Round when this interview is booked.'
-            : 'Candidate status will move to Technical Round when this interview is booked.'}
-        </p>
+        
+      </CardContent>
+    </Card>
+  );
+
+  const renderCoordinatorSection = () => (
+    <Card className="border-slate-200">
+      <CardContent className="p-4 space-y-4">
+        <p className="text-sm font-semibold">Interview Coordinator <span className="font-normal text-muted-foreground">(optional)</span></p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Coordinator Department</Label>
+            <Select
+              value={requestForm.interviewCoordinatorDepartmentId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorDepartmentChange}
+            >
+              <SelectTrigger className="bg-white dark:bg-gray-900">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Select department</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id.toString()}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Interview Coordinator</Label>
+            <SearchableSelect
+              value={requestForm.interviewCoordinatorId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorUserChange}
+              disabled={!requestForm.interviewCoordinatorDepartmentId || coordinatorUsersLoading}
+              className="bg-white dark:bg-gray-900"
+              label="Coordinator"
+              placeholder={
+                !requestForm.interviewCoordinatorDepartmentId
+                  ? 'Select department first'
+                  : coordinatorUsersLoading
+                    ? 'Loading users...'
+                    : undefined
+              }
+              searchPlaceholder="Search coordinators..."
+              emptyMessage={
+                coordinatorUsers.length === 0
+                  ? 'No user found for selected department'
+                  : 'No matching users found'
+              }
+              options={coordinatorUsers.map((user) => ({
+                value: user.id.toString(),
+                label: `${user.fullName} (${user.email})`,
+                keywords: `${user.fullName} ${user.email}`,
+              }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Can be anyone from the selected department who will join and coordinate the interview.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -892,11 +1111,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                 }
               </div>
             )}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Or enter manually</Label>
-              <Input placeholder="Candidate name" value={requestForm.candidateName}
-                onChange={(e) => setRequestForm({ ...requestForm, candidateName: e.target.value })} />
-            </div>
+            {!candidateSearchTerm && (
+              <p className="text-xs text-muted-foreground">Search and select an existing candidate from the list.</p>
+            )}
           </>
         )}
       </div>
@@ -919,12 +1136,6 @@ const calendarSlotPropGetter = useCallback((date) => {
         <Textarea placeholder="Special requirements…" value={requestForm.notes}
           onChange={(e) => setRequestForm({ ...requestForm, notes: e.target.value })} rows={3} />
       </div>
-
-      <div className="flex items-center gap-2">
-        <input type="checkbox" id="urgent" checked={requestForm.isUrgent}
-          onChange={(e) => setRequestForm({ ...requestForm, isUrgent: e.target.checked })} className="rounded" />
-        <Label htmlFor="urgent" className="cursor-pointer text-sm">Mark as urgent</Label>
-      </div>
     </div>
   );
 
@@ -946,71 +1157,6 @@ const calendarSlotPropGetter = useCallback((date) => {
           </div>
          
         </motion.div>
-
-        {/* Department color legend */}
-        {departmentLegend.length > 0 && (
-          <div className="hr-interviewer-legend">
-            {departmentLegend.map(({ name, palette }) => (
-              <div
-                key={name}
-                className="hr-interviewer-legend-chip"
-                style={{
-                  borderColor: `${palette.solid}60`,
-                  background: `${palette.solid}12`,
-                  color: palette.solid,
-                }}
-              >
-                <div className="hr-interviewer-legend-dot" style={{ backgroundColor: palette.solid }} />
-                {name}
-              </div>
-            ))}
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#3b82f660', background: '#3b82f612', color: '#2563eb' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: BOOKED_TYPE_PALETTES.TECHNICAL.solid, borderRadius: 2 }}
-              />
-              Booked · Technical
-            </div>
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#ec489960', background: '#ec489912', color: '#db2777' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: BOOKED_TYPE_PALETTES.HR.solid, borderRadius: 2 }}
-              />
-              Booked · HR
-            </div>
-            <div
-              className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#05966960', background: '#05966912', color: '#047857' }}
-            >
-              <div
-                className="hr-interviewer-legend-dot"
-                style={{ backgroundColor: COMPLETED_EVENT_PALETTE.solid, borderRadius: 2 }}
-              />
-              Completed
-            </div>
-          </div>
-        )}
-
-        {/* Slot counts */}
-        {/* <div className="flex items-center gap-6 px-1 flex-wrap">
-          {[
-            { color: '#6366f1', label: 'Available slots', count: availableCount, textColor: 'text-indigo-600' },
-            { color: '#10b981', label: 'Booked slots',    count: bookedCount,    textColor: 'text-emerald-600' },
-            { color: '#0ea5e9', label: 'Panel selected',  count: panelSlots.length, textColor: 'text-sky-600' },
-          ].map(({ color, label, count, textColor }) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-md shadow-sm" style={{ background: color }} />
-              <span className="text-sm font-medium text-muted-foreground">{label}</span>
-              {count > 0 && <span className={`text-xs font-bold ${textColor} px-1.5 py-0.5 rounded-full`}>{count}</span>}
-            </div>
-          ))}
-        </div> */}
 
         {/* Filters */}
         <Card>
@@ -1281,7 +1427,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                     onClick={() => {
                       setPanelBookStartOverride('');
                       setPanelBookEndOverride('');
-                      setRequestForm(prev => ({ candidateId: prev.candidateId, candidateName: prev.candidateName, candidateDesignationId: prev.candidateDesignationId, requiredTechnologyIds: [], isUrgent: false, notes: '' }));
+                      setRequestForm(prev => ({
+                        candidateId: prev.candidateId,
+                        candidateName: prev.candidateName,
+                        candidateDesignationId: prev.candidateDesignationId,
+                        interviewType: prev.interviewType,
+                        interviewCoordinatorId: prev.interviewCoordinatorId,
+                        interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
+                        requiredTechnologyIds: [],
+                        isUrgent: false,
+                        notes: '',
+                      }));
                       setCandidateSearchTerm('');
                       setPanelDialogOpen(true);
                     }}
@@ -1367,6 +1523,27 @@ const calendarSlotPropGetter = useCallback((date) => {
                 </motion.div>
               )}
             </AnimatePresence>
+
+
+            {/* ------- commented out for now ---- */}
+            <div className="pt-4 px-2 border-t border-slate-100 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={creatingGoogleEvent}
+                onClick={handleCreateEventNow}
+              >
+                <CalendarPlus className="w-4 h-4" />
+                {creatingGoogleEvent ? 'Creating event…' : 'Create Event Now'}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Creates a mock Google Calendar event starting 10 minutes from now.
+              </p>
+            </div>
+
+            {/* ------- commented out for now ---- */}
+
           </CardContent>
         </Card>
       </div>
@@ -1393,6 +1570,16 @@ const calendarSlotPropGetter = useCallback((date) => {
               {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
                 <p className="text-sm">
                   Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.interviewCoordinatorName && (
+                <p className="text-sm">
+                  Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.coordinatedHrName && (
+                <p className="text-sm">
+                  Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
@@ -1514,6 +1701,8 @@ const calendarSlotPropGetter = useCallback((date) => {
               </Card>
 
               {renderInterviewTypeSection()}
+
+              {renderCoordinatorSection()}
 
               {/* Candidate + privilege check */}
               {renderCandidateSection(singlePrivilegeError)}
@@ -1638,6 +1827,8 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Card>
 
             {renderInterviewTypeSection()}
+
+            {renderCoordinatorSection()}
 
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}

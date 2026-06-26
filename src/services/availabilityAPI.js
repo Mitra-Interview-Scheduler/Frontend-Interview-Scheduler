@@ -1,6 +1,7 @@
 // src/services/availabilityAPI.js
 import api from './api';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
+import { InterviewRequestStatus } from '@/lib/statusConstants';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
 export const availabilityAPI = {
@@ -58,7 +59,7 @@ export const availabilityAPI = {
    */
   proposeAlternativeTime: async (payload) => {
     console.info('[STUB] proposeAlternativeTime', payload);
-    return { status: 'PENDING', ...payload };
+    return { status: InterviewRequestStatus.PENDING, ...payload };
   },
 
   // ── Write ─────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags } from 'lucide-react';
+import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags, ListChecks } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
@@ -17,14 +17,25 @@ import { designationAPI } from '@/services/designationAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
+import ObligatoryQuestionsManager from '@/components/admin/ObligatoryQuestionsManager';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'categories' ? 'categories' : 'forms';
+  const tabParam = searchParams.get('tab');
+  const activeTab = tabParam === 'categories'
+    ? 'categories'
+    : tabParam === 'obligatory'
+      ? 'obligatory'
+      : 'forms';
 
   const setActiveTab = (tab) => {
-    setSearchParams(tab === 'categories' ? { tab: 'categories' } : {});
+    if (tab === 'forms') {
+      setSearchParams({});
+      return;
+    }
+    setSearchParams({ tab });
   };
 
   const [loading, setLoading] = useState(true);
@@ -44,7 +55,23 @@ const FeedbackFormsPage = () => {
     searchTerm: '',
     departmentId: '',
     designationId: '',
+    interviewType: '',
   });
+
+  const availableDesignations = useMemo(() => {
+    if (!filters.departmentId) return [];
+    const departmentId = Number(filters.departmentId);
+    return designations.filter((designation) => designation.departmentId === departmentId);
+  }, [designations, filters.departmentId]);
+
+  const handleDepartmentFilterChange = (value) => {
+    const departmentId = value === 'all' ? '' : value;
+    setFilters((current) => ({
+      ...current,
+      departmentId,
+      designationId: '',
+    }));
+  };
 
   const totalPages = Math.ceil(filteredForms.length / itemsPerPage);
   const paginatedForms = filteredForms.slice(
@@ -130,6 +157,15 @@ const FeedbackFormsPage = () => {
       );
     }
 
+    if (filters.interviewType) {
+      const selectedType = filters.interviewType.toUpperCase();
+      result = result.filter((form) =>
+        (form.scopes?.interviewTypes || []).some(
+          (interviewType) => String(interviewType).toUpperCase() === selectedType
+        )
+      );
+    }
+
     setFilteredForms(result);
   }, [forms, filters, statusFilter]);
 
@@ -153,23 +189,6 @@ const FeedbackFormsPage = () => {
     } finally {
       setStatusUpdatingId(null);
     }
-  };
-
-  const getFormStats = (form) => {
-    const stats = [];
-    if (form.questions?.length) {
-      stats.push(`${form.questions.length} question(s)`);
-    }
-    if (form.scopes?.departmentIds?.length) {
-      stats.push(`${form.scopes.departmentIds.length} department(s)`);
-    }
-    if (form.scopes?.designationIds?.length) {
-      stats.push(`${form.scopes.designationIds.length} designation(s)`);
-    }
-    if (form.scopes?.tierIds?.length) {
-      stats.push(`${form.scopes.tierIds.length} tier(s)`);
-    }
-    return stats.join(' • ');
   };
 
   const getDepartmentName = (id) => {
@@ -198,33 +217,9 @@ const FeedbackFormsPage = () => {
           </div>
 
           {activeTab === 'forms' && (
-          <div className="flex gap-2">
             <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
               <Plus className="w-4 h-4" /> New Form
             </Button>
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  setLoading(true);
-                  const createdForms = await feedbackQuestionsAPI.seedMock({ totalForms: 5 });
-                  toast({
-                    title: 'Seeded',
-                    description: `${createdForms.length} mock feedback forms created from the template questions.`,
-                  });
-                  await refreshData();
-                } catch (err) {
-                  console.error('Seed failed', err);
-                  toast({ title: 'Seed failed', description: err.response?.data?.message || err.message || 'Unable to seed mock form', variant: 'destructive' });
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="gap-2 w-fit"
-            >
-              Seed 5 Mock Forms
-            </Button>
-          </div>
           )}
         </div>
 
@@ -232,20 +227,23 @@ const FeedbackFormsPage = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           tabs={[
-            { value: 'forms', label: 'Forms', icon: FileText, count: forms.length },
-            { value: 'categories', label: 'Categories', icon: Tags, count: questionCategories.length },
+            { value: 'forms', label: 'Forms', icon: FileText },
+            { value: 'obligatory', label: 'Obligatory Questions', icon: ListChecks },
+            { value: 'categories', label: 'Categories', icon: Tags },
           ]}
         />
 
         {activeTab === 'categories' ? (
           <CategoryManager type="question" onCategoriesChange={setQuestionCategories} />
+        ) : activeTab === 'obligatory' ? (
+          <ObligatoryQuestionsManager />
         ) : (
           <>
         <Card>
           <CardHeader>
             <CardTitle>Filters</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-4">
+          <CardContent className="grid gap-4 md:grid-cols-5">
             <div className="space-y-2">
               <Label>Search</Label>
               <div className="relative">
@@ -263,7 +261,7 @@ const FeedbackFormsPage = () => {
               <Label>Department</Label>
               <Select 
                 value={filters.departmentId || 'all'} 
-                onValueChange={(value) => setFilters({ ...filters, departmentId: value === 'all' ? '' : value })}
+                onValueChange={handleDepartmentFilterChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All departments" />
@@ -284,15 +282,36 @@ const FeedbackFormsPage = () => {
               <Select 
                 value={filters.designationId || 'all'} 
                 onValueChange={(value) => setFilters({ ...filters, designationId: value === 'all' ? '' : value })}
+                disabled={!filters.departmentId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All designations" />
+                  <SelectValue placeholder={filters.departmentId ? 'All designations' : 'Select department first'} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All designations</SelectItem>
-                  {designations.map((desig) => (
+                  {availableDesignations.map((desig) => (
                     <SelectItem key={desig.id} value={desig.id.toString()}>
                       {desig.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Interview Type</Label>
+              <Select
+                value={filters.interviewType || 'all'}
+                onValueChange={(value) => setFilters({ ...filters, interviewType: value === 'all' ? '' : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All interview types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All interview types</SelectItem>
+                  {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -377,7 +396,6 @@ const FeedbackFormsPage = () => {
                                 >
                                   {form.isActive ? 'Active' : 'Inactive'}
                                 </Badge>
-                                <span>{getFormStats(form)}</span>
                               </div>
                             </div>
 
@@ -410,29 +428,6 @@ const FeedbackFormsPage = () => {
                               </Button>
                             </div>
                           </div>
-
-                          {form.scopes && (
-                            <div className="flex flex-wrap gap-2">
-                              {form.scopes.departmentIds?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {form.scopes.departmentIds.map((deptId) => (
-                                    <Badge key={`dept-${deptId}`} variant="secondary">
-                                      {getDepartmentName(deptId)}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {form.scopes.designationIds?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {form.scopes.designationIds.map((desigId) => (
-                                    <Badge key={`desig-${desigId}`} variant="outline">
-                                      {getDesignationName(desigId)}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </CardContent>
                     </Card>

@@ -16,6 +16,14 @@ api.interceptors.request.use(
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       'UTC';
     config.headers['X-Timezone'] = selectedTimeZone;
+    // Let the browser set multipart boundary; axios must not send application/json.
+    if (config.data instanceof FormData) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else {
+        delete config.headers['Content-Type'];
+      }
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -24,7 +32,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    if (error.config?._skipAuthRedirect) {
+      return Promise.reject(error);
+    }
+    // Only expired/invalid sessions should force re-login. A 403 means the user
+    // is authenticated but lacks permission — redirecting to login is misleading.
+    if (error.response?.status === 401) {
       const requestUrl = error.config?.url || '';
       const isAuthRequest = requestUrl.includes('/auth/login')
         || requestUrl.includes('/auth/register')

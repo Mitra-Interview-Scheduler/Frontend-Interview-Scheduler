@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { availabilityAPI } from '@/services/availabilityAPI';
+import { SlotStatus } from '@/lib/statusConstants';
 import { toast } from '@/hooks/use-toast';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
@@ -44,7 +45,7 @@ function ProposeTimeDialog({
       const data = await availabilityAPI.getMyAvailability();
       const now = new Date();
       const futureAvailable = (Array.isArray(data) ? data : [])
-        .filter((slot) => slot.status === 'AVAILABLE' && isAfter(new Date(slot.startDateTime), now))
+        .filter((slot) => slot.status === SlotStatus.AVAILABLE && isAfter(new Date(slot.startDateTime), now))
         .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
 
       setSlots(futureAvailable);

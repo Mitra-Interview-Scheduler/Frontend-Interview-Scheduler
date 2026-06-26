@@ -15,9 +15,9 @@ const adminLinks = [
   { icon: Users, label: 'User Management', path: '/admin/users' },
   { icon: Shield, label: 'Designations', path: '/admin/designations' },
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
-  { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
+  // { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
-  { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
+  // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
   { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
 ];
 
@@ -25,9 +25,7 @@ const hrLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/hr/dashboard' },
   { icon: Users, label: 'Candidates', path: '/hr/candidates' },
   { icon: UserCheck, label: 'Interviewer Availability', path: '/hr/availability' },
-  // { icon: Shield, label: 'Designations', path: '/hr/designations' },
-  // { icon: Briefcase, label: 'Technologies', path: '/hr/technologies' }
-  
+  { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
 ];
 
 const interviewerLinks = [

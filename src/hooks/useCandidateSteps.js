@@ -56,10 +56,23 @@ export const useCandidateSteps = (candidate) => {
     Promise.all([
       loadMasterSteps,
       loadClosingSteps,
-      candidatePipelineAPI.getCandidatePipeline(candidate.id).catch((error) => {
-        console.error(`Failed to load pipeline for candidate ${candidate.id}:`, error);
-        return [];
-      }),
+      candidatePipelineAPI.getCandidatePipeline(candidate.id)
+        .catch((error) => {
+          console.error(`Failed to load pipeline for candidate ${candidate.id}:`, error);
+          return [];
+        })
+        .then(async (pipelineSteps) => {
+          if (Array.isArray(pipelineSteps) && pipelineSteps.length > 0) {
+            return pipelineSteps;
+          }
+          try {
+            await candidatePipelineAPI.initializePipeline(candidate.id);
+            return candidatePipelineAPI.getCandidatePipeline(candidate.id);
+          } catch (initError) {
+            console.error(`Failed to initialize pipeline for candidate ${candidate.id}:`, initError);
+            return [];
+          }
+        }),
     ]).then(([masterSteps, closing, pipelineSteps]) => {
       if (!active) return;
       const steps = Array.isArray(pipelineSteps) && pipelineSteps.length > 0

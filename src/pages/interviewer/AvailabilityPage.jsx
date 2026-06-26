@@ -19,12 +19,13 @@ import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
+import { InterviewScheduleStatus, SlotStatus } from '@/lib/statusConstants';
 import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
 import EditSlotDialog from './components/EditSlotDialog';
 import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
-import { calendarLocalizer } from '@/lib/calendarUtils';
+import { calendarLocalizer, computeSlotDurationHours } from '@/lib/calendarUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
 
 
@@ -164,14 +165,14 @@ const AvailabilityPage = () => {
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   // ── Data loading 
   const mapSlotsToEvents = (data) => data.map((slot) => {
-    const isCompleted = slot.interviewStatus === 'COMPLETED';
-    const statusKey = slot.status === 'BOOKED'
+    const isCompleted = slot.interviewStatus === InterviewScheduleStatus.COMPLETED;
+    const statusKey = slot.status === SlotStatus.BOOKED
       ? (isCompleted ? 'completed' : 'booked')
       : slot.status.toLowerCase();
 
     return {
       id: slot.id,
-      title: slot.status === 'BOOKED'
+      title: slot.status === SlotStatus.BOOKED
         ? (isCompleted
           ? `✓ ${slot.candidateName || 'Interview Completed'}`
           : `🔒 ${slot.candidateName || 'Interview Scheduled'}`)
@@ -183,7 +184,7 @@ const AvailabilityPage = () => {
       candidateName: slot.candidateName,
       interviewScheduleId: slot.interviewScheduleId,
       interviewStatus: slot.interviewStatus,
-      durationHours: slot.durationHours,
+      durationHours: computeSlotDurationHours(slot.startDateTime, slot.endDateTime, slot.durationHours),
       recurrenceGroupId: slot.recurrenceGroupId,
       isRecurring: slot.isRecurring,
     };
@@ -658,7 +659,10 @@ const handleSelectSlot = ({ start, end }) => {
         interviewScheduleId={selectedInterviewScheduleId}
         onOpenChange={(open) => {
           setIsInterviewStartDialogOpen(open);
-          if (!open) setSelectedInterviewScheduleId(null);
+          if (!open) {
+            setSelectedInterviewScheduleId(null);
+            refreshCalendarAvailability();
+          }
         }}
       />
     </Layout>

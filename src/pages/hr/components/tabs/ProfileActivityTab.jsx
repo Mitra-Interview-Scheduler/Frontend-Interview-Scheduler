@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Activity, LayoutList, ListTree, Loader2, Table2 } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { buildCandidateActivityHistory } from '@/lib/candidateSteps';
+import { InterviewScheduleStatus, PipelineStepStatus } from '@/lib/statusConstants';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import '@/styles/ProfileActivityTab.css';
 
@@ -14,44 +15,71 @@ const VIEW_MODES = [
   { id: 'table', label: 'Table', icon: Table2 },
 ];
 
-const isInterviewActivity = (entry) => entry.kind === 'INTERVIEW_PRELUDE';
-
+const isInterviewActivity = (entry) => (
+  entry.kind === 'INTERVIEW_PRELUDE'
+  || Boolean(entry.interviewRequest || entry.panel || entry.detail)
+);
 
 const InterviewActivityPrelude = ({ entry, formatDateTime, formatDateTimeRange }) => {
   const request = entry.interviewRequest;
-  const interviewer = request?.assignedInterviewerName || entry.detail;
-  const start = request?.scheduledStartDateTime || request?.preferredStartDateTime || entry.timestamp;
-  const end = request?.scheduledEndDateTime || request?.preferredEndDateTime || entry.endTimestamp;
+  const interviewerDetail = entry.detail
+    || request?.assignedInterviewerName
+    || null;
+  const start = entry.timestamp
+    || request?.scheduledStartDateTime
+    || request?.preferredStartDateTime
+    || null;
+  const end = entry.endTimestamp
+    || request?.scheduledEndDateTime
+    || request?.preferredEndDateTime
+    || null;
 
   return (
     <p className="mt-0.5 text-xs text-slate-600">
-      {interviewer ? `With ${interviewer}` : 'Interview scheduled'}
+      {interviewerDetail ? `With ${interviewerDetail}` : 'Interview scheduled'}
       {start ? ` · ${end ? formatDateTimeRange(start, end) : formatDateTime(start)}` : ''}
     </p>
   );
 };
 
 const formatActivityWhen = (entry, formatDateTime, formatDateTimeRange) => {
-  if (isInterviewActivity(entry) && entry.timestamp && entry.endTimestamp) {
-    return formatDateTimeRange(entry.timestamp, entry.endTimestamp);
+  const start = entry.timestamp;
+  const end = entry.endTimestamp;
+
+  if (isInterviewActivity(entry)) {
+    if (start && end) return formatDateTimeRange(start, end);
+    if (start) return formatDateTime(start);
   }
-  if (entry.timestamp) return formatDateTime(entry.timestamp);
+
+  if (start) return formatDateTime(start);
   return 'Date unavailable';
 };
 
-const ActivityEntryDetails = ({ entry, formatDateTime, formatDateTimeRange }) => (
-  <>
-    {entry.detail && (
-      <p className="mt-0.5 text-xs text-slate-600">{entry.detail}</p>
-    )}
-    <p className="mt-1 text-xs text-slate-500">
-      {formatActivityWhen(entry, formatDateTime, formatDateTimeRange)}
-    </p>
-  </>
-);
+const ActivityEntryDetails = ({ entry, formatDateTime, formatDateTimeRange }) => {
+  if (isInterviewActivity(entry)) {
+    return (
+      <InterviewActivityPrelude
+        entry={entry}
+        formatDateTime={formatDateTime}
+        formatDateTimeRange={formatDateTimeRange}
+      />
+    );
+  }
+
+  return (
+    <>
+      {entry.detail && (
+        <p className="mt-0.5 text-xs text-slate-600">{entry.detail}</p>
+      )}
+      <p className="mt-1 text-xs text-slate-500">
+        {formatActivityWhen(entry, formatDateTime, formatDateTimeRange)}
+      </p>
+    </>
+  );
+};
 
 const ActivityBadges = ({ entry }) => {
-  const isPipelineCurrent = entry.kind === 'PIPELINE' && entry.stepStatus === 'CURRENT';
+  const isPipelineCurrent = entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -66,7 +94,12 @@ const ActivityBadges = ({ entry }) => {
           Active
         </Badge>
       )}
-      {isInterviewActivity(entry) && entry.stepStatus === 'SCHEDULED' && (
+      {entry.cancelledInterview && (
+        <Badge variant="outline" className="rounded-full text-[10px] border-red-200 text-red-700 bg-red-50">
+          Interview cancelled
+        </Badge>
+      )}
+      {isInterviewActivity(entry) && entry.stepStatus === InterviewScheduleStatus.SCHEDULED && (
         <Badge variant="outline" className="rounded-full text-[10px] border-sky-200 text-sky-700 bg-sky-50">
           Interview
         </Badge>
@@ -136,7 +169,7 @@ const ActivityFeed = ({ activities, formatDateTime, formatDateTimeRange }) => {
   return (
     <div className="profile-activity-feed">
       {feedItems.map((entry) => {
-        const isPipelineCurrent = entry.kind === 'PIPELINE' && entry.stepStatus === 'CURRENT';
+        const isPipelineCurrent = entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT;
 
         if (entry.kind === 'INTERVIEW_PRELUDE') {
           return (
@@ -208,7 +241,7 @@ const ActivityTable = ({ activities, formatDateTime, formatDateTimeRange }) => (
           return (
           <tr
             key={entry.id}
-            className={entry.kind === 'PIPELINE' && entry.stepStatus === 'CURRENT' ? 'is-current' : ''}
+            className={entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT ? 'is-current' : ''}
           >
             <td>
               <div className="flex items-start gap-2">
@@ -220,7 +253,7 @@ const ActivityTable = ({ activities, formatDateTime, formatDateTimeRange }) => (
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-slate-900">{entry.stepLabel}</span>
-                    {entry.kind === 'PIPELINE' && entry.stepStatus === 'CURRENT' && (
+                    {entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT && (
                       <Badge className="rounded-full bg-blue-600 text-[10px] hover:bg-blue-600">
                         Active
                       </Badge>

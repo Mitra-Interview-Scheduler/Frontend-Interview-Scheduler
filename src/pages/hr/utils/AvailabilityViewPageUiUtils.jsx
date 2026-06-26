@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle2, Lock } from 'lucide-react';
+import { InterviewScheduleStatus, InterviewType, SlotStatus } from '@/lib/statusConstants';
 
 export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
@@ -28,13 +29,13 @@ export const PANEL_PALETTE = {
 };
 
 export const BOOKED_TYPE_PALETTES = {
-  TECHNICAL: {
+  [InterviewType.TECHNICAL]: {
     bg: 'linear-gradient(135deg, #3b82f6, #2563eb)',
     solid: '#3b82f6',
     border: '#1e40af',
     text: '#fff',
   },
-  HR: {
+  [InterviewType.HR]: {
     bg: 'linear-gradient(135deg, #ec4899, #db2777)',
     solid: '#ec4899',
     border: '#9d174d',
@@ -83,8 +84,8 @@ export const getDepartmentPalette = (department) => {
 
 export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) => {
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-  const isBooked = event.resource?.status === 'BOOKED';
-  const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+  const isBooked = event.resource?.status === SlotStatus.BOOKED;
+  const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
   const resource = event.resource || {};
   const candidateName = resource.candidateName?.trim();
   const interviewerName = resource.interviewer?.trim();
@@ -137,8 +138,8 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
 };
 
 export const getEventStyle = (event, panelSlots) => {
-  const isBooked = event.resource?.status === 'BOOKED';
-  const isCompleted = event.resource?.interviewStatus === 'COMPLETED';
+  const isBooked = event.resource?.status === SlotStatus.BOOKED;
+  const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const deptPalette = getDepartmentPalette(event.resource?.department);
   const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
@@ -178,8 +179,8 @@ export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end)
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const timeRange = formatTimeRange(event.start, event.end);
 
-  if (r?.status === 'BOOKED') {
-    if (r.interviewStatus === 'COMPLETED') {
+  if (r?.status === SlotStatus.BOOKED) {
+    if (r.interviewStatus === InterviewScheduleStatus.COMPLETED) {
       return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nInterview finished — feedback locked`;
     }
     return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;

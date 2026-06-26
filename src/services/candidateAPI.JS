@@ -1,6 +1,44 @@
 import api from './api';
 import { withQuery } from './queryParams';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
+
+/** Native fetch for multipart — avoids axios Content-Type boundary issues. */
+async function uploadMultipartFile(url, file, method = 'POST') {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = localStorage.getItem('token');
+  const timezone =
+    localStorage.getItem('preferredTimeZone') ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    'UTC';
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'X-Timezone': timezone,
+    },
+    body: formData,
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    const error = new Error(data.message || `Document upload failed (${response.status})`);
+    error.response = { status: response.status, data };
+    throw error;
+  }
+
+  return data;
+}
+
 export const candidateAPI = {
   // Get all candidates with optional filters
   getAllCandidates: async (filters = {}, pagination = null) => {
@@ -65,29 +103,19 @@ export const candidateAPI = {
     return response.data;
   },
 
-  uploadCandidateDocument: async (candidateId, file, documentType = 'CV') => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await api.post(
+  uploadCandidateDocument: async (candidateId, file, documentType = 'CV') =>
+    uploadMultipartFile(
       `/candidates/${candidateId}/documents?documentType=${encodeURIComponent(documentType)}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    );
-    return response.data;
-  },
+      file,
+      'POST'
+    ),
 
-  replaceCandidateDocument: async (candidateId, documentId, file, documentType = 'CV') => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await api.put(
+  replaceCandidateDocument: async (candidateId, documentId, file, documentType = 'CV') =>
+    uploadMultipartFile(
       `/candidates/${candidateId}/documents/${documentId}?documentType=${encodeURIComponent(documentType)}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    );
-    return response.data;
-  },
+      file,
+      'PUT'
+    ),
 
   downloadCandidateDocument: async (candidateId, documentId) => {
     const response = await api.get(

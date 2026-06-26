@@ -9,6 +9,7 @@ import {
 export function DocumentDropzone({
   file,
   onFileSelect,
+  onAddDocument,
   type,
   onTypeChange,
   disabled = false,
@@ -17,6 +18,24 @@ export function DocumentDropzone({
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+
+  const resetPicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChosen = (selectedFile) => {
+    if (!selectedFile) return;
+
+    if (isCreate && onAddDocument) {
+      onAddDocument(selectedFile, type);
+      resetPicker();
+      return;
+    }
+
+    onFileSelect?.(selectedFile);
+  };
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -32,10 +51,10 @@ export function DocumentDropzone({
     e.preventDefault();
     setIsDragging(false);
     if (disabled) return;
-    
+
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile) {
-      onFileSelect(droppedFile);
+      handleFileChosen(droppedFile);
     }
   };
 
@@ -57,7 +76,11 @@ export function DocumentDropzone({
 
         <div className="space-y-1">
           <p className="text-sm font-medium">
-            {file ? file.name : 'Drop document here or click to upload'}
+            {isCreate
+              ? 'Drop document here or click to add'
+              : file
+                ? file.name
+                : 'Drop document here or click to upload'}
           </p>
           <p className="text-xs text-muted-foreground">
             PDF, DOC, or DOCX up to 10 MB
@@ -72,7 +95,7 @@ export function DocumentDropzone({
         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         onChange={(e) => {
           const selectedFile = e.target.files?.[0];
-          if (selectedFile) onFileSelect(selectedFile);
+          if (selectedFile) handleFileChosen(selectedFile);
         }}
         disabled={disabled}
       />
@@ -92,9 +115,7 @@ export function DocumentDropzone({
 
       {isCreate ? (
         <p className="text-xs text-muted-foreground">
-          {file
-            ? 'This document will be uploaded when you add the candidate.'
-            : 'Choose a document to upload with the candidate.'}
+          Documents are added to the queue and uploaded when you save the candidate.
         </p>
       ) : (
         <Button

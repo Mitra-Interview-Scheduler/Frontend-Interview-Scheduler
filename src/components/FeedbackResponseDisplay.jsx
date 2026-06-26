@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Star, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { readCommentValue, readResponseValue } from '@/lib/feedbackResponseKeys';
 
 const SUMMARY_QUESTION_LABELS = new Set(['overall rating', 'decision on hire']);
 
@@ -96,10 +97,10 @@ const FeedbackResponseDisplay = ({ form, responses = {}, submittedAt = null }) =
   const hireDecisionQuestion = findQuestionByLabel(lookupQuestions, 'Decision on Hire');
 
   const overallRating = overallRatingQuestion
-    ? resolveAnswerLabel(overallRatingQuestion, responses[overallRatingQuestion.order])
+    ? resolveAnswerLabel(overallRatingQuestion, readResponseValue(responses, overallRatingQuestion))
     : null;
   const hireDecision = hireDecisionQuestion
-    ? resolveAnswerLabel(hireDecisionQuestion, responses[hireDecisionQuestion.order])
+    ? resolveAnswerLabel(hireDecisionQuestion, readResponseValue(responses, hireDecisionQuestion))
     : null;
 
   const hasSummary = (overallRating && overallRating !== '—') || (hireDecision && hireDecision !== '—');
@@ -138,8 +139,8 @@ const FeedbackResponseDisplay = ({ form, responses = {}, submittedAt = null }) =
 
       <div className="space-y-3">
         {detailQuestions.map((question, index) => {
-          const answer = responses[question.order];
-          const comment = responses[`${question.order}_comment`];
+          const answer = readResponseValue(responses, question);
+          const comment = readCommentValue(responses, question);
 
           return (
             <div
