@@ -30,7 +30,7 @@ function CandidateDetailsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [interviewRefreshKey, setInterviewRefreshKey] = useState(0);
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
-  const { interviewRequests, interviews, panels, loading: interviewsLoading } = useCandidateInterviews(
+  const { interviewRequests, interviews, panels, loading: interviewsLoading, error: interviewsError } = useCandidateInterviews(
     candidate?.id,
     interviewRefreshKey,
   );
@@ -321,6 +321,7 @@ function CandidateDetailsPage() {
               interviews={interviews}
               panels={panels}
               interviewsLoading={interviewsLoading}
+              interviewsError={interviewsError}
               onInterviewsRefresh={refreshInterviews}
               documents={documents}
               documentsLoading={documentsLoading}

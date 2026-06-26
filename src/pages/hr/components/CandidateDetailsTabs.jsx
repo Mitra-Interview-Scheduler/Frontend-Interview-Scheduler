@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { getCandidateDetailTabs } from './candidateDetailsTabsConfig';
 import { resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
 import { InterviewScheduleStatus } from '@/lib/statusConstants';
@@ -12,6 +13,7 @@ const CandidateDetailsTabs = ({
   interviews = [],
   panels = [],
   interviewsLoading = false,
+  interviewsError = null,
   onInterviewsRefresh = () => {},
   documents = [],
   documentsLoading = false,
@@ -64,6 +66,14 @@ const CandidateDetailsTabs = ({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full min-w-0 w-full flex-col overflow-hidden">
+      {interviewsError && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span>{interviewsError}</span>
+          <Button variant="outline" size="sm" onClick={onInterviewsRefresh} className="shrink-0 border-red-300 text-red-800 hover:bg-red-100">
+            Retry
+          </Button>
+        </div>
+      )}
       <div className="sticky top-0 z-10 shrink-0 pb-3">
         <div className="relative">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-6 rounded-l-xl bg-gradient-to-r from-white to-transparent" />

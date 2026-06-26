@@ -6,17 +6,22 @@ export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
   const [interviews, setInterviews] = useState([]);
   const [panels, setPanels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!candidateId) {
       setInterviews([]);
       setPanels([]);
+      setError(null);
       return undefined;
     }
 
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setError(null);
+      setInterviews([]);
+      setPanels([]);
       try {
         const [interviewData, panelData] = await Promise.all([
           hrAvailabilityAPI.getInterviewsForCandidate(candidateId),
@@ -26,10 +31,9 @@ export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
           setInterviews(Array.isArray(interviewData) ? interviewData : []);
           setPanels(Array.isArray(panelData) ? panelData : []);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setInterviews([]);
-          setPanels([]);
+          setError(err?.response?.data?.message || err?.message || 'Failed to load interviews');
         }
       } finally {
         if (!cancelled) {
@@ -49,7 +53,7 @@ export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
     [interviews, panels],
   );
 
-  return { interviews, panels, interviewRequests, loading };
+  return { interviews, panels, interviewRequests, loading, error };
 };
 
 export default useCandidateInterviews;
