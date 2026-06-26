@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
-import { collectCandidateInterviewRequests } from '@/lib/candidateInterviews';
+import { collectInterviewRoundsForPipeline } from '@/lib/candidateInterviews';
 
 export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
   const [interviews, setInterviews] = useState([]);
@@ -45,7 +45,7 @@ export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
   }, [candidateId, refreshKey]);
 
   const interviewRequests = useMemo(
-    () => collectCandidateInterviewRequests(interviews, panels),
+    () => collectInterviewRoundsForPipeline(interviews, panels),
     [interviews, panels],
   );
 

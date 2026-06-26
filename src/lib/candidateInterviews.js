@@ -38,6 +38,89 @@ export const compareInterviewCreationOrder = (a, b) => {
   return Number(a?.id ?? 0) - Number(b?.id ?? 0);
 };
 
+const deriveAggregateInterviewStatus = (statuses = []) => {
+  if (statuses.includes(InterviewScheduleStatus.SCHEDULED)) {
+    return InterviewScheduleStatus.SCHEDULED;
+  }
+  if (statuses.length > 0 && statuses.every((status) => status === InterviewScheduleStatus.CANCELLED)) {
+    return InterviewScheduleStatus.CANCELLED;
+  }
+  if (statuses.length > 0 && statuses.every((status) => status === InterviewScheduleStatus.COMPLETED)) {
+    return InterviewScheduleStatus.COMPLETED;
+  }
+  return statuses[0] || InterviewScheduleStatus.SCHEDULED;
+};
+
+export const resolveInterviewRoundStatus = (round) => {
+  if (!round) return InterviewScheduleStatus.SCHEDULED;
+  if (round.interviewStatus) return round.interviewStatus;
+  if (round.kind === 'panel') {
+    return deriveAggregateInterviewStatus(
+      (round.panelRequests || []).map(resolveInterviewRequestStatus),
+    );
+  }
+  return resolveInterviewRequestStatus(round);
+};
+
+const getInterviewRoundCreationOrderTimestamp = (round) => {
+  if (round?.createdAt) {
+    const time = new Date(round.createdAt).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+  if (round?.kind === 'panel') {
+    return getInterviewCreationOrderTimestamp(round.panelRequests?.[0]);
+  }
+  return getInterviewCreationOrderTimestamp(round);
+};
+
+export const compareInterviewRoundCreationOrder = (a, b) => {
+  const delta = getInterviewRoundCreationOrderTimestamp(a) - getInterviewRoundCreationOrderTimestamp(b);
+  if (delta !== 0) return delta;
+  return Number(a?.id ?? 0) - Number(b?.id ?? 0);
+};
+
+/**
+ * One entry per interview round for pipeline matching.
+ * A panel counts as a single round (not one entry per panel interviewer).
+ */
+export const collectInterviewRoundsForPipeline = (interviews = [], panels = []) => {
+  const rounds = [];
+  const panelScheduleIds = new Set();
+
+  (panels || []).forEach((panel) => {
+    const panelRequests = (panel.panelRequests || []).filter(hasCandidateInterviewRecord);
+    if (panelRequests.length === 0) return;
+
+    panelRequests.forEach((request) => panelScheduleIds.add(request.interviewScheduleId));
+    const aggregateStatus = deriveAggregateInterviewStatus(
+      panelRequests.map(resolveInterviewRequestStatus),
+    );
+
+    rounds.push({
+      kind: 'panel',
+      panel,
+      panelRequests,
+      interviewType: panelRequests[0]?.interviewType,
+      createdAt: panel.createdAt || panelRequests[0]?.createdAt,
+      id: panel.id,
+      interviewScheduleId: `panel-${panel.id}`,
+      interviewStatus: aggregateStatus,
+    });
+  });
+
+  (interviews || []).forEach((interview) => {
+    if (!hasCandidateInterviewRecord(interview)) return;
+    if (interview.panelId || panelScheduleIds.has(interview.interviewScheduleId)) return;
+
+    rounds.push({
+      kind: 'single',
+      ...interview,
+    });
+  });
+
+  return rounds.sort(compareInterviewRoundCreationOrder);
+};
+
 export const getInterviewerDesignationLabel = (request) => (
   request?.assignedInterviewerDesignationName?.trim() || null
 );
