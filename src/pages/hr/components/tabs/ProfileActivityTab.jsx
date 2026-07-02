@@ -22,9 +22,8 @@ const formatStatusKeyLabel = (statusKey) => String(statusKey || '')
   .toLowerCase()
   .replace(/\b\w/g, (char) => char.toUpperCase());
 
-const isInterviewActivity = (entry) => (
-  entry.kind === 'INTERVIEW_PRELUDE'
-  || Boolean(entry.interviewRequest || entry.panel)
+const hasInterviewDetails = (entry) => (
+  Boolean(entry.interviewRequest || entry.panel)
 );
 
 const InterviewActivityPrelude = ({ entry, formatDateTime, formatDateTimeRange }) => {
@@ -53,7 +52,7 @@ const formatActivityWhen = (entry, formatDateTime, formatDateTimeRange) => {
   const start = entry.timestamp;
   const end = entry.endTimestamp;
 
-  if (isInterviewActivity(entry)) {
+  if (hasInterviewDetails(entry)) {
     if (start && end) return formatDateTimeRange(start, end);
     if (start) return formatDateTime(start);
   }
@@ -84,7 +83,22 @@ const ActivityEntryDetails = ({ entry, formatDateTime, formatDateTimeRange }) =>
     );
   }
 
-  if (isInterviewActivity(entry)) {
+  if (entry.kind === 'PIPELINE' && hasInterviewDetails(entry)) {
+    return (
+      <>
+        {entry.actorDetail && (
+          <p className="mt-0.5 text-xs text-slate-600">{entry.actorDetail}</p>
+        )}
+        <InterviewActivityPrelude
+          entry={entry}
+          formatDateTime={formatDateTime}
+          formatDateTimeRange={formatDateTimeRange}
+        />
+      </>
+    );
+  }
+
+  if (hasInterviewDetails(entry)) {
     return (
       <InterviewActivityPrelude
         entry={entry}
@@ -132,7 +146,7 @@ const ActivityBadges = ({ entry }) => {
           Audit
         </Badge>
       )}
-      {isInterviewActivity(entry) && entry.stepStatus === InterviewScheduleStatus.SCHEDULED && (
+      {entry.interviewScheduleStatus === InterviewScheduleStatus.SCHEDULED && (
         <Badge variant="outline" className="rounded-full text-[10px] border-sky-200 text-sky-700 bg-sky-50">
           Interview
         </Badge>
@@ -149,23 +163,6 @@ const ActivityTimeline = ({ activities, formatDateTime, formatDateTimeRange }) =
   <ol className="profile-activity-timeline">
     {activities.map((entry, index) => {
       const isLast = index === activities.length - 1;
-
-      if (entry.kind === 'INTERVIEW_PRELUDE') {
-        return (
-          <li key={entry.id} className="profile-activity-timeline-prelude">
-            {!isLast && <span className="profile-activity-timeline-line" aria-hidden="true" />}
-            <span className="profile-activity-timeline-spacer" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.stepLabel}</p>
-              <InterviewActivityPrelude
-                entry={entry}
-                formatDateTime={formatDateTime}
-                formatDateTimeRange={formatDateTimeRange}
-              />
-            </div>
-          </li>
-        );
-      }
 
       return (
         <li key={entry.id} className="profile-activity-timeline-item">
@@ -203,19 +200,6 @@ const ActivityFeed = ({ activities, formatDateTime, formatDateTimeRange }) => {
     <div className="profile-activity-feed">
       {feedItems.map((entry) => {
         const isPipelineCurrent = entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT;
-
-        if (entry.kind === 'INTERVIEW_PRELUDE') {
-          return (
-            <div key={entry.id} className="profile-activity-feed-prelude">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.stepLabel}</p>
-              <InterviewActivityPrelude
-                entry={entry}
-                formatDateTime={formatDateTime}
-                formatDateTimeRange={formatDateTimeRange}
-              />
-            </div>
-          );
-        }
 
         return (
           <article
@@ -255,23 +239,7 @@ const ActivityTable = ({ activities, formatDateTime, formatDateTimeRange }) => (
         </tr>
       </thead>
       <tbody>
-        {[...activities].reverse().map((entry) => {
-          if (entry.kind === 'INTERVIEW_PRELUDE') {
-            return (
-              <tr key={entry.id} className="profile-activity-table-prelude">
-                <td colSpan={3}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.stepLabel}</p>
-                  <InterviewActivityPrelude
-                    entry={entry}
-                    formatDateTime={formatDateTime}
-                    formatDateTimeRange={formatDateTimeRange}
-                  />
-                </td>
-              </tr>
-            );
-          }
-
-          return (
+        {[...activities].reverse().map((entry) => (
           <tr
             key={entry.id}
             className={entry.kind === 'PIPELINE' && entry.stepStatus === PipelineStepStatus.CURRENT ? 'is-current' : ''}
@@ -312,8 +280,7 @@ const ActivityTable = ({ activities, formatDateTime, formatDateTimeRange }) => (
               {formatActivityWhen(entry, formatDateTime, formatDateTimeRange)}
             </td>
           </tr>
-          );
-        })}
+        ))}
       </tbody>
     </table>
   </div>

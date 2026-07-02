@@ -275,6 +275,12 @@ const PIPELINE_AUDIT_ACTION_LABELS = {
   INTERVIEW_CANCELLED: 'Interview cancelled',
 };
 
+const formatActorDetail = (name, designation) => {
+  if (!name) return null;
+  if (designation) return `By ${name} (${designation})`;
+  return `By ${name}`;
+};
+
 const formatStatusKeyLabel = (statusKey) => String(statusKey || '')
   .trim()
   .replace(/_/g, ' ')
@@ -299,7 +305,7 @@ export const mapPipelineStatusEventsToActivityEntries = (events = [], getStepLab
       stepStatus: ActivityStepStatus.CREATED,
       sequenceOrder: 5000 + Number(event.id ?? 0),
       timestamp,
-      detail: event.changedByName ? `By ${event.changedByName}` : null,
+      detail: formatActorDetail(event.changedByName, event.changedByDesignation),
       notes: event.notes,
       actionLabel: PIPELINE_AUDIT_ACTION_LABELS[event.actionType] || 'Updated',
       statusBadgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
@@ -311,7 +317,8 @@ export const mapPipelineStatusEventsToActivityEntries = (events = [], getStepLab
 const pickLatestAuditActorForStep = (step, statusEvents = []) => {
   const matches = statusEvents.filter((event) => event.statusKey === step.key);
   if (matches.length === 0) return null;
-  return matches[0]?.changedByName || null;
+  const event = matches[0];
+  return formatActorDetail(event.changedByName, event.changedByDesignation);
 };
 
 const getActivityTimestamp = (entry) => {
@@ -495,10 +502,12 @@ const enrichPipelineWithPrelude = (pipelineEntry, prelude) => {
 
   return {
     ...pipelineEntry,
+    actorDetail: pipelineEntry.detail || null,
     interviewRequest: prelude.interviewRequest,
     panel: prelude.panel,
     detail: prelude.detail,
     interviewType: prelude.interviewType,
+    interviewScheduleStatus: interviewStatus,
     timestamp: prelude.timestamp || pipelineEntry.timestamp,
     endTimestamp: prelude.endTimestamp || null,
     ...(isCancelled && {
@@ -507,6 +516,31 @@ const enrichPipelineWithPrelude = (pipelineEntry, prelude) => {
       actionLabel: 'Cancelled',
       statusBadgeClass: 'bg-red-50 text-red-700 border-red-200',
     }),
+  };
+};
+
+const convertPreludeToPipelineEntry = (prelude) => {
+  const interviewStatus = prelude.stepStatus;
+  const isCancelled = interviewStatus === InterviewScheduleStatus.CANCELLED;
+  const pipelineStatus = isCancelled
+    ? PipelineStepStatus.FAILED
+    : interviewStatus === InterviewScheduleStatus.COMPLETED
+      ? PipelineStepStatus.COMPLETED
+      : PipelineStepStatus.CURRENT;
+  const pipelineMeta = ACTIVITY_STATUS_META[pipelineStatus] || ACTIVITY_STATUS_META[PipelineStepStatus.COMPLETED];
+  const interviewMeta = INTERVIEW_STATUS_META[interviewStatus] || INTERVIEW_STATUS_META[InterviewScheduleStatus.SCHEDULED];
+
+  return {
+    ...prelude,
+    kind: 'PIPELINE',
+    id: `pipeline-${prelude.id}`,
+    stepStatus: pipelineStatus,
+    interviewScheduleStatus: interviewStatus,
+    cancelledInterview: isCancelled,
+    actionLabel: isCancelled ? 'Cancelled' : interviewMeta.action || pipelineMeta.action,
+    statusBadgeClass: isCancelled
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : interviewMeta.badgeClass || pipelineMeta.badgeClass,
   };
 };
 
@@ -589,9 +623,9 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
         || getActivityTimestamp(entry)
         || Date.now();
       timeline.push(withSortMeta(
-        entry,
+        convertPreludeToPipelineEntry(entry),
         fallbackSort + PIPELINE_SORT_SCALE * 1_000,
-        INTERVIEW_GROUP_ORDER.PRELUDE,
+        INTERVIEW_GROUP_ORDER.ROUND_STAGE,
       ));
     });
 
@@ -616,9 +650,9 @@ export const buildCandidateActivityHistory = (
     .filter((step) => step.stepStatus && step.stepStatus !== PipelineStepStatus.PENDING)
     .map((step) => {
       const entry = mapPipelineStepToActivityEntry(step);
-      const actor = pickLatestAuditActorForStep(step, statusEvents);
-      if (actor) {
-        entry.detail = `By ${actor}`;
+      const actorDetail = pickLatestAuditActorForStep(step, statusEvents);
+      if (actorDetail) {
+        entry.detail = actorDetail;
       }
       return entry;
     });
@@ -642,7 +676,6 @@ export const buildCandidateActivityHistory = (
   }
 
   const interviewEntries = buildInterviewActivityEntries(interviews, panels);
-  const auditEntries = mapPipelineStatusEventsToActivityEntries(statusEvents, getStepLabel);
   const timeline = buildInterleavedActivityTimeline(entries, interviewEntries);
-  return [...timeline, ...auditEntries].sort(compareActivityEntries);
+  return timeline.sort(compareActivityEntries);
 };

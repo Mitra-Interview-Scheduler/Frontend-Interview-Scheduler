@@ -31,12 +31,6 @@ const CandidateDetailsTabs = ({
   const tabsListRef = useRef(null);
 
   useEffect(() => {
-    if (!candidate?.id) return undefined;
-    onInterviewsRefresh();
-    return undefined;
-  }, [candidate?.id, activeTab, onInterviewsRefresh]);
-
-  useEffect(() => {
     if (!activeTab || !tabsListRef.current) return;
     const activeTrigger = tabsListRef.current.querySelector('[data-state="active"]');
     activeTrigger?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });

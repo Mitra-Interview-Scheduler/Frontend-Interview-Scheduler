@@ -20,8 +20,6 @@ export const useCandidateInterviews = (candidateId, refreshKey = 0) => {
     const load = async () => {
       setLoading(true);
       setError(null);
-      setInterviews([]);
-      setPanels([]);
       try {
         const [interviewData, panelData] = await Promise.all([
           hrAvailabilityAPI.getInterviewsForCandidate(candidateId),
