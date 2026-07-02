@@ -6,7 +6,6 @@ import { Activity, LayoutList, ListTree, Loader2, Table2 } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { buildCandidateActivityHistory, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { InterviewScheduleStatus, PipelineStepStatus } from '@/lib/statusConstants';
-import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import '@/styles/ProfileActivityTab.css';
 
@@ -139,11 +138,6 @@ const ActivityBadges = ({ entry }) => {
       {entry.cancelledInterview && (
         <Badge variant="outline" className="rounded-full text-[10px] border-red-200 text-red-700 bg-red-50">
           Interview cancelled
-        </Badge>
-      )}
-      {entry.kind === 'STATUS_AUDIT' && (
-        <Badge variant="outline" className="rounded-full text-[10px] border-violet-200 text-violet-700 bg-violet-50">
-          Audit
         </Badge>
       )}
       {entry.interviewScheduleStatus === InterviewScheduleStatus.SCHEDULED && (
@@ -289,15 +283,11 @@ const ActivityTable = ({ activities, formatDateTime, formatDateTimeRange }) => (
 const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isActive = true }) => {
   const { formatDateTime, formatDateTimeRange } = useFormattedDateTime();
   const [viewMode, setViewMode] = useState('feed');
-  const [interviews, setInterviews] = useState([]);
-  const [panels, setPanels] = useState([]);
   const [statusEvents, setStatusEvents] = useState([]);
-  const [interviewsLoading, setInterviewsLoading] = useState(false);
+  const [statusEventsLoading, setStatusEventsLoading] = useState(false);
 
   useEffect(() => {
     if (!candidate?.id) {
-      setInterviews([]);
-      setPanels([]);
       setStatusEvents([]);
       return undefined;
     }
@@ -307,48 +297,40 @@ const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isAct
     }
 
     let active = true;
-    setInterviewsLoading(true);
+    setStatusEventsLoading(true);
 
-    Promise.all([
-      hrAvailabilityAPI.getInterviewsForCandidate(candidate.id),
-      hrAvailabilityAPI.getPanelsByCandidateId(candidate.id),
-      candidatePipelineAPI.getPipelineStatusEvents(candidate.id).catch(() => []),
-    ])
-      .then(([interviewData, panelData, auditData]) => {
+    candidatePipelineAPI.getPipelineStatusEvents(candidate.id)
+      .then((auditData) => {
         if (!active) return;
-        setInterviews(Array.isArray(interviewData) ? interviewData : []);
-        setPanels(Array.isArray(panelData) ? panelData : []);
         setStatusEvents(Array.isArray(auditData) ? auditData : []);
       })
       .catch((error) => {
-        console.error('Failed to load candidate interview activity:', error);
+        console.error('Failed to load candidate activity audit events:', error);
         if (!active) return;
-        setInterviews([]);
-        setPanels([]);
         setStatusEvents([]);
       })
       .finally(() => {
-        if (active) setInterviewsLoading(false);
+        if (active) setStatusEventsLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [isActive, candidate?.id, candidate?.status, steps]);
+  }, [isActive, candidate?.id, candidate?.status]);
 
   const activities = useMemo(
     () => buildCandidateActivityHistory(
       steps,
       candidate,
-      interviews,
-      panels,
+      [],
+      [],
       statusEvents,
       (statusKey) => getCandidateStatusLabel(steps, statusKey),
     ),
-    [steps, candidate, interviews, panels, statusEvents],
+    [steps, candidate, statusEvents],
   );
 
-  const loading = stepsLoading || interviewsLoading;
+  const loading = stepsLoading || statusEventsLoading;
 
   return (
     <div className="space-y-4">
