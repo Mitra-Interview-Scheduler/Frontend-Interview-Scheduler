@@ -26,6 +26,8 @@ const ProfilePage = () => {
     ? user.roles
     : (user?.role ? [user.role] : []);
   const isInterviewer = userRoles.includes('INTERVIEWER');
+  const isAdmin = userRoles.includes('ADMIN');
+  const canEditProfessionalDetails = isAdmin;
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -146,12 +148,16 @@ const ProfilePage = () => {
       await profileAPI.updateProfile({
         phone: profile.phone,
         profilePictureUrl: profile.profilePictureUrl,
-        departmentId: profile.department?.id,
-        designationId: profile.currentDesignation?.id,
         firstName: profile.firstName,
         lastName: profile.lastName,
         bio: profile.bio,
-        yearsOfExperience: profile.yearsOfExperience
+        ...(canEditProfessionalDetails
+          ? {
+              departmentId: profile.department?.id,
+              designationId: profile.currentDesignation?.id,
+              yearsOfExperience: profile.yearsOfExperience,
+            }
+          : {}),
       });
 
       setIsEditing(false);
@@ -503,8 +509,10 @@ const ProfilePage = () => {
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
                 <CardDescription>
-                  Your role, department, tier, and designation information
-                  {isInterviewer && isEditing && (
+                  {canEditProfessionalDetails
+                    ? 'Your role, department, tier, and designation information'
+                    : 'Your role, department, tier, and designation are managed by an administrator'}
+                  {canEditProfessionalDetails && isInterviewer && isEditing && (
                     <>
                       {' '}
                       — missing options?{' '}
@@ -525,7 +533,7 @@ const ProfilePage = () => {
                     <Briefcase className="w-4 h-4" />
                     Department
                   </Label>
-                  {isEditing ? (
+                  {isEditing && canEditProfessionalDetails ? (
                     <Select
                       value={profile.department?.id?.toString() || "NONE"}
                       onValueChange={handleDepartmentChange}
@@ -559,7 +567,7 @@ const ProfilePage = () => {
                         <TrendingUp className="w-4 h-4" />
                         Tier
                       </Label>
-                      {isEditing ? (
+                      {isEditing && canEditProfessionalDetails ? (
                         <Select
                           // ── FIX: read from dedicated selectedTierId, not from designation
                           value={selectedTierId?.toString() || "NONE"}
@@ -595,7 +603,7 @@ const ProfilePage = () => {
                         <Award className="w-4 h-4" />
                         Designation
                       </Label>
-                      {isEditing ? (
+                      {isEditing && canEditProfessionalDetails ? (
                         <Select
                           value={profile.currentDesignation?.id?.toString() || "NONE"}
                           onValueChange={handleDesignationChange}
@@ -642,7 +650,7 @@ const ProfilePage = () => {
                     onChange={(e) =>
                       handleChange('yearsOfExperience', parseInt(e.target.value) || 0)
                     }
-                    disabled={!isEditing}
+                    disabled={!isEditing || !canEditProfessionalDetails}
                     min={0}
                     max={50}
                   />
