@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import { TimeFormatProvider } from "@/context/TimeFormatContext";
 import { TimeZoneProvider } from "@/context/TimeZoneContext";
 import { PrivateRoute } from "@/components/PrivateRoute";
@@ -37,6 +38,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <NotificationProvider>
       <TimeZoneProvider>
         <TimeFormatProvider>
           <TooltipProvider>
@@ -270,6 +272,7 @@ const App = () => (
           </TooltipProvider>
         </TimeFormatProvider>
       </TimeZoneProvider>
+      </NotificationProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
