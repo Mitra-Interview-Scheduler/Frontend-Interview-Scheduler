@@ -23,6 +23,7 @@ import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
+import CandidateSkillsPanel from '@/components/CandidateSkillsPanel';
 import { DocumentDropzone } from '@/components/DocumentDropzone';
 import { downloadBlobResponse } from '@/lib/documentUtils';
 
@@ -81,6 +82,7 @@ function CandidateDialogPage({
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [pendingDocuments, setPendingDocuments] = useState([]);
+  const [pendingSkills, setPendingSkills] = useState([]);
   const [pendingDocumentDeleteIds, setPendingDocumentDeleteIds] = useState([]);
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [documentType, setDocumentType] = useState('CV');
@@ -259,6 +261,7 @@ function CandidateDialogPage({
       resetValidationState();
       setDocuments([]);
       setPendingDocuments([]);
+      setPendingSkills([]);
       setPendingDocumentDeleteIds([]);
       setDocumentType('CV');
       setResourceLinks([]);
@@ -422,6 +425,23 @@ function CandidateDialogPage({
         }
       }
 
+      if (pendingSkills.length > 0) {
+        const skillResults = await Promise.allSettled(
+          pendingSkills.map((skill) =>
+            candidateAPI.addCandidateTechnology(savedCandidateId, skill.technology.id)
+          )
+        );
+        const failedSkills = skillResults.filter((result) => result.status === 'rejected');
+        if (failedSkills.length > 0) {
+          const reason = failedSkills[0].reason?.response?.data?.message
+            || failedSkills[0].reason?.message
+            || 'Skill save failed';
+          throw new Error(
+            `Candidate saved, but ${failedSkills.length} skill(s) failed to save: ${reason}`
+          );
+        }
+      }
+
       onOpenChange(false);
       onSaveSuccess?.();
     } catch (err) {
@@ -437,6 +457,7 @@ function CandidateDialogPage({
     setSaving(false);
     setDocuments([]);
     setPendingDocuments([]);
+    setPendingSkills([]);
     setPendingDocumentDeleteIds([]);
     setDocumentType('CV');
     setResourceLinks([]);
@@ -938,6 +959,20 @@ function CandidateDialogPage({
                 ))}
               </div>
             </div>
+            )}
+
+            {open && (
+              <div className="md:col-span-2">
+                <CandidateSkillsPanel
+                  candidateId={isCreate ? null : candidate?.id}
+                  skills={candidate?.technologies}
+                  readOnly={readOnly}
+                  disabled={saving}
+                  pendingSkills={pendingSkills}
+                  onPendingSkillsChange={setPendingSkills}
+                  variant="embedded"
+                />
+              </div>
             )}
 
             {/* Notes */}

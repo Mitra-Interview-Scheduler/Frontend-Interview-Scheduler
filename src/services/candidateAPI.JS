@@ -129,6 +129,15 @@ export const candidateAPI = {
     await api.delete(`/candidates/${candidateId}/documents/${documentId}`);
   },
 
+  addCandidateTechnology: async (candidateId, technologyId) => {
+    const response = await api.post(`/candidates/${candidateId}/technologies`, { technologyId });
+    return response.data;
+  },
+
+  removeCandidateTechnology: async (candidateId, technologyAssignmentId) => {
+    await api.delete(`/candidates/${candidateId}/technologies/${technologyAssignmentId}`);
+  },
+
   // Fetch a candidate's screening tracker file mapping context
   getCandidateScreeningFile: async (candidateId) => {
     const response = await api.get(`/candidateScreening/${candidateId}/screening`);

@@ -43,7 +43,8 @@ api.interceptors.response.use(
       const isAuthRequest = requestUrl.includes('/auth/login')
         || requestUrl.includes('/auth/register')
         || requestUrl.includes('/auth/google');
-      if (!isAuthRequest) {
+      const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
+      if (!isAuthRequest && hadAuthHeader) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         if (!window.location.pathname.startsWith('/login')) {

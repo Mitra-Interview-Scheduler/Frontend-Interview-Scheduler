@@ -252,6 +252,10 @@ const AvailabilityViewPage = () => {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
       }
+
+      if (incomingFilter.technologyIds?.length) {
+        setFilterTech(incomingFilter.technologyIds);
+      }
     }
 
     setInterviewType(resolvedInterviewType);
@@ -503,11 +507,14 @@ const AvailabilityViewPage = () => {
           candidateDesignationId: candidate.targetDesignationId
         }));
       }
+      if (candidate) {
+        const ids = (candidate.technologies || []).map((skill) => skill.technology?.id).filter(Boolean);
+        if (ids.length > 0) {
+          setFilterTech(ids);
+        }
+      }
     }
   }, [requestForm.candidateId, candidates]);
-
-
-
 
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {

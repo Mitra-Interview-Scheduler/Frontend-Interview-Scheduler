@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
+import CandidateSkillsPanel from '@/components/CandidateSkillsPanel';
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
@@ -136,6 +137,12 @@ const ProfileSummaryTab = ({
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{candidate.notes || '-'}</p>
         </CardContent>
       </Card>
+
+      <CandidateSkillsPanel
+        candidateId={candidate?.id}
+        skills={candidate?.technologies}
+        onSkillsUpdated={onCandidateUpdated}
+      />
 
       {/* Resource Links Card */}
       <Card className="border border-slate-200 shadow-sm">

@@ -34,6 +34,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const [coordinatorUserId, setCoordinatorUserId] = useState('');
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
+  const [candidateTechnologies, setCandidateTechnologies] = useState([]);
 
 
   const loadDepartments = async () => {
@@ -90,18 +91,24 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     setCoordinatorDepartmentId('');
     setCoordinatorUserId('');
     setCoordinatorUsers([]);
-  }, [open, candidate?.id]);
+    setCandidateTechnologies(Array.isArray(candidate?.technologies) ? candidate.technologies : []);
+  }, [open, candidate?.id, candidate?.technologies]);
 
   if (!candidate) return null;
 
   const handleGoToAvailability = () => {
     if (!availabilityDate || !interviewType) return;
 
+    const technologyIds = candidateTechnologies
+      .map((item) => item.technology?.id)
+      .filter(Boolean);
+
     const filteredData = {
       startDateTime: availabilityDate,
       departmentId: interviewType === InterviewType.HR ? hrDepartmentId : candidate.departmentId,
       minTierOrder: candidate.tierOrder,
       minLevelOrder: interviewType === InterviewType.HR ? null : candidate.levelOrder,
+      technologyIds: technologyIds.length > 0 ? technologyIds : null,
       candidateId: candidate.id,
       candidateName: candidate.name,
       interviewType,

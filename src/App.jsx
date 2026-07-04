@@ -120,7 +120,7 @@ const App = () => (
             <Route
               path="/hr/dashboard"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <HRDashboard />
                 </PrivateRoute>
               }
@@ -128,7 +128,7 @@ const App = () => (
             <Route
               path="/hr/candidates"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <CandidatesPage />
                 </PrivateRoute>
               }
@@ -136,7 +136,7 @@ const App = () => (
             <Route
               path="/hr/candidates/:candidateId/details"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <CandidateDetailsPage />
                 </PrivateRoute>
               }
@@ -144,7 +144,7 @@ const App = () => (
             <Route
               path="/hr/schedule"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <SchedulePage />
                 </PrivateRoute>
               }
@@ -152,7 +152,7 @@ const App = () => (
             <Route
               path="/hr/availability"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <AvailabilityViewPage />
                 </PrivateRoute>
               }
@@ -160,7 +160,7 @@ const App = () => (
             <Route
               path="/hr/urgent"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <UrgentRequestsPage />
                 </PrivateRoute>
               }
@@ -168,7 +168,7 @@ const App = () => (
             {/* <Route
               path="/hr/designations"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <DesignationsPage />
                 </PrivateRoute>
               }
@@ -176,7 +176,7 @@ const App = () => (
             {/* <Route
               path="/hr/technologies"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <TechnologiesPage />
                 </PrivateRoute>
               }
@@ -184,7 +184,7 @@ const App = () => (
             <Route
               path="/hr/rules"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <RulesPage />
                 </PrivateRoute>
               }
