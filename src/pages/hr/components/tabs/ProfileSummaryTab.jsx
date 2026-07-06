@@ -8,6 +8,7 @@ import {
 import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
 import CandidateSkillsPanel from '@/components/CandidateSkillsPanel';
+import CandidateDomainsPanel, { buildCandidateDomainPayload } from '@/components/CandidateDomainsPanel';
 import { candidateAPI } from '@/services/candidateAPI';
 import { toast } from '@/hooks/use-toast';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
@@ -54,18 +55,10 @@ const ProfileSummaryTab = ({
     setLinkSaving(true);
     try {
       const payload = {
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.phone,
-        departmentId: candidate.departmentId ? parseInt(candidate.departmentId) : null,
-        targetDesignationId: candidate.targetDesignationId ? parseInt(candidate.targetDesignationId) : null,
-        status: candidate.status,
-        yearsOfExperience: candidate.yearsOfExperience ? parseInt(candidate.yearsOfExperience) : null,
-        jdUrl: candidate.jdUrl || null,
-        jobReferenceCode: candidate.jobReferenceCode || null,
-        location: candidate.location || null,
-        notes: candidate.notes || null,
-        resourceRequestNumber: candidate.resourceRequestNumber || null,
+        ...buildCandidateDomainPayload(
+          candidate,
+          (candidate.domains || []).map((domain) => domain.id),
+        ),
         resourceLink: JSON.stringify(updatedLinksList),
       };
 
@@ -137,6 +130,12 @@ const ProfileSummaryTab = ({
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{candidate.notes || '-'}</p>
         </CardContent>
       </Card>
+
+      <CandidateDomainsPanel
+        candidate={candidate}
+        domains={candidate?.domains}
+        onDomainsUpdated={onCandidateUpdated}
+      />
 
       <CandidateSkillsPanel
         candidateId={candidate?.id}

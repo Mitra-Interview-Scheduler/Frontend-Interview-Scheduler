@@ -103,12 +103,17 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
       .map((item) => item.technology?.id)
       .filter(Boolean);
 
+    const domainIds = (candidate.domains || [])
+      .map((d) => d.id)
+      .filter(Boolean);
+
     const filteredData = {
       startDateTime: availabilityDate,
       departmentId: interviewType === InterviewType.HR ? hrDepartmentId : candidate.departmentId,
       minTierOrder: candidate.tierOrder,
       minLevelOrder: interviewType === InterviewType.HR ? null : candidate.levelOrder,
       technologyIds: technologyIds.length > 0 ? technologyIds : null,
+      domainIds: interviewType === InterviewType.TECHNICAL && domainIds.length > 0 ? domainIds : null,
       candidateId: candidate.id,
       candidateName: candidate.name,
       interviewType,

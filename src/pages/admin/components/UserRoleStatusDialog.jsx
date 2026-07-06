@@ -25,6 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Award,
   Briefcase,
+  Globe2,
   Loader2,
   Mail,
   TrendingUp,
@@ -34,6 +35,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { usersAPI } from '@/services/api';
 import profileAPI from '@/services/profileService';
+import { domainAPI } from '@/services/domainAPI';
+import DomainMultiSelect from '@/components/DomainMultiSelect';
 import { getInitial } from '@/lib/personUtils';
 
 const ROLE_OPTIONS = ['ADMIN', 'HR', 'INTERVIEWER'];
@@ -68,8 +71,10 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
     designationId: null,
     selectedTierId: null,
     yearsOfExperience: 0,
+    domainIds: [],
   });
   const [departments, setDepartments] = useState([]);
+  const [allDomains, setAllDomains] = useState([]);
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
 
@@ -109,6 +114,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
       designationId,
       selectedTierId,
       yearsOfExperience: selectedUser.yearsOfExperience ?? 0,
+      domainIds: (selectedUser.domains || []).map((d) => d.id),
     });
 
     if (departmentId) {
@@ -129,6 +135,9 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
     profileAPI.getDepartments()
       .then(setDepartments)
       .catch(() => setDepartments([]));
+    domainAPI.getAllDomains()
+      .then(setAllDomains)
+      .catch(() => setAllDomains([]));
   }, [open]);
 
   useEffect(() => {
@@ -186,6 +195,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
         designationId: null,
         selectedTierId: null,
         yearsOfExperience: professionalForm.yearsOfExperience,
+        domainIds: professionalForm.domainIds,
       });
       setTiersForSelectedDept([]);
       setDesignationsForSelectedTier([]);
@@ -244,10 +254,13 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
   const professionalDetailsChanged = () => {
     if (!user) return false;
+    const userDomainIds = (user.domains || []).map((d) => d.id).sort();
+    const formDomainIds = [...(professionalForm.domainIds || [])].sort();
     return (
       (professionalForm.departmentId ?? null) !== (user.departmentId ?? null)
       || (professionalForm.designationId ?? null) !== (user.designationId ?? null)
       || (professionalForm.yearsOfExperience ?? 0) !== (user.yearsOfExperience ?? 0)
+      || JSON.stringify(formDomainIds) !== JSON.stringify(userDomainIds)
     );
   };
 
@@ -317,6 +330,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
           departmentId: professionalForm.departmentId,
           designationId: professionalForm.designationId,
           yearsOfExperience: professionalForm.yearsOfExperience,
+          domainIds: professionalForm.domainIds,
         });
         updatedUser = {
           ...updatedUser,
@@ -349,6 +363,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
   const displayLastName = editing ? form.lastName : user?.lastName;
   const displayRoles = editing ? form.roles : (user?.roles || (user?.role ? [user.role] : []));
   const displayActive = editing ? form.active : (user?.active !== false);
+  const displayDomains = editing ? [] : (user?.domains || []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -410,6 +425,19 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
                       </Badge>
                     ))}
                   </div>
+                  {displayDomains.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        <Globe2 className="w-3 h-3" />
+                        Domains
+                      </span>
+                      {displayDomains.map((domain) => (
+                        <Badge key={domain.id} variant="secondary" className="text-[10px] px-2 py-0 h-5 font-medium">
+                          {domain.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -478,7 +506,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
               <div>
                 <p className={sectionLabelClass}>Professional Details</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Department, tier, designation, and experience
+                  Department, tier, designation, experience, and domains
                 </p>
               </div>
 
@@ -614,6 +642,36 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
                     </div>
                   </div>
                 )}
+
+                <div className="pt-2 border-t border-slate-100">
+                  {editing ? (
+                    <DomainMultiSelect
+                      label="Domains"
+                      domains={allDomains}
+                      selectedIds={professionalForm.domainIds}
+                      onChange={(ids) => setProfessionalForm((prev) => ({ ...prev, domainIds: ids }))}
+                      disabled={saving}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className={fieldLabelClass}>
+                        <span className="inline-flex items-center gap-2">
+                          <Globe2 className="w-4 h-4 text-slate-400" />
+                          Domains
+                        </span>
+                      </Label>
+                      {displayDomains.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {displayDomains.map((d) => (
+                            <Badge key={d.id} variant="secondary">{d.name}</Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <Input value="Not set" disabled className="h-10 bg-muted" />
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

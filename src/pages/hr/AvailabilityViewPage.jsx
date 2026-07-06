@@ -33,6 +33,8 @@ import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
+import { domainAPI } from '@/services/domainAPI';
+import DomainMultiSelect from '@/components/DomainMultiSelect';
 import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
@@ -87,6 +89,7 @@ const AvailabilityViewPage = () => {
   const viewTimerRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -96,6 +99,7 @@ const AvailabilityViewPage = () => {
   // Filters
   const [filterDept, setFilterDept] = useState([]);
   const [filterTech, setFilterTech] = useState([]);
+  const [filterDomain, setFilterDomain] = useState([]);
   const [selectedTechCategory, setSelectedTechCategory] = useState('');
   const [techSearchTerm, setTechSearchTerm] = useState('');
   const [showTechDropdown, setShowTechDropdown] = useState(false);
@@ -179,17 +183,19 @@ const AvailabilityViewPage = () => {
           page: 0,
           size: getCalendarPageSize(currentView),
         };
-        const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
+        const [availData, deptData, techData, domainData, desigData, tierData, candData] = await Promise.all([
           // Load initial availability for visible range
           hrAvailabilityAPI.getAllAvailability(initialAvailabilityFilters),
           departmentAPI.getAllDepartments(),
           technologyAPI.getAllTechnologies(),
+          domainAPI.getAllDomains(),
           designationAPI.getAllDesignations(),
           tierAPI.getAllTiers(),
           candidateAPI.getAllCandidates(),
         ]);
         setDepartments(deptData);
         setTechnologies(techData);
+        setDomains(domainData || []);
         setDesignations(desigData);
         setTiers(tierData);
         setCandidates(candData);
@@ -255,6 +261,10 @@ const AvailabilityViewPage = () => {
 
       if (incomingFilter.technologyIds?.length) {
         setFilterTech(incomingFilter.technologyIds);
+      }
+
+      if (incomingFilter.domainIds?.length) {
+        setFilterDomain(incomingFilter.domainIds);
       }
     }
 
@@ -407,6 +417,7 @@ const AvailabilityViewPage = () => {
       endDateTime: formatLocalDateTime(end),
       departmentIds: filterDept.length > 0 ? filterDept : null,
       technologyIds: filterTech.length > 0 ? filterTech : null,
+      domainIds: filterDomain.length > 0 ? filterDomain : null,
       minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
       page: 0,
       size: getCalendarPageSize(view),
@@ -481,7 +492,7 @@ const AvailabilityViewPage = () => {
 
   applyFilters();
 }, [
-  filterDept, filterTech, minExperience, dateRange,
+  filterDept, filterTech, filterDomain, minExperience, dateRange,
   selectedDeptForDesignation, selectedTierInDept, minDesignationLevel,
   pendingFilter
 ]);
@@ -511,6 +522,10 @@ const AvailabilityViewPage = () => {
         const ids = (candidate.technologies || []).map((skill) => skill.technology?.id).filter(Boolean);
         if (ids.length > 0) {
           setFilterTech(ids);
+        }
+        const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
+        if (domainIds.length > 0) {
+          setFilterDomain(domainIds);
         }
       }
     }
@@ -1222,6 +1237,16 @@ const calendarSlotPropGetter = useCallback((date) => {
                     })}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <DomainMultiSelect
+                  label="Domains"
+                  domains={domains}
+                  selectedIds={filterDomain}
+                  onChange={setFilterDomain}
+                  placeholder="Filter by domains…"
+                />
               </div>
 
               <div className="space-y-2">
