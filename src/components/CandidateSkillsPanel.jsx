@@ -11,13 +11,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
-import { Code, Search, ChevronDown, X } from 'lucide-react';
+import { Code, Search, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { candidateAPI } from '@/services/candidateAPI';
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
-import { getTechnologyCategoryLabel } from '@/lib/technologyHelpers';
+import {
+  filterTechnologiesByCategory,
+  getTechnologyCategoryLabel,
+  getSkillIsCore,
+  normalizeSkillAssignment,
+} from '@/lib/technologyHelpers';
+import { CoreTechnologyPrompt, TechnologyProficiencyBadge } from '@/components/technologyProficiencyUi';
 
 function CandidateSkillsPanel({
   candidateId = null,
@@ -37,31 +43,50 @@ function CandidateSkillsPanel({
   const [skillCategories, setSkillCategories] = useState([]);
   const [newSkill, setNewSkill] = useState('');
   const [newSkillCategoryId, setNewSkillCategoryId] = useState('');
+  const [selectedBrowseCategory, setSelectedBrowseCategory] = useState('');
   const [showSkillDropdown, setShowSkillDropdown] = useState(false);
   const [showNewSkillModal, setShowNewSkillModal] = useState(false);
-  const [filteredTechnologies, setFilteredTechnologies] = useState([]);
+  const [corePrompt, setCorePrompt] = useState(null);
+  const [savingCoreChoice, setSavingCoreChoice] = useState(false);
 
-  const currentSkills = isPendingMode ? pendingSkills : candidateTechs;
+  const currentSkills = isPendingMode
+    ? pendingSkills.map(normalizeSkillAssignment)
+    : candidateTechs;
   const canEdit = !readOnly && !disabled;
 
-  const groupedSkills = useMemo(() => {
-    const groups = new Map();
-    currentSkills.forEach((item) => {
-      const category = getTechnologyCategoryLabel(item.technology) || 'Other';
-      if (!groups.has(category)) {
-        groups.set(category, []);
-      }
-      groups.get(category).push(item);
-    });
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([category, items]) => ({
-        category,
-        items: [...items].sort((a, b) =>
-          (a.technology?.name || '').localeCompare(b.technology?.name || '', undefined, { sensitivity: 'base' }),
-        ),
-      }));
-  }, [currentSkills]);
+  const skillByTechnologyId = useMemo(
+    () => new Map(currentSkills.map((item) => [item.technology.id, item])),
+    [currentSkills],
+  );
+
+  const categoryTechnologies = useMemo(
+    () => filterTechnologiesByCategory(technologies, selectedBrowseCategory),
+    [technologies, selectedBrowseCategory],
+  );
+
+  const coreTechnologies = useMemo(
+    () => currentSkills.filter((item) => getSkillIsCore(item)),
+    [currentSkills],
+  );
+
+  const otherTechnologies = useMemo(
+    () => currentSkills.filter((item) => !getSkillIsCore(item)),
+    [currentSkills],
+  );
+
+  const canBrowseTechnologies = Boolean(selectedBrowseCategory);
+
+  const dropdownTechnologies = useMemo(() => {
+    if (!canBrowseTechnologies) return [];
+
+    const term = newSkill.trim().toLowerCase();
+    if (!term) return categoryTechnologies;
+
+    return categoryTechnologies.filter((tech) =>
+      tech.name.toLowerCase().includes(term)
+      || tech.code?.toLowerCase().includes(term),
+    );
+  }, [newSkill, categoryTechnologies, canBrowseTechnologies]);
 
   useEffect(() => {
     const loadCatalog = async () => {
@@ -87,24 +112,26 @@ function CandidateSkillsPanel({
       setCandidateTechs([]);
       return;
     }
-    setCandidateTechs(Array.isArray(skills) ? skills : []);
+    setCandidateTechs(Array.isArray(skills) ? skills.map(normalizeSkillAssignment) : []);
   }, [candidateId, skills]);
 
-  useEffect(() => {
-    if (newSkill.trim()) {
-      const filtered = technologies.filter((tech) =>
-        tech.name.toLowerCase().includes(newSkill.toLowerCase())
-        && !currentSkills.some((item) => item.technology?.id === tech.id)
-      );
-      setFilteredTechnologies(filtered);
-      setShowSkillDropdown(filtered.length > 0 || newSkill.length > 0);
-    } else {
-      setFilteredTechnologies([]);
-      setShowSkillDropdown(false);
+  const openTechnologyDropdown = () => {
+    if (!canBrowseTechnologies) {
+      toast({ title: 'Select a category first' });
+      return;
     }
-  }, [newSkill, technologies, currentSkills]);
+    setShowSkillDropdown(true);
+  };
 
-  const addPendingSkill = (technology) => {
+  const openCorePrompt = (technology, existingEntry = null) => {
+    setCorePrompt({ technology, existingEntry });
+  };
+
+  const closeCorePrompt = () => {
+    setCorePrompt(null);
+  };
+
+  const addPendingSkill = (technology, isCore) => {
     if (!onPendingSkillsChange) return;
     if (pendingSkills.some((item) => item.technology.id === technology.id)) {
       toast({ title: 'Skill already added', variant: 'destructive' });
@@ -116,8 +143,18 @@ function CandidateSkillsPanel({
         id: `pending-${technology.id}`,
         technology,
         isActive: true,
+        isCore,
       },
     ]);
+  };
+
+  const updatePendingSkill = (technologyId, isCore) => {
+    if (!onPendingSkillsChange) return;
+    onPendingSkillsChange(
+      pendingSkills.map((item) =>
+        (item.technology.id === technologyId ? { ...item, isCore } : item),
+      ),
+    );
   };
 
   const removePendingSkill = (technologyId) => {
@@ -125,48 +162,92 @@ function CandidateSkillsPanel({
     onPendingSkillsChange(pendingSkills.filter((item) => item.technology.id !== technologyId));
   };
 
-  const addSkillById = async (technologyId) => {
-    if (isPendingMode) {
-      const technology = technologies.find((tech) => tech.id === technologyId);
-      if (technology) addPendingSkill(technology);
-      return;
-    }
+  const handleCoreChoice = async (isCore) => {
+    if (!corePrompt?.technology) return;
+
+    const { technology, existingEntry } = corePrompt;
+    setSavingCoreChoice(true);
 
     try {
-      if (candidateTechs.some((item) => item.technology.id === technologyId)) {
-        toast({ title: 'Skill already added' });
-        return;
+      if (existingEntry) {
+        if (getSkillIsCore(existingEntry) === isCore) {
+          closeCorePrompt();
+          return;
+        }
+
+        if (isPendingMode) {
+          updatePendingSkill(technology.id, isCore);
+        } else {
+          const updated = normalizeSkillAssignment(await candidateAPI.updateCandidateTechnology(
+            candidateId,
+            existingEntry.id,
+            { isCore },
+          ));
+          setCandidateTechs((prev) =>
+            prev.map((entry) => (entry.id === existingEntry.id ? updated : entry)),
+          );
+          onSkillsUpdated?.();
+        }
+
+        toast({
+          title: isCore ? 'Marked as core technology' : 'Moved to can do',
+        });
+      } else if (isPendingMode) {
+        addPendingSkill(technology, isCore);
+        toast({
+          title: isCore ? 'Core technology added' : 'Can do technology added',
+        });
+      } else {
+        const created = normalizeSkillAssignment(
+          await candidateAPI.addCandidateTechnology(candidateId, technology.id, isCore),
+        );
+        setCandidateTechs((prev) => [...prev, created]);
+        onSkillsUpdated?.();
+        toast({
+          title: isCore ? 'Core technology added' : 'Can do technology added',
+        });
       }
-      const created = await candidateAPI.addCandidateTechnology(candidateId, technologyId);
-      setCandidateTechs((prev) => [...prev, created]);
-      onSkillsUpdated?.();
-      toast({ title: 'Skill added' });
+
+      setNewSkill('');
+      setShowSkillDropdown(false);
+      closeCorePrompt();
     } catch (error) {
       toast({
-        title: 'Failed to add skill',
+        title: 'Failed to save skill',
         description: error.response?.data?.message || error.message,
         variant: 'destructive',
       });
+    } finally {
+      setSavingCoreChoice(false);
     }
   };
 
-  const handleSelectFromDropdown = async (tech) => {
+  const handleTechnologyPick = (tech) => {
+    if (!canBrowseTechnologies) {
+      toast({ title: 'Select a category first' });
+      return;
+    }
+
     setShowSkillDropdown(false);
-    setNewSkill('');
-    await addSkillById(tech.id);
+    const existingEntry = skillByTechnologyId.get(tech.id) || null;
+    openCorePrompt(tech, existingEntry);
   };
 
-  const handleAddSkill = async () => {
+  const handleAddSkill = () => {
     if (!newSkill.trim()) return;
+    if (!canBrowseTechnologies) {
+      toast({ title: 'Select a category first' });
+      return;
+    }
+
     setShowSkillDropdown(false);
 
-    const exactMatch = technologies.find(
-      (tech) => tech.name.toLowerCase() === newSkill.trim().toLowerCase()
+    const exactMatch = categoryTechnologies.find(
+      (tech) => tech.name.toLowerCase() === newSkill.trim().toLowerCase(),
     );
 
     if (exactMatch) {
-      await addSkillById(exactMatch.id);
-      setNewSkill('');
+      handleTechnologyPick(exactMatch);
     } else {
       setShowNewSkillModal(true);
     }
@@ -174,18 +255,15 @@ function CandidateSkillsPanel({
 
   const handleCreateAndAddSkill = async () => {
     if (!newSkill.trim()) return;
+
     try {
       const createdTech = await profileAPI.createTechnology(
         newSkill.trim(),
-        Number(newSkillCategoryId)
+        Number(newSkillCategoryId),
       );
       setTechnologies((prev) => [...prev, createdTech]);
-      await addSkillById(createdTech.id);
-      setNewSkill('');
-      const defaultCategory = skillCategories.find((c) => c.code === 'GENERAL') || skillCategories[0];
-      setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
       setShowNewSkillModal(false);
-      toast({ title: 'Skill created and added' });
+      openCorePrompt(createdTech, null);
     } catch (error) {
       toast({
         title: 'Failed to create skill',
@@ -215,70 +293,127 @@ function CandidateSkillsPanel({
     }
   };
 
-  const handleShowAllSkills = () => {
-    if (showSkillDropdown) {
-      setShowSkillDropdown(false);
-    } else {
-      setFilteredTechnologies(
-        technologies.filter((tech) => !currentSkills.some((item) => item.technology?.id === tech.id))
-      );
-      setShowSkillDropdown(true);
-    }
-  };
+  const renderTechnologyGroup = (title, items, emptyText) => (
+    <div className="space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      {items.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item) => (
+            <motion.div
+              key={item.id}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+            >
+              <TechnologyProficiencyBadge
+                item={item}
+                isEditing={canEdit}
+                onOpenCorePrompt={openCorePrompt}
+                onRemove={handleRemoveSkill}
+              />
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">{emptyText}</p>
+      )}
+    </div>
+  );
 
   const skillSearch = canEdit && (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Browse by category</Label>
+        <Select
+          value={selectedBrowseCategory || 'NONE'}
+          onValueChange={(value) => {
+            setSelectedBrowseCategory(value === 'NONE' ? '' : value);
+            setShowSkillDropdown(false);
+            setNewSkill('');
+          }}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="NONE">Select a category</SelectItem>
+            {skillCategories.map((category) => (
+              <SelectItem key={category.id} value={category.code}>
+                {category.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <div className="relative">
           <Input
-            placeholder="Type to search or add skill..."
+            placeholder={canBrowseTechnologies ? 'Search technologies in this category…' : 'Select a category first'}
             value={newSkill}
-            onChange={(e) => setNewSkill(e.target.value)}
+            onChange={(e) => {
+              setNewSkill(e.target.value);
+              if (canBrowseTechnologies) {
+                setShowSkillDropdown(true);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 handleAddSkill();
               }
             }}
-            onFocus={() => {
-              if (newSkill.trim()) {
-                setShowSkillDropdown(filteredTechnologies.length > 0);
-              }
-            }}
+            onFocus={openTechnologyDropdown}
+            onClick={openTechnologyDropdown}
             onBlur={() => {
               setTimeout(() => setShowSkillDropdown(false), 200);
             }}
             className="h-9 pr-10"
+            disabled={!canBrowseTechnologies || savingCoreChoice}
           />
-          <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
 
           <AnimatePresence>
-            {showSkillDropdown && (
+            {canBrowseTechnologies && showSkillDropdown && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg"
               >
-                {filteredTechnologies.length > 0 ? (
+                {dropdownTechnologies.length > 0 ? (
                   <div className="py-1">
-                    {filteredTechnologies.slice(0, 10).map((tech) => (
-                      <button
-                        key={tech.id}
-                        type="button"
-                        onClick={() => handleSelectFromDropdown(tech)}
-                        className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-accent"
-                      >
-                        <span className="font-medium">{tech.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {getTechnologyCategoryLabel(tech)}
-                        </span>
-                      </button>
-                    ))}
+                    {dropdownTechnologies.map((tech) => {
+                      const existingEntry = skillByTechnologyId.get(tech.id);
+                      return (
+                        <button
+                          key={tech.id}
+                          type="button"
+                          onClick={() => handleTechnologyPick(tech)}
+                          className={`flex w-full items-center justify-between px-4 py-2 text-left hover:bg-accent ${
+                            existingEntry ? 'bg-slate-50' : ''
+                          }`}
+                        >
+                          <span className="font-medium">{tech.name}</span>
+                          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {getTechnologyCategoryLabel(tech)}
+                            {existingEntry && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {getSkillIsCore(existingEntry) ? 'Core' : 'Can Do'}
+                              </Badge>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : newSkill.trim() && (
+                ) : newSkill.trim() ? (
                   <div className="px-4 py-3 text-sm text-muted-foreground">
                     No matching skills found. Press Enter to create &quot;{newSkill}&quot;
+                  </div>
+                ) : (
+                  <div className="px-4 py-3 text-sm text-muted-foreground">
+                    No technologies available in this category.
                   </div>
                 )}
               </motion.div>
@@ -286,58 +421,34 @@ function CandidateSkillsPanel({
           </AnimatePresence>
         </div>
 
-        <Button
-          type="button"
-          onClick={handleShowAllSkills}
-          size="sm"
-          variant="outline"
-          className="h-9 shrink-0 px-2"
-          title="Browse all skills"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
+        <p className="text-xs text-muted-foreground">
+          Select a category, then click the search field to browse technologies.
+          Type to filter, or pick one to set Core Technology or Can Do.
+        </p>
       </div>
     </div>
   );
 
   const skillsList = (
     <>
-      {currentSkills.length === 0 && (
+      {currentSkills.length === 0 ? (
         <p className="text-sm text-slate-500">
           {canEdit
-            ? 'No skills added yet. Search above to add skills.'
+            ? 'No skills added yet. Select a category and add your first technology.'
             : 'No skills available.'}
         </p>
-      )}
-      {currentSkills.length > 0 && (
+      ) : (
         <div className="space-y-4">
-          {groupedSkills.map(({ category, items }) => (
-            <div key={category}>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {category}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {items.map((item) => (
-                  <span
-                    key={item.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 px-3 py-1.5 text-xs font-medium text-indigo-900 shadow-sm"
-                  >
-                    {item.technology?.name}
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSkill(item)}
-                        className="rounded-full p-0.5 text-indigo-500 transition-colors hover:bg-indigo-100 hover:text-indigo-800"
-                        title="Remove skill"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
+          {renderTechnologyGroup(
+            'Core Technologies',
+            coreTechnologies,
+            'No core technologies marked yet.',
+          )}
+          {renderTechnologyGroup(
+            'Can Do',
+            otherTechnologies,
+            'No can do technologies added.',
+          )}
         </div>
       )}
     </>
@@ -368,7 +479,7 @@ function CandidateSkillsPanel({
                 <div>
                   <p className="text-base font-semibold text-slate-900">Create New Skill</p>
                   <p className="mt-1 text-sm text-slate-500">
-                    &quot;{newSkill}&quot; doesn&apos;t exist yet. Create it for this candidate.
+                    &quot;{newSkill}&quot; doesn&apos;t exist yet. You&apos;ll choose core status next.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -407,7 +518,7 @@ function CandidateSkillsPanel({
                     Cancel
                   </Button>
                   <Button type="button" className="flex-1" onClick={handleCreateAndAddSkill}>
-                    Create & Add
+                    Create
                   </Button>
                 </div>
               </CardContent>
@@ -466,6 +577,14 @@ function CandidateSkillsPanel({
           {sectionBody}
         </div>
         {createSkillModal}
+        <CoreTechnologyPrompt
+          open={Boolean(corePrompt)}
+          technology={corePrompt?.technology}
+          existingEntry={corePrompt?.existingEntry}
+          saving={savingCoreChoice}
+          onClose={closeCorePrompt}
+          onConfirm={handleCoreChoice}
+        />
       </>
     );
   }
@@ -488,6 +607,14 @@ function CandidateSkillsPanel({
         </CardContent>
       </Card>
       {createSkillModal}
+      <CoreTechnologyPrompt
+        open={Boolean(corePrompt)}
+        technology={corePrompt?.technology}
+        existingEntry={corePrompt?.existingEntry}
+        saving={savingCoreChoice}
+        onClose={closeCorePrompt}
+        onConfirm={handleCoreChoice}
+      />
     </>
   );
 }

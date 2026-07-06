@@ -35,7 +35,7 @@ import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
-import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/technologyHelpers';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -519,7 +519,7 @@ const AvailabilityViewPage = () => {
         }));
       }
       if (candidate) {
-        const ids = (candidate.technologies || []).map((skill) => skill.technology?.id).filter(Boolean);
+        const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
         if (ids.length > 0) {
           setFilterTech(ids);
         }

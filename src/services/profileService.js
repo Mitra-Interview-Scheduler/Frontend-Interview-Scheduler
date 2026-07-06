@@ -26,11 +26,18 @@ export const profileAPI = {
   },
 
   // Add interviewer technology
-  addInterviewerTechnology: async (technologyId, yearsOfExperience) => {
+  addInterviewerTechnology: async (technologyId, yearsOfExperience = 0, isCore = false) => {
     const response = await api.post('/profile/interviewer-technologies', {
       technologyId,
-      yearsOfExperience
+      yearsOfExperience,
+      isCore,
     });
+    return response.data;
+  },
+
+  // Update interviewer technology (e.g. core flag)
+  updateInterviewerTechnology: async (id, { isCore }) => {
+    const response = await api.put(`/profile/interviewer-technologies/${id}`, { isCore });
     return response.data;
   },
 

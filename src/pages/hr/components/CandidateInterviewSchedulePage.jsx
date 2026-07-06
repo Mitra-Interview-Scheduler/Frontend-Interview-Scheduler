@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { InterviewType } from '@/lib/statusConstants';
+import { getCandidateCoreTechnologyIds } from '@/lib/technologyHelpers';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
@@ -99,9 +100,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const handleGoToAvailability = () => {
     if (!availabilityDate || !interviewType) return;
 
-    const technologyIds = candidateTechnologies
-      .map((item) => item.technology?.id)
-      .filter(Boolean);
+    const technologyIds = getCandidateCoreTechnologyIds(candidateTechnologies);
 
     const domainIds = (candidate.domains || [])
       .map((d) => d.id)

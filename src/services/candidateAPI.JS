@@ -129,8 +129,16 @@ export const candidateAPI = {
     await api.delete(`/candidates/${candidateId}/documents/${documentId}`);
   },
 
-  addCandidateTechnology: async (candidateId, technologyId) => {
-    const response = await api.post(`/candidates/${candidateId}/technologies`, { technologyId });
+  addCandidateTechnology: async (candidateId, technologyId, isCore = false) => {
+    const response = await api.post(`/candidates/${candidateId}/technologies`, { technologyId, isCore });
+    return response.data;
+  },
+
+  updateCandidateTechnology: async (candidateId, technologyAssignmentId, { isCore }) => {
+    const response = await api.put(
+      `/candidates/${candidateId}/technologies/${technologyAssignmentId}`,
+      { isCore },
+    );
     return response.data;
   },
 

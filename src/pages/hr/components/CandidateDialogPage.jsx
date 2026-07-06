@@ -442,7 +442,11 @@ function CandidateDialogPage({
       if (pendingSkills.length > 0) {
         const skillResults = await Promise.allSettled(
           pendingSkills.map((skill) =>
-            candidateAPI.addCandidateTechnology(savedCandidateId, skill.technology.id)
+            candidateAPI.addCandidateTechnology(
+              savedCandidateId,
+              skill.technology.id,
+              skill.isCore ?? false,
+            )
           )
         );
         const failedSkills = skillResults.filter((result) => result.status === 'rejected');
