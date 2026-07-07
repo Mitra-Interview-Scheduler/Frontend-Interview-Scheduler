@@ -30,6 +30,7 @@ import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
 import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
+import InterviewerProfilePage from "./pages/interviewer/ProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
@@ -252,7 +253,11 @@ const App = () => (
             />
             <Route
               path="/interviewer/profile"
-              element={<Navigate to="/profile" replace />}
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <InterviewerProfilePage />
+                </PrivateRoute>
+              }
             />
 
             <Route

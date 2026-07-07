@@ -25,7 +25,7 @@ import { format, startOfDay } from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
@@ -135,12 +135,23 @@ const AvailabilityViewPage = () => {
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
   const techDropdownRef = useRef(null);
+  const appliedCandidateFiltersRef = useRef(null);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
     ? candidates.find((c) => c.id === requestForm.candidateId) || null
     : null;
+
+  const candidateCoreTechIds = useMemo(
+    () => getCandidateCoreTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
+
+  const isCandidateCoreTech = useCallback(
+    (technologyId) => candidateCoreTechIds.includes(technologyId),
+    [candidateCoreTechIds],
+  );
 
   // Single-interview privilege error
   const singlePrivilegeError = selectedSlot && selectedCandidate
@@ -333,11 +344,14 @@ const AvailabilityViewPage = () => {
     setInterviewType(InterviewType.TECHNICAL);
     setDateRange({ start: null, end: null });
     setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
     setSelectedDeptForDesignation('');
     setSelectedTierInDept('');
     setMinDesignationLevel('');
     setDesignationsForSelectedTier([]);
     setPendingFilter(null);
+    appliedCandidateFiltersRef.current = null;
     navigate('/hr/availability', { replace: true, state: null });
   }, [navigate]);
 
@@ -499,35 +513,46 @@ const AvailabilityViewPage = () => {
 
   
   
-  // ── Auto-set candidate designation after candidates load ─────────────────
+  // ── Auto-set candidate filters once when a candidate is first selected ──
   useEffect(() => {
-    if (requestForm.candidateId && candidates.length > 0) {
-      const candidate = candidates.find(c => c.id === requestForm.candidateId);
-      if (candidate && !isSchedulableCandidate(candidate.status)) {
-        setRequestForm((prev) => ({
-          ...prev,
-          candidateId: null,
-          candidateName: '',
-          candidateDesignationId: '',
-        }));
-        return;
+    if (!requestForm.candidateId || candidates.length === 0) {
+      if (!requestForm.candidateId) {
+        appliedCandidateFiltersRef.current = null;
       }
-      if (candidate && candidate.targetDesignationId) {
-        setRequestForm(prev => ({
-          ...prev,
-          candidateDesignationId: candidate.targetDesignationId
-        }));
+      return;
+    }
+
+    if (appliedCandidateFiltersRef.current === requestForm.candidateId) {
+      return;
+    }
+
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate && !isSchedulableCandidate(candidate.status)) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateId: null,
+        candidateName: '',
+        candidateDesignationId: '',
+      }));
+      appliedCandidateFiltersRef.current = null;
+      return;
+    }
+    if (candidate && candidate.targetDesignationId) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateDesignationId: candidate.targetDesignationId,
+      }));
+    }
+    if (candidate) {
+      const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
+      if (ids.length > 0) {
+        setFilterTech(ids);
       }
-      if (candidate) {
-        const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
-        if (ids.length > 0) {
-          setFilterTech(ids);
-        }
-        const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
-        if (domainIds.length > 0) {
-          setFilterDomain(domainIds);
-        }
+      const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
+      if (domainIds.length > 0) {
+        setFilterDomain(domainIds);
       }
+      appliedCandidateFiltersRef.current = requestForm.candidateId;
     }
   }, [requestForm.candidateId, candidates]);
 
@@ -823,12 +848,35 @@ const AvailabilityViewPage = () => {
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
   const clearFilters = () => {
-    setFilterDept([]); setFilterTech([]); setSelectedTechCategory(''); setTechSearchTerm(''); setMinExperience('');
-    setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
-    setMinDesignationLevel(''); setSelectedTierInDept('');
-    setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
+    setSelectedTechCategory('');
+    setTechSearchTerm('');
+    setShowTechDropdown(false);
+    setMinExperience('');
+    setDateRange({ start: null, end: null });
+    setSelectedDeptForDesignation('');
+    setMinDesignationLevel('');
+    setSelectedTierInDept('');
+    setTiersForSelectedDept([]);
+    setDesignationsForSelectedTier([]);
     setPendingFilter(null);
     setCalendarDate(new Date());
+    setInterviewType(InterviewType.TECHNICAL);
+    appliedCandidateFiltersRef.current = null;
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: null,
+      candidateName: '',
+      candidateDesignationId: '',
+      interviewCoordinatorId: null,
+      interviewCoordinatorDepartmentId: null,
+    }));
+    setCandidateSearchTerm('');
+    if (searchParams.get('candidateId') || searchParams.get('interviewType') || location.state?.filterData) {
+      navigate('/hr/availability', { replace: true, state: null });
+    }
   };
 
   const handleStartDateTimeChange = (value) => {
@@ -1177,7 +1225,10 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </div>
 
                 <div className="space-y-1">
-                  <Label >Technologies</Label>
+                  <Label className="flex items-center gap-2">
+                    Technologies
+                  </Label>
+                
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -1204,16 +1255,36 @@ const calendarSlotPropGetter = useCallback((date) => {
                           <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
                         ) : (
                           <div className="py-2">
-                            {filteredTechnologies.map((tech) => (
+                            {filteredTechnologies.map((tech) => {
+                              const isSelected = filterTech.includes(tech.id);
+                              const isCore = isCandidateCoreTech(tech.id);
+                              return (
                               <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
-                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
-                                <span className="font-medium">{tech.name}</span>
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${
+                                  isSelected ? (isCore ? 'bg-amber-50' : 'bg-primary/10') : ''
+                                }`}>
+                                <span className="flex items-center gap-2 font-medium">
+                                  {isCore && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
+                                  {tech.name}
+                                </span>
                                 <span className="flex items-center gap-2">
                                   <span className="text-xs text-muted-foreground">{getTechnologyCategoryLabel(tech)}</span>
-                                  {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
+                                  {isSelected && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs ${
+                                        isCore
+                                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                                          : ''
+                                      }`}
+                                    >
+                                      {isCore ? 'Candidate Core' : 'Selected'}
+                                    </Badge>
+                                  )}
                                 </span>
                               </button>
-                            ))}
+                            );
+                            })}
                           </div>
                         )}
                       </motion.div>
@@ -1225,9 +1296,20 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex flex-wrap gap-2 mt-2">
                     {filterTech.map((id) => {
                       const tech = technologies.find((t) => t.id === id);
+                      const isCore = isCandidateCoreTech(id);
                       return tech ? (
-                        <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                          {tech.name}
+                        <Badge
+                          key={id}
+                          variant="outline"
+                          className={`gap-1 pr-1 ${
+                            isCore
+                              ? 'border-amber-300 bg-amber-50 text-amber-900'
+                              : 'border-slate-200 bg-secondary text-secondary-foreground'
+                          }`}
+                        >
+                          {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+                          <span>{tech.name}</span>
+                          
                           <button onClick={() => setFilterTech(filterTech.filter((x) => x !== id))}
                             className="ml-1 hover:text-destructive rounded-full p-0.5">
                             <X className="w-3 h-3" />

@@ -44,9 +44,16 @@ function InterviewerTechnologiesPanel({  isEditing = false,
     setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
   }, [newSkillCategoryId, skillCategories]);
 
-  const interviewerTechByTechnologyId = useMemo(
-    () => new Map(interviewerTechs.map((item) => [item.technology.id, item])),
+  const visibleInterviewerTechs = useMemo(
+    () => interviewerTechs
+      .map(normalizeSkillAssignment)
+      .filter((item) => item?.technology?.id != null),
     [interviewerTechs],
+  );
+
+  const interviewerTechByTechnologyId = useMemo(
+    () => new Map(visibleInterviewerTechs.map((item) => [item.technology.id, item])),
+    [visibleInterviewerTechs],
   );
 
   const categoryTechnologies = useMemo(
@@ -55,13 +62,13 @@ function InterviewerTechnologiesPanel({  isEditing = false,
   );
 
   const coreTechnologies = useMemo(
-    () => interviewerTechs.filter((item) => getSkillIsCore(item)),
-    [interviewerTechs],
+    () => visibleInterviewerTechs.filter((item) => getSkillIsCore(item)),
+    [visibleInterviewerTechs],
   );
 
   const otherTechnologies = useMemo(
-    () => interviewerTechs.filter((item) => !getSkillIsCore(item)),
-    [interviewerTechs],
+    () => visibleInterviewerTechs.filter((item) => !getSkillIsCore(item)),
+    [visibleInterviewerTechs],
   );
 
   const canBrowseTechnologies = Boolean(selectedBrowseCategory);
@@ -331,7 +338,7 @@ function InterviewerTechnologiesPanel({  isEditing = false,
             </div>
           )}
 
-          {interviewerTechs.length === 0 ? (
+          {visibleInterviewerTechs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {isEditing
                 ? 'No skills added yet. Select a category and add your first technology.'
@@ -339,15 +346,20 @@ function InterviewerTechnologiesPanel({  isEditing = false,
             </p>
           ) : (
             <div className="space-y-4">
-              {renderTechnologyGroup(
+              {coreTechnologies.length > 0 && renderTechnologyGroup(
                 'Core Technologies',
                 coreTechnologies,
                 'No core technologies marked yet.',
               )}
-              {renderTechnologyGroup(
+              {otherTechnologies.length > 0 && renderTechnologyGroup(
                 'Can Do',
                 otherTechnologies,
                 'No can do technologies added.',
+              )}
+              {coreTechnologies.length === 0 && otherTechnologies.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Existing skills are shown under Can Do. Click Edit Profile to mark any as Core Technology.
+                </p>
               )}
             </div>
           )}

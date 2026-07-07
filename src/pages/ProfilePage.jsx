@@ -15,16 +15,18 @@ import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
 import { normalizeImageUrl } from '@/lib/imageUrl';
+import { hasInterviewerRole, shouldLoadInterviewerTechnologies } from '@/lib/roleHelpers';
+import { normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import InterviewerTechnologiesPanel from '@/components/InterviewerTechnologiesPanel';
 
 
 
 const ProfilePage = () => {
-  const { user, syncUser } = useAuth();
+  const { user, syncUser, loading: authLoading } = useAuth();
   const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
     ? user.roles
     : (user?.role ? [user.role] : []);
-  const isInterviewer = userRoles.includes('INTERVIEWER');
+  const isInterviewer = hasInterviewerRole(userRoles);
   const isAdmin = userRoles.includes('ADMIN');
   const canEditProfessionalDetails = isAdmin;
   const [isEditing, setIsEditing] = useState(false);
@@ -42,8 +44,28 @@ const ProfilePage = () => {
   const [selectedTierId, setSelectedTierId] = useState(null);
 
   useEffect(() => {
+    if (authLoading) return;
     loadProfileData();
-  }, []);
+  }, [authLoading, user?.id]);
+
+  const loadInterviewerTechnologies = async () => {
+    try {
+      const interviewerTechList = await profileAPI.getInterviewerTechnologies();
+      const normalized = (interviewerTechList || [])
+        .map(normalizeSkillAssignment)
+        .filter((item) => item?.technology?.id != null);
+      setInterviewerTechs(normalized);
+      return normalized;
+    } catch (skillsError) {
+      console.error('Error loading interviewer technologies:', skillsError);
+      setInterviewerTechs([]);
+      toast.error(
+        skillsError.response?.data?.message
+        || 'Failed to load your technologies. Please refresh the page.',
+      );
+      return [];
+    }
+  };
 
   const loadProfileData = async () => {
     try {
@@ -64,14 +86,8 @@ const ProfilePage = () => {
       setTiers(tierList);
       setSkillCategories(categoryList || []);
 
-      if (isInterviewer) {
-        try {
-          const interviewerTechList = await profileAPI.getInterviewerTechnologies();
-          setInterviewerTechs(interviewerTechList);
-        } catch (skillsError) {
-          console.error('Error loading interviewer technologies:', skillsError);
-          setInterviewerTechs([]);
-        }
+      if (shouldLoadInterviewerTechnologies(profileData, user)) {
+        await loadInterviewerTechnologies();
       } else {
         setInterviewerTechs([]);
       }
@@ -79,6 +95,7 @@ const ProfilePage = () => {
       syncUser?.({
         ...user,
         ...profileData,
+        roles: profileData.roles ?? user?.roles,
         profilePicture: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePicture || null,
         profilePictureUrl: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePictureUrl || null,
       });
@@ -232,6 +249,8 @@ const ProfilePage = () => {
       </Layout>
     );
   }
+
+  const showInterviewerSkills = shouldLoadInterviewerTechnologies(profile, user);
 
   return (
     <Layout>
@@ -548,6 +567,7 @@ const ProfilePage = () => {
               </CardContent>
             </Card>
 
+            {showInterviewerSkills && (
             <InterviewerTechnologiesPanel
               isEditing={isEditing}
               technologies={technologies}
@@ -556,6 +576,7 @@ const ProfilePage = () => {
               onTechnologiesChange={setInterviewerTechs}
               onTechnologyCreated={(tech) => setTechnologies((prev) => [...prev, tech])}
             />
+            )}
 
           </div>
         </div>

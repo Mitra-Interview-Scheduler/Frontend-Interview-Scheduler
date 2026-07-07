@@ -14,16 +14,13 @@ import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
 import { normalizeImageUrl } from '@/lib/imageUrl';
+import { normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import InterviewerTechnologiesPanel from '@/components/InterviewerTechnologiesPanel';
 
 
 
 const ProfilePage = () => {
-  const { user, syncUser } = useAuth();
-  const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
-    ? user.roles
-    : (user?.role ? [user.role] : []);
-  const isInterviewer = userRoles.includes('INTERVIEWER');
+  const { user, syncUser, loading: authLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,8 +36,28 @@ const ProfilePage = () => {
   const [selectedTierId, setSelectedTierId] = useState(null);
 
   useEffect(() => {
+    if (authLoading) return;
     loadProfileData();
-  }, []);
+  }, [authLoading, user?.id]);
+
+  const loadInterviewerTechnologies = async () => {
+    try {
+      const interviewerTechList = await profileAPI.getInterviewerTechnologies();
+      const normalized = (interviewerTechList || [])
+        .map(normalizeSkillAssignment)
+        .filter((item) => item?.technology?.id != null);
+      setInterviewerTechs(normalized);
+      return normalized;
+    } catch (skillsError) {
+      console.error('Error loading interviewer technologies:', skillsError);
+      setInterviewerTechs([]);
+      toast.error(
+        skillsError.response?.data?.message
+        || 'Failed to load your technologies. Please refresh the page.',
+      );
+      return [];
+    }
+  };
 
   const loadProfileData = async () => {
     try {
@@ -61,17 +78,7 @@ const ProfilePage = () => {
       setTiers(tierList);
       setSkillCategories(categoryList || []);
 
-      if (isInterviewer) {
-        try {
-          const interviewerTechList = await profileAPI.getInterviewerTechnologies();
-          setInterviewerTechs(interviewerTechList);
-        } catch (skillsError) {
-          console.error('Error loading interviewer technologies:', skillsError);
-          setInterviewerTechs([]);
-        }
-      } else {
-        setInterviewerTechs([]);
-      }
+      await loadInterviewerTechnologies();
 
       syncUser?.({
         ...user,

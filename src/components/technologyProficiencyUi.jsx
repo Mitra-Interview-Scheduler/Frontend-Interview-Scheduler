@@ -26,7 +26,7 @@ export function TechnologyProficiencyBadge({ item, isEditing, onOpenCorePrompt, 
       }`}
     >
       {getSkillIsCore(item) && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
-      <span>{item.technology.name}</span>
+      <span>{item.technology?.name}</span>
       {item.technology?.category && (
         <span className="text-xs opacity-70">
           ({getTechnologyCategoryLabel(item.technology)})
