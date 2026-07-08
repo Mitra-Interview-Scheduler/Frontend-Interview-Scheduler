@@ -9,7 +9,8 @@ import {
   Download, Eye, FileText, Loader2, Plus, Trash2,
 } from 'lucide-react';
 import { DocumentDropzone } from '@/components/DocumentDropzone';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { toast } from '@/hooks/use-toast';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import InterviewDocumentPreviewDialog from '@/pages/interviewer/components/InterviewDocumentPreviewDialog';

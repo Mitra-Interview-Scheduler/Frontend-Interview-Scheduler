@@ -17,7 +17,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { toast } from '@/hooks/use-toast';

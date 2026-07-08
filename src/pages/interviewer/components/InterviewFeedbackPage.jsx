@@ -14,7 +14,8 @@ import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { InterviewScheduleStatus, InterviewType } from '@/lib/statusConstants';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';

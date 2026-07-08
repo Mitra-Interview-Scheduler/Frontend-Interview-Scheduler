@@ -9,7 +9,8 @@ import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog'
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
 import CandidateSkillsPanel from '@/components/CandidateSkillsPanel';
 import CandidateDomainsPanel, { buildCandidateDomainPayload } from '@/components/CandidateDomainsPanel';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { toast } from '@/hooks/use-toast';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
 

@@ -38,7 +38,8 @@ import DomainMultiSelect from '@/components/DomainMultiSelect';
 import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
