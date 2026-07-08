@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, FileText, Eye, Download, Hash, UserCheck } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -30,7 +29,7 @@ function CandidateDetailsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [interviewRefreshKey, setInterviewRefreshKey] = useState(0);
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
-  const { interviewRequests, interviews, panels, loading: interviewsLoading } = useCandidateInterviews(
+  const { interviewRequests, interviews, panels, loading: interviewsLoading, error: interviewsError } = useCandidateInterviews(
     candidate?.id,
     interviewRefreshKey,
   );
@@ -321,6 +320,7 @@ function CandidateDetailsPage() {
               interviews={interviews}
               panels={panels}
               interviewsLoading={interviewsLoading}
+              interviewsError={interviewsError}
               onInterviewsRefresh={refreshInterviews}
               documents={documents}
               documentsLoading={documentsLoading}

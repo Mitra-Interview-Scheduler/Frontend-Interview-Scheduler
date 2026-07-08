@@ -87,7 +87,8 @@ export const AuthProvider = ({ children }) => {
       if (storedUser && token) {
         try {
           await authAPI.verify();
-          syncUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          syncUser(parsedUser);
         } catch (error) {
           clearSession();
         }

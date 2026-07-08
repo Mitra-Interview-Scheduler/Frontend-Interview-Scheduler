@@ -261,7 +261,6 @@ const HRDashboard = () => {
     }
   }, []);
 
-  useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
   useEffect(() => {
     // load departments for filter UI
     (async () => {

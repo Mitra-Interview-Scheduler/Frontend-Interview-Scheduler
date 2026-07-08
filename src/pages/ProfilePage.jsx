@@ -8,33 +8,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Plus, X, Loader2, Search, ChevronDown, TrendingUp } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Loader2, TrendingUp } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
-import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
-import { getTechnologyCategoryLabel } from '@/lib/technologyHelpers';
 import { normalizeImageUrl } from '@/lib/imageUrl';
+import { hasInterviewerRole, shouldLoadInterviewerTechnologies } from '@/lib/roleHelpers';
+import { normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import InterviewerTechnologiesPanel from '@/components/InterviewerTechnologiesPanel';
 
 
 
 const ProfilePage = () => {
-  const { user, syncUser } = useAuth();
+  const { user, syncUser, loading: authLoading } = useAuth();
   const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
     ? user.roles
     : (user?.role ? [user.role] : []);
-  const isInterviewer = userRoles.includes('INTERVIEWER');
+  const isInterviewer = hasInterviewerRole(userRoles);
+  const isAdmin = userRoles.includes('ADMIN');
+  const canEditProfessionalDetails = isAdmin;
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [newSkill, setNewSkill] = useState('');
-  const [newSkillCategoryId, setNewSkillCategoryId] = useState('');
   const [skillCategories, setSkillCategories] = useState([]);
-  const [showSkillDropdown, setShowSkillDropdown] = useState(false);
-  const [showNewSkillModal, setShowNewSkillModal] = useState(false);
-  const [filteredTechnologies, setFilteredTechnologies] = useState([]);
   const [profile, setProfile] = useState(null);
   const [technologies, setTechnologies] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -46,22 +44,28 @@ const ProfilePage = () => {
   const [selectedTierId, setSelectedTierId] = useState(null);
 
   useEffect(() => {
+    if (authLoading) return;
     loadProfileData();
-  }, []);
+  }, [authLoading, user?.id]);
 
-  useEffect(() => {
-    if (newSkill.trim()) {
-      const filtered = technologies.filter(tech =>
-        tech.name.toLowerCase().includes(newSkill.toLowerCase()) &&
-        !interviewerTechs.some(it => it.technology.id === tech.id)
+  const loadInterviewerTechnologies = async () => {
+    try {
+      const interviewerTechList = await profileAPI.getInterviewerTechnologies();
+      const normalized = (interviewerTechList || [])
+        .map(normalizeSkillAssignment)
+        .filter((item) => item?.technology?.id != null);
+      setInterviewerTechs(normalized);
+      return normalized;
+    } catch (skillsError) {
+      console.error('Error loading interviewer technologies:', skillsError);
+      setInterviewerTechs([]);
+      toast.error(
+        skillsError.response?.data?.message
+        || 'Failed to load your technologies. Please refresh the page.',
       );
-      setFilteredTechnologies(filtered);
-      setShowSkillDropdown(filtered.length > 0 || newSkill.length > 0);
-    } else {
-      setFilteredTechnologies([]);
-      setShowSkillDropdown(false);
+      return [];
     }
-  }, [newSkill, technologies, interviewerTechs]);
+  };
 
   const loadProfileData = async () => {
     try {
@@ -81,17 +85,9 @@ const ProfilePage = () => {
       setDesignations(desList);
       setTiers(tierList);
       setSkillCategories(categoryList || []);
-      const defaultCategory = (categoryList || []).find((c) => c.code === 'GENERAL') || categoryList?.[0];
-      setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
 
-      if (isInterviewer) {
-        try {
-          const interviewerTechList = await profileAPI.getInterviewerTechnologies();
-          setInterviewerTechs(interviewerTechList);
-        } catch (skillsError) {
-          console.error('Error loading interviewer technologies:', skillsError);
-          setInterviewerTechs([]);
-        }
+      if (shouldLoadInterviewerTechnologies(profileData, user)) {
+        await loadInterviewerTechnologies();
       } else {
         setInterviewerTechs([]);
       }
@@ -99,6 +95,7 @@ const ProfilePage = () => {
       syncUser?.({
         ...user,
         ...profileData,
+        roles: profileData.roles ?? user?.roles,
         profilePicture: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePicture || null,
         profilePictureUrl: profileData.profilePictureUrl || profileData.profilePicture || user?.profilePictureUrl || null,
       });
@@ -146,12 +143,16 @@ const ProfilePage = () => {
       await profileAPI.updateProfile({
         phone: profile.phone,
         profilePictureUrl: profile.profilePictureUrl,
-        departmentId: profile.department?.id,
-        designationId: profile.currentDesignation?.id,
         firstName: profile.firstName,
         lastName: profile.lastName,
         bio: profile.bio,
-        yearsOfExperience: profile.yearsOfExperience
+        ...(canEditProfessionalDetails
+          ? {
+              departmentId: profile.department?.id,
+              designationId: profile.currentDesignation?.id,
+              yearsOfExperience: profile.yearsOfExperience,
+            }
+          : {}),
       });
 
       setIsEditing(false);
@@ -231,94 +232,6 @@ const ProfilePage = () => {
       null
   );
 
-  const handleSelectFromDropdown = async (tech) => {
-    setShowSkillDropdown(false);
-    setNewSkill('');
-    await addSkillById(tech.id);
-  };
-
-  const handleAddSkill = async () => {
-    if (!newSkill.trim()) return;
-
-    setShowSkillDropdown(false);
-
-    try {
-      const exactMatch = technologies.find(
-        t => t.name.toLowerCase() === newSkill.trim().toLowerCase()
-      );
-
-      if (exactMatch) {
-        await addSkillById(exactMatch.id);
-        setNewSkill('');
-      } else {
-        setShowNewSkillModal(true);
-      }
-    } catch (error) {
-      console.error('Error adding skill:', error);
-      toast.error('Failed to add skill');
-    }
-  };
-
-  const handleCreateAndAddSkill = async () => {
-    if (!newSkill.trim()) return;
-
-    try {
-      const newTech = await profileAPI.createTechnology(newSkill.trim(), Number(newSkillCategoryId));
-      setTechnologies([...technologies, newTech]);
-      await addSkillById(newTech.id);
-
-      setNewSkill('');
-      const defaultCategory = skillCategories.find((c) => c.code === 'GENERAL') || skillCategories[0];
-      setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
-      setShowNewSkillModal(false);
-
-      toast.success(`Created and added "${newTech.name}"`);
-    } catch (error) {
-      console.error('Error creating skill:', error);
-      toast.error('Failed to create skill');
-    }
-  };
-
-  const addSkillById = async (technologyId) => {
-    try {
-      if (interviewerTechs.some(it => it.technology.id === technologyId)) {
-        toast.warning('This skill is already added');
-        return;
-      }
-
-      const newInterviewerTech = await profileAPI.addInterviewerTechnology(technologyId, 0);
-      setInterviewerTechs([...interviewerTechs, newInterviewerTech]);
-      toast.success('Skill added');
-    } catch (error) {
-      console.error('Error adding skill:', error);
-      toast.error(error.response?.data?.message || 'Failed to add skill');
-    }
-  };
-
-  const handleRemoveSkill = async (interviewerTechId) => {
-    try {
-      await profileAPI.removeInterviewerTechnology(interviewerTechId);
-      setInterviewerTechs(interviewerTechs.filter(it => it.id !== interviewerTechId));
-      toast.success('Skill removed');
-    } catch (error) {
-      console.error('Error removing skill:', error);
-      toast.error('Failed to remove skill');
-    }
-  };
-
-  const handleShowAllSkills = () => {
-    if (showSkillDropdown) {
-      setShowSkillDropdown(false);
-    } else {
-      setFilteredTechnologies(
-        technologies.filter(tech =>
-          !interviewerTechs.some(it => it.technology.id === tech.id)
-        )
-      );
-      setShowSkillDropdown(true);
-    }
-  };
-
   if (loading) {
     return (
       <Layout>
@@ -336,6 +249,8 @@ const ProfilePage = () => {
       </Layout>
     );
   }
+
+  const showInterviewerSkills = shouldLoadInterviewerTechnologies(profile, user);
 
   return (
     <Layout>
@@ -503,8 +418,10 @@ const ProfilePage = () => {
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
                 <CardDescription>
-                  Your role, department, tier, and designation information
-                  {isInterviewer && isEditing && (
+                  {canEditProfessionalDetails
+                    ? 'Your role, department, tier, and designation information'
+                    : 'Your role, department, tier, and designation are managed by an administrator'}
+                  {canEditProfessionalDetails && isInterviewer && isEditing && (
                     <>
                       {' '}
                       — missing options?{' '}
@@ -525,7 +442,7 @@ const ProfilePage = () => {
                     <Briefcase className="w-4 h-4" />
                     Department
                   </Label>
-                  {isEditing ? (
+                  {isEditing && canEditProfessionalDetails ? (
                     <Select
                       value={profile.department?.id?.toString() || "NONE"}
                       onValueChange={handleDepartmentChange}
@@ -559,7 +476,7 @@ const ProfilePage = () => {
                         <TrendingUp className="w-4 h-4" />
                         Tier
                       </Label>
-                      {isEditing ? (
+                      {isEditing && canEditProfessionalDetails ? (
                         <Select
                           // ── FIX: read from dedicated selectedTierId, not from designation
                           value={selectedTierId?.toString() || "NONE"}
@@ -595,7 +512,7 @@ const ProfilePage = () => {
                         <Award className="w-4 h-4" />
                         Designation
                       </Label>
-                      {isEditing ? (
+                      {isEditing && canEditProfessionalDetails ? (
                         <Select
                           value={profile.currentDesignation?.id?.toString() || "NONE"}
                           onValueChange={handleDesignationChange}
@@ -642,7 +559,7 @@ const ProfilePage = () => {
                     onChange={(e) =>
                       handleChange('yearsOfExperience', parseInt(e.target.value) || 0)
                     }
-                    disabled={!isEditing}
+                    disabled={!isEditing || !canEditProfessionalDetails}
                     min={0}
                     max={50}
                   />
@@ -650,222 +567,20 @@ const ProfilePage = () => {
               </CardContent>
             </Card>
 
-             
-              <Card className="shadow-elegant">
-                <CardHeader>
-                  <CardTitle>Technical Skills & Interview Preferences</CardTitle>
-                  <CardDescription>
-                    Technologies you're proficient in and willing to conduct interviews for
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {isEditing && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Input
-                            placeholder="Type to search or add new skill..."
-                            value={newSkill}
-                            onChange={(e) => setNewSkill(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddSkill();
-                              }
-                            }}
-                            onFocus={() => {
-                              if (newSkill.trim()) {
-                                setShowSkillDropdown(filteredTechnologies.length > 0);
-                              }
-                            }}
-                            onBlur={() => {
-                              setTimeout(() => setShowSkillDropdown(false), 200);
-                            }}
-                            className="pr-10"
-                          />
-                          <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+            {showInterviewerSkills && (
+            <InterviewerTechnologiesPanel
+              isEditing={isEditing}
+              technologies={technologies}
+              skillCategories={skillCategories}
+              interviewerTechs={interviewerTechs}
+              onTechnologiesChange={setInterviewerTechs}
+              onTechnologyCreated={(tech) => setTechnologies((prev) => [...prev, tech])}
+            />
+            )}
 
-                          <AnimatePresence>
-                            {showSkillDropdown && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto"
-                              >
-                                {filteredTechnologies.length > 0 ? (
-                                  <div className="py-1">
-                                    {filteredTechnologies.slice(0, 10).map((tech) => (
-                                      <button
-                                        key={tech.id}
-                                        onClick={() => handleSelectFromDropdown(tech)}
-                                        className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between group"
-                                      >
-                                        <span className="font-medium">{tech.name}</span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {getTechnologyCategoryLabel(tech)}
-                                        </span>
-                                      </button>
-                                    ))}
-                                    {filteredTechnologies.length > 10 && (
-                                      <div className="px-4 py-2 text-xs text-muted-foreground border-t">
-                                        +{filteredTechnologies.length - 10} more...
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : newSkill.trim() && (
-                                  <div className="px-4 py-3 text-sm text-muted-foreground">
-                                    No matching skills found. Press Enter to create "{newSkill}"
-                                  </div>
-                                )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                        <Button
-                          onClick={handleShowAllSkills}
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0"
-                          title="Browse all skills"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                      </div>
-
-                      <p className="text-xs text-muted-foreground">
-                        Start typing to search, or click the dropdown icon to browse all available skills
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {interviewerTechs.map((it) => (
-                      <motion.div
-                        key={it.id}
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.8, opacity: 0 }}
-                      >
-                        <Badge
-                          variant="outline"
-                          className="text-sm gap-1 pr-1 bg-success-light text-success border-success/20"
-                        >
-                          <span>{it.technology.name}</span>
-                          {it.technology?.category && (
-                            <span className="text-xs opacity-70">({getTechnologyCategoryLabel(it.technology)})</span>
-                          )}
-                          {isEditing && (
-                            <button
-                              onClick={() => handleRemoveSkill(it.id)}
-                              className="ml-1 hover:text-destructive rounded-full hover:bg-destructive/10 p-0.5 transition-colors"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          )}
-                        </Badge>
-                      </motion.div>
-                    ))}
-                    {interviewerTechs.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {isEditing
-                          ? "No skills added yet. Start typing above to add your first skill."
-                          : "No skills added yet. Click 'Edit Profile' to add skills."}
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            
           </div>
         </div>
       </div>
-
-      {/* New Skill Modal */}
-      <AnimatePresence>
-        {showNewSkillModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-40"
-              onClick={() => {
-                setShowNewSkillModal(false);
-                setNewSkill('');
-                setNewSkillCategory('Other');
-              }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
-            >
-              <Card className="shadow-2xl">
-                <CardHeader>
-                  <CardTitle>Create New Skill</CardTitle>
-                  <CardDescription>
-                    "{newSkill}" doesn't exist yet. Let's create it!
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="skillName">Skill Name</Label>
-                    <Input
-                      id="skillName"
-                      value={newSkill}
-                      onChange={(e) => setNewSkill(e.target.value)}
-                      placeholder="e.g., React Native"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="skillCategory">Category</Label>
-                    <Select
-                      value={newSkillCategoryId}
-                      onValueChange={setNewSkillCategoryId}
-                    >
-                      <SelectTrigger id="skillCategory">
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {skillCategories.map((category) => (
-                          <SelectItem key={category.id} value={String(category.id)}>
-                            {category.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => {
-                        setShowNewSkillModal(false);
-                        setNewSkill('');
-                        const defaultCategory = skillCategories.find((c) => c.code === 'GENERAL') || skillCategories[0];
-                        setNewSkillCategoryId(defaultCategory ? String(defaultCategory.id) : '');
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      className="flex-1"
-                      onClick={handleCreateAndAddSkill}
-                    >
-                      Create & Add
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </Layout>
   );
 };

@@ -190,6 +190,7 @@ const AdminDashboard = () => {
                 {[
                   { label: 'Manage Users', icon: Users, path: '/admin/users' },
                   { label: 'Technologies', icon: Shield, path: '/admin/technologies' },
+                  { label: 'Domains', icon: Shield, path: '/admin/domains' },
                   { label: 'Designations', icon: Calendar, path: '/admin/designations' },
                   { label: 'Departments', icon: Clock, path: '/admin/departments' },
                 ].map((action) => {

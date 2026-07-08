@@ -1,4 +1,4 @@
-import { resolveInterviewRequestStatus, resolveInterviewRoundStatus, collectInterviewRoundsForPipeline, getInterviewerDesignationLabel, compareInterviewCreationOrder, compareInterviewRoundCreationOrder } from '@/lib/candidateInterviews';
+import { resolveInterviewRequestStatus, resolveInterviewRoundStatus, collectInterviewRoundsForPipeline, getInterviewerDesignationLabel, compareInterviewCreationOrder, compareInterviewRoundCreationOrder, getInterviewCreationOrderTimestamp } from '@/lib/candidateInterviews';
 import {
   ActivityStepStatus,
   InterviewRequestStatus,
@@ -90,11 +90,14 @@ export const normalizeCandidateSteps = (steps) => {
 
 export const getCandidateStep = (steps, status) => {
   const normalized = normalizeCandidateSteps(steps);
-  const currentPipelineStep = normalized.find((step) => step.stepStatus === PipelineStepStatus.CURRENT);
-  if (currentPipelineStep) {
-    return currentPipelineStep;
+  if (status) {
+    const matchByKey = normalized.find((step) => step.key === status);
+    if (matchByKey) {
+      return matchByKey;
+    }
   }
-  return normalized.find((step) => step.key === status);
+  return normalized.find((step) => step.stepStatus === PipelineStepStatus.CURRENT)
+    ?? normalized.find((step) => step.key === status);
 };
 
 export const getCandidateStatusLabel = (steps, status) => {
@@ -231,14 +234,20 @@ export const applyCancelledInterviewOverrides = (
           return;
         }
 
+        if (linkedStatus === InterviewScheduleStatus.COMPLETED) {
+          overrides[stepIndex] = {
+            ...step,
+            stepStatus: PipelineStepStatus.COMPLETED,
+            cancelledInterview: false,
+          };
+          return;
+        }
+
         if (step.stepStatus === PipelineStepStatus.CURRENT) {
           return;
         }
 
-        if (
-          linkedStatus === InterviewScheduleStatus.SCHEDULED
-          || linkedStatus === InterviewScheduleStatus.COMPLETED
-        ) {
+        if (linkedStatus === InterviewScheduleStatus.SCHEDULED) {
           if (step.stepStatus === PipelineStepStatus.FAILED || step.cancelledInterview) {
             overrides[stepIndex] = {
               ...step,
@@ -258,12 +267,168 @@ export const applyCancelledInterviewOverrides = (
   return enforceCancelledStepState(overrides);
 };
 
+/**
+ * Keeps macro stages in pipeline order but sorts interview round steps by when
+ * each interview was actually scheduled (global chronology), not by round type.
+ */
+export const sortPipelineStepsByInterviewChronology = (steps, interviewRequests = []) => {
+  if (!Array.isArray(steps) || steps.length === 0) return steps;
+
+  const sorted = [...steps].sort((a, b) => a.step - b.step || Number(a.id ?? 0) - Number(b.id ?? 0));
+  const roundSteps = sorted
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => REPEATABLE_ROUND_KEYS.has(step.key));
+
+  if (roundSteps.length <= 1) {
+    return assignDisplayStepNumbers(sorted);
+  }
+
+  const stepsByKey = {};
+  roundSteps.forEach(({ step, index }) => {
+    if (!stepsByKey[step.key]) {
+      stepsByKey[step.key] = [];
+    }
+    stepsByKey[step.key].push({ step, index });
+  });
+
+  const usedIndices = new Set();
+  const matchedRounds = [];
+
+  dedupeInterviewRounds(interviewRequests)
+    .sort(compareInterviewRoundCreationOrder)
+    .forEach((interview) => {
+      const roundKey = resolveRoundKeyForInterview(interview);
+      const pool = stepsByKey[roundKey] || [];
+      const match = pool.find(({ index }) => !usedIndices.has(index));
+      if (!match) return;
+
+      usedIndices.add(match.index);
+      matchedRounds.push({
+        step: match.step,
+        timestamp: getInterviewCreationOrderTimestamp(interview),
+        sourceIndex: match.index,
+      });
+    });
+
+  roundSteps.forEach(({ step, index }) => {
+    if (usedIndices.has(index)) return;
+    matchedRounds.push({
+      step,
+      timestamp: step.step * 1_000_000 + Number(step.id ?? 0),
+      sourceIndex: index,
+    });
+  });
+
+  matchedRounds.sort((a, b) => a.timestamp - b.timestamp || a.sourceIndex - b.sourceIndex);
+
+  const firstRoundIndex = Math.min(...roundSteps.map(({ index }) => index));
+  const lastRoundIndex = Math.max(...roundSteps.map(({ index }) => index));
+  const nonRoundBefore = sorted.slice(0, firstRoundIndex);
+  const macroBetweenRounds = sorted.filter(
+    (step, index) => index > firstRoundIndex
+      && index < lastRoundIndex
+      && !REPEATABLE_ROUND_KEYS.has(step.key),
+  );
+  const nonRoundAfter = sorted.slice(lastRoundIndex + 1);
+
+  return assignDisplayStepNumbers([
+    ...nonRoundBefore,
+    ...matchedRounds.map(({ step }) => step),
+    ...macroBetweenRounds.sort((a, b) => a.step - b.step || Number(a.id ?? 0) - Number(b.id ?? 0)),
+    ...nonRoundAfter,
+  ]);
+};
+
+const assignDisplayStepNumbers = (steps) => steps.map((step, index) => ({
+  ...step,
+  step: index + 1,
+}));
+
 const ROUND_STAGE_KEYS = REPEATABLE_ROUND_KEYS;
 
 const INTERVIEW_GROUP_ORDER = {
   ROUND_STAGE: 0,
+  STATUS_AUDIT: 15,
   PRELUDE: 1,
   DEFAULT: 50,
+};
+
+const PIPELINE_AUDIT_ACTION_LABELS = {
+  APPLICATION_CREATED: 'Application created',
+  STATUS_CHANGED: 'Status updated',
+  SCREENING_SAVED: 'Screening saved',
+  APPLICATION_CLOSED: 'Application closed',
+  INTERVIEW_SCHEDULED: 'Interview scheduled',
+  INTERVIEW_CANCELLED: 'Interview cancelled',
+  FEEDBACK_SUBMITTED: 'Feedback submitted',
+};
+
+const formatActorDetail = (name, designation) => {
+  if (!name) return null;
+  if (designation) return `By ${name} (${designation})`;
+  return `By ${name}`;
+};
+
+const formatStatusKeyLabel = (statusKey) => String(statusKey || '')
+  .trim()
+  .replace(/_/g, ' ')
+  .toLowerCase()
+  .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const resolveAuditEntryStyle = (actionType) => {
+  if (actionType === 'INTERVIEW_CANCELLED') {
+    return {
+      statusBadgeClass: 'bg-red-50 text-red-700 border-red-200',
+      bgColor: '#ef4444',
+    };
+  }
+  return {
+    statusBadgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+    bgColor: '#8b5cf6',
+  };
+};
+
+export const mapPipelineStatusEventsToActivityEntries = (events = [], getStepLabel) => (
+  events.map((event) => {
+    const timestamp = event.createdAt;
+    const sortTimestamp = timestamp ? new Date(timestamp).getTime() : Number(event.id ?? 0);
+    const stepLabel = getStepLabel
+      ? getStepLabel(event.statusKey)
+      : formatStatusKeyLabel(event.statusKey);
+    const auditStyle = resolveAuditEntryStyle(event.actionType);
+
+    return withSortMeta({
+      id: `status-audit-${event.id}`,
+      kind: 'STATUS_AUDIT',
+      stepLabel,
+      stepKey: event.statusKey,
+      masterStepId: event.masterStepId,
+      previousStatusKey: event.previousStatusKey,
+      previousMasterStepId: event.previousMasterStepId,
+      actionType: event.actionType,
+      stepStatus: ActivityStepStatus.CREATED,
+      sequenceOrder: 5000 + Number(event.id ?? 0),
+      timestamp,
+      detail: formatActorDetail(event.changedByName, event.changedByDesignation),
+      notes: event.notes,
+      actionLabel: PIPELINE_AUDIT_ACTION_LABELS[event.actionType] || 'Updated',
+      statusBadgeClass: auditStyle.statusBadgeClass,
+      bgColor: auditStyle.bgColor,
+    }, sortTimestamp, INTERVIEW_GROUP_ORDER.STATUS_AUDIT);
+  })
+);
+
+const pickLatestAuditActorForStep = (step, statusEvents = []) => {
+  const masterStepId = step.step?.id ?? step.masterStepId ?? null;
+  const matches = statusEvents.filter((event) => {
+    if (masterStepId != null && event.masterStepId != null) {
+      return Number(event.masterStepId) === Number(masterStepId);
+    }
+    return event.statusKey === step.key;
+  });
+  if (matches.length === 0) return null;
+  const event = matches[0];
+  return formatActorDetail(event.changedByName, event.changedByDesignation);
 };
 
 const getActivityTimestamp = (entry) => {
@@ -447,10 +612,12 @@ const enrichPipelineWithPrelude = (pipelineEntry, prelude) => {
 
   return {
     ...pipelineEntry,
+    actorDetail: pipelineEntry.detail || null,
     interviewRequest: prelude.interviewRequest,
     panel: prelude.panel,
     detail: prelude.detail,
     interviewType: prelude.interviewType,
+    interviewScheduleStatus: interviewStatus,
     timestamp: prelude.timestamp || pipelineEntry.timestamp,
     endTimestamp: prelude.endTimestamp || null,
     ...(isCancelled && {
@@ -459,6 +626,31 @@ const enrichPipelineWithPrelude = (pipelineEntry, prelude) => {
       actionLabel: 'Cancelled',
       statusBadgeClass: 'bg-red-50 text-red-700 border-red-200',
     }),
+  };
+};
+
+const convertPreludeToPipelineEntry = (prelude) => {
+  const interviewStatus = prelude.stepStatus;
+  const isCancelled = interviewStatus === InterviewScheduleStatus.CANCELLED;
+  const pipelineStatus = isCancelled
+    ? PipelineStepStatus.FAILED
+    : interviewStatus === InterviewScheduleStatus.COMPLETED
+      ? PipelineStepStatus.COMPLETED
+      : PipelineStepStatus.CURRENT;
+  const pipelineMeta = ACTIVITY_STATUS_META[pipelineStatus] || ACTIVITY_STATUS_META[PipelineStepStatus.COMPLETED];
+  const interviewMeta = INTERVIEW_STATUS_META[interviewStatus] || INTERVIEW_STATUS_META[InterviewScheduleStatus.SCHEDULED];
+
+  return {
+    ...prelude,
+    kind: 'PIPELINE',
+    id: `pipeline-${prelude.id}`,
+    stepStatus: pipelineStatus,
+    interviewScheduleStatus: interviewStatus,
+    cancelledInterview: isCancelled,
+    actionLabel: isCancelled ? 'Cancelled' : interviewMeta.action || pipelineMeta.action,
+    statusBadgeClass: isCancelled
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : interviewMeta.badgeClass || pipelineMeta.badgeClass,
   };
 };
 
@@ -541,44 +733,22 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
         || getActivityTimestamp(entry)
         || Date.now();
       timeline.push(withSortMeta(
-        entry,
+        convertPreludeToPipelineEntry(entry),
         fallbackSort + PIPELINE_SORT_SCALE * 1_000,
-        INTERVIEW_GROUP_ORDER.PRELUDE,
+        INTERVIEW_GROUP_ORDER.ROUND_STAGE,
       ));
     });
 
   return timeline.sort(compareActivityEntries);
 };
 
-export const buildCandidateActivityHistory = (steps, candidate = null, interviews = [], panels = []) => {
-  const interviewRequests = collectInterviewRoundsForPipeline(interviews, panels);
-  const normalized = applyCancelledInterviewOverrides(
-    normalizeCandidateSteps(steps),
-    interviewRequests,
-    candidate?.status ?? null,
-  );
-  const entries = normalized
-    .filter((step) => step.stepStatus && step.stepStatus !== PipelineStepStatus.PENDING)
-    .map(mapPipelineStepToActivityEntry);
-
-  if (candidate?.createdAt) {
-    const hasCreatedStep = entries.some((entry) => entry.stepKey === MasterStatus.NEW);
-    if (!hasCreatedStep) {
-      entries.unshift({
-        id: 'candidate-created',
-        kind: 'PIPELINE',
-        stepLabel: 'New Application',
-        stepKey: MasterStatus.NEW,
-        stepStatus: ActivityStepStatus.CREATED,
-        sequenceOrder: 0,
-        timestamp: candidate.createdAt,
-        bgColor: '#6366f1',
-        actionLabel: ACTIVITY_STATUS_META[ActivityStepStatus.CREATED].action,
-        statusBadgeClass: ACTIVITY_STATUS_META[ActivityStepStatus.CREATED].badgeClass,
-      });
-    }
-  }
-
-  const interviewEntries = buildInterviewActivityEntries(interviews, panels);
-  return buildInterleavedActivityTimeline(entries, interviewEntries);
-};
+export const buildCandidateActivityHistory = (
+  _steps,
+  _candidate = null,
+  _interviews = [],
+  _panels = [],
+  statusEvents = [],
+  getStepLabel = null,
+) => (
+  mapPipelineStatusEventsToActivityEntries(statusEvents, getStepLabel).sort(compareActivityEntries)
+);

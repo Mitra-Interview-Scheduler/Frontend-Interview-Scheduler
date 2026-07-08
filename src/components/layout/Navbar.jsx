@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,7 +10,8 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Menu, Bell, LogOut, User, Calendar } from 'lucide-react';
+import { Menu, LogOut, User, Calendar } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
 import { normalizeImageUrl } from '@/lib/imageUrl';
@@ -19,7 +19,6 @@ import { normalizeImageUrl } from '@/lib/imageUrl';
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [notifications] = useState(3); // Mock notification count
 
   const getInitials = () => {
     if (!user) return 'U';
@@ -38,7 +37,7 @@ const Navbar = ({ onMenuClick }) => {
   const profileImage = normalizeImageUrl(user?.profilePicture || user?.profilePictureUrl || null);
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 shadow-sm">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 shadow-sm">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center gap-4">
           <Button 
@@ -62,16 +61,7 @@ const Navbar = ({ onMenuClick }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="w-5 h-5" />
-            {notifications > 0 && (
-              <Badge 
-                className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center bg-destructive text-white text-xs"
-              >
-                {notifications}
-              </Badge>
-            )}
-          </Button>
+          <NotificationBell />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

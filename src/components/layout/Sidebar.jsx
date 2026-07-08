@@ -5,7 +5,7 @@ import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
   UserCheck, BarChart3, Clock, FileText, 
-  Shield, Briefcase, Bell, ChevronDown, MessageSquare
+  Shield, Briefcase, Bell, ChevronDown, MessageSquare, Globe2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ const adminLinks = [
   { icon: Users, label: 'User Management', path: '/admin/users' },
   { icon: Shield, label: 'Designations', path: '/admin/designations' },
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
+  { icon: Globe2, label: 'Domains', path: '/admin/domains' },
   // { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
   // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },

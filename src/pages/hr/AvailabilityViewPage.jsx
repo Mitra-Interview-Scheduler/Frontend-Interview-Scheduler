@@ -22,11 +22,10 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
 import { format, startOfDay } from 'date-fns';
-import { useGoogleLogin } from '@react-oauth/google';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert, CalendarPlus,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
@@ -34,17 +33,13 @@ import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
-import { getTechnologyCategoryLabel, getTechnologyCategoryCode } from '@/lib/technologyHelpers';
+import { domainAPI } from '@/services/domainAPI';
+import DomainMultiSelect from '@/components/DomainMultiSelect';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import {
-  createMockCalendarEvent,
-  getStoredCalendarAccessToken,
-  GOOGLE_CALENDAR_EVENTS_SCOPE,
-  storeCalendarAccessToken,
-} from '@/services/googleCalendarAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
@@ -61,7 +56,8 @@ const CALENDAR_PAGE_SIZES = {
 };
 
 
-// ── Component ────────────────────────────────────────────────────────────────
+const normalizeTechName = (name) => (name ?? '').trim().toLowerCase();
+
 const resolveInterviewType = (...values) => {
   const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
   return match || InterviewType.TECHNICAL;
@@ -94,6 +90,7 @@ const AvailabilityViewPage = () => {
   const viewTimerRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -103,6 +100,7 @@ const AvailabilityViewPage = () => {
   // Filters
   const [filterDept, setFilterDept] = useState([]);
   const [filterTech, setFilterTech] = useState([]);
+  const [filterDomain, setFilterDomain] = useState([]);
   const [selectedTechCategory, setSelectedTechCategory] = useState('');
   const [techSearchTerm, setTechSearchTerm] = useState('');
   const [showTechDropdown, setShowTechDropdown] = useState(false);
@@ -136,65 +134,72 @@ const AvailabilityViewPage = () => {
   const [cancelling, setCancelling] = useState(false);
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
-  const [creatingGoogleEvent, setCreatingGoogleEvent] = useState(false);
-
-  const createGoogleEventWithToken = useCallback(async (accessToken) => {
-    const event = await createMockCalendarEvent(accessToken);
-    const start = new Date(event.start?.dateTime || event.start?.date);
-    toast({
-      title: 'Mock event created',
-      description: `Added to Google Calendar for ${format(start, 'PPp')}.`,
-    });
-  }, []);
-
-  const requestCalendarAccess = useGoogleLogin({
-    scope: GOOGLE_CALENDAR_EVENTS_SCOPE,
-    onSuccess: async (tokenResponse) => {
-      try {
-        storeCalendarAccessToken(tokenResponse.access_token);
-        await createGoogleEventWithToken(tokenResponse.access_token);
-      } catch (error) {
-        toast({
-          title: 'Failed to create event',
-          description: error.message || 'Could not create the Google Calendar event.',
-          variant: 'destructive',
-        });
-      } finally {
-        setCreatingGoogleEvent(false);
-      }
-    },
-    onError: () => {
-      toast({
-        title: 'Calendar permission required',
-        description: 'Allow Google Calendar access to create the mock event.',
-        variant: 'destructive',
-      });
-      setCreatingGoogleEvent(false);
-    },
-  });
-
-  const handleCreateEventNow = async () => {
-    setCreatingGoogleEvent(true);
-    const storedToken = getStoredCalendarAccessToken();
-    if (storedToken) {
-      try {
-        await createGoogleEventWithToken(storedToken);
-        setCreatingGoogleEvent(false);
-        return;
-      } catch {
-        // Token expired or revoked — request a fresh one below.
-      }
-    }
-    requestCalendarAccess();
-  };
 
   const techDropdownRef = useRef(null);
+  const appliedCandidateFiltersRef = useRef(null);
+  const loadedCandidateDetailsRef = useRef(new Set());
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
     ? candidates.find((c) => c.id === requestForm.candidateId) || null
     : null;
+
+  const candidateCoreTechIds = useMemo(
+    () => getCandidateCoreTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
+
+  const candidateCoreTechNames = useMemo(() => {
+    const names = new Set();
+    (selectedCandidate?.technologies || [])
+      .map(normalizeSkillAssignment)
+      .filter(getSkillIsCore)
+      .forEach((item) => {
+        const name = item.technology?.name;
+        if (name) names.add(normalizeTechName(name));
+      });
+    return names;
+  }, [selectedCandidate]);
+
+  const isCandidateCoreTech = useCallback(
+    (technologyId) => candidateCoreTechIds.includes(technologyId),
+    [candidateCoreTechIds],
+  );
+
+  const isCoreSkillForDisplay = useCallback((skillName, coreTechnologies = []) => {
+    const normalized = normalizeTechName(skillName);
+    if (!normalized) return false;
+    if ((coreTechnologies || []).some((s) => normalizeTechName(s) === normalized)) {
+      return true;
+    }
+    return candidateCoreTechNames.has(normalized);
+  }, [candidateCoreTechNames]);
+
+  const renderInterviewerSkillBadge = useCallback((skillName, { key, className = '', coreTechnologies = [] } = {}) => {
+    const isCore = isCoreSkillForDisplay(skillName, coreTechnologies);
+    return (
+      <Badge
+        key={key ?? skillName}
+        variant="outline"
+        className={`gap-1 ${className} ${
+          isCore ? 'border-amber-300 bg-amber-50 text-amber-900' : ''
+        }`}
+      >
+        {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+        {skillName}
+      </Badge>
+    );
+  }, [isCoreSkillForDisplay]);
+
+  const sortSkillsWithCoreFirst = useCallback((skills = [], coreTechnologies = []) => (
+    [...skills].sort((a, b) => {
+      const aCore = isCoreSkillForDisplay(a, coreTechnologies);
+      const bCore = isCoreSkillForDisplay(b, coreTechnologies);
+      if (aCore === bCore) return 0;
+      return aCore ? -1 : 1;
+    })
+  ), [isCoreSkillForDisplay]);
 
   // Single-interview privilege error
   const singlePrivilegeError = selectedSlot && selectedCandidate
@@ -237,17 +242,19 @@ const AvailabilityViewPage = () => {
           page: 0,
           size: getCalendarPageSize(currentView),
         };
-        const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
+        const [availData, deptData, techData, domainData, desigData, tierData, candData] = await Promise.all([
           // Load initial availability for visible range
           hrAvailabilityAPI.getAllAvailability(initialAvailabilityFilters),
           departmentAPI.getAllDepartments(),
           technologyAPI.getAllTechnologies(),
+          domainAPI.getAllDomains(),
           designationAPI.getAllDesignations(),
           tierAPI.getAllTiers(),
           candidateAPI.getAllCandidates(),
         ]);
         setDepartments(deptData);
         setTechnologies(techData);
+        setDomains(domainData || []);
         setDesignations(desigData);
         setTiers(tierData);
         setCandidates(candData);
@@ -309,6 +316,14 @@ const AvailabilityViewPage = () => {
       if (incomingFilter.departmentId) {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
+      }
+
+      if (incomingFilter.technologyIds?.length) {
+        setFilterTech(incomingFilter.technologyIds);
+      }
+
+      if (incomingFilter.domainIds?.length) {
+        setFilterDomain(incomingFilter.domainIds);
       }
     }
 
@@ -377,11 +392,14 @@ const AvailabilityViewPage = () => {
     setInterviewType(InterviewType.TECHNICAL);
     setDateRange({ start: null, end: null });
     setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
     setSelectedDeptForDesignation('');
     setSelectedTierInDept('');
     setMinDesignationLevel('');
     setDesignationsForSelectedTier([]);
     setPendingFilter(null);
+    appliedCandidateFiltersRef.current = null;
     navigate('/hr/availability', { replace: true, state: null });
   }, [navigate]);
 
@@ -461,6 +479,7 @@ const AvailabilityViewPage = () => {
       endDateTime: formatLocalDateTime(end),
       departmentIds: filterDept.length > 0 ? filterDept : null,
       technologyIds: filterTech.length > 0 ? filterTech : null,
+      domainIds: filterDomain.length > 0 ? filterDomain : null,
       minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
       page: 0,
       size: getCalendarPageSize(view),
@@ -535,37 +554,82 @@ const AvailabilityViewPage = () => {
 
   applyFilters();
 }, [
-  filterDept, filterTech, minExperience, dateRange,
+  filterDept, filterTech, filterDomain, minExperience, dateRange,
   selectedDeptForDesignation, selectedTierInDept, minDesignationLevel,
   pendingFilter
 ]);
 
   
   
-  // ── Auto-set candidate designation after candidates load ─────────────────
+  // ── Auto-set candidate filters once when a candidate is first selected ──
   useEffect(() => {
-    if (requestForm.candidateId && candidates.length > 0) {
-      const candidate = candidates.find(c => c.id === requestForm.candidateId);
-      if (candidate && !isSchedulableCandidate(candidate.status)) {
-        setRequestForm((prev) => ({
-          ...prev,
-          candidateId: null,
-          candidateName: '',
-          candidateDesignationId: '',
-        }));
-        return;
+    if (!requestForm.candidateId || candidates.length === 0) {
+      if (!requestForm.candidateId) {
+        appliedCandidateFiltersRef.current = null;
       }
-      if (candidate && candidate.targetDesignationId) {
-        setRequestForm(prev => ({
-          ...prev,
-          candidateDesignationId: candidate.targetDesignationId
-        }));
+      return;
+    }
+
+    if (appliedCandidateFiltersRef.current === requestForm.candidateId) {
+      return;
+    }
+
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate && !isSchedulableCandidate(candidate.status)) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateId: null,
+        candidateName: '',
+        candidateDesignationId: '',
+      }));
+      appliedCandidateFiltersRef.current = null;
+      return;
+    }
+    if (candidate && candidate.targetDesignationId) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateDesignationId: candidate.targetDesignationId,
+      }));
+    }
+    if (candidate) {
+      const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
+      if (ids.length > 0) {
+        setFilterTech(ids);
       }
+      const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
+      if (domainIds.length > 0) {
+        setFilterDomain(domainIds);
+      }
+      appliedCandidateFiltersRef.current = requestForm.candidateId;
     }
   }, [requestForm.candidateId, candidates]);
 
+  // Load full candidate profile (technologies/domains) when missing from list payload
+  useEffect(() => {
+    if (!requestForm.candidateId) return undefined;
+    if (loadedCandidateDetailsRef.current.has(requestForm.candidateId)) return undefined;
 
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate?.technologies?.length > 0) {
+      loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+      return undefined;
+    }
 
+    let active = true;
+    loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+    candidateAPI.getCandidateById(requestForm.candidateId)
+      .then((details) => {
+        if (!active || !details) return;
+        setCandidates((prev) => {
+          const exists = prev.some((c) => c.id === details.id);
+          if (!exists) return [...prev, details];
+          return prev.map((c) => (c.id === details.id ? { ...c, ...details } : c));
+        });
+      })
+      .catch((err) => console.error('Failed to load candidate technologies:', err));
+
+    return () => { active = false; };
+  }, [requestForm.candidateId, candidates]);
 
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {
@@ -859,12 +923,35 @@ const AvailabilityViewPage = () => {
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
   const clearFilters = () => {
-    setFilterDept([]); setFilterTech([]); setSelectedTechCategory(''); setTechSearchTerm(''); setMinExperience('');
-    setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
-    setMinDesignationLevel(''); setSelectedTierInDept('');
-    setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
+    setSelectedTechCategory('');
+    setTechSearchTerm('');
+    setShowTechDropdown(false);
+    setMinExperience('');
+    setDateRange({ start: null, end: null });
+    setSelectedDeptForDesignation('');
+    setMinDesignationLevel('');
+    setSelectedTierInDept('');
+    setTiersForSelectedDept([]);
+    setDesignationsForSelectedTier([]);
     setPendingFilter(null);
     setCalendarDate(new Date());
+    setInterviewType(InterviewType.TECHNICAL);
+    appliedCandidateFiltersRef.current = null;
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: null,
+      candidateName: '',
+      candidateDesignationId: '',
+      interviewCoordinatorId: null,
+      interviewCoordinatorDepartmentId: null,
+    }));
+    setCandidateSearchTerm('');
+    if (searchParams.get('candidateId') || searchParams.get('interviewType') || location.state?.filterData) {
+      navigate('/hr/availability', { replace: true, state: null });
+    }
   };
 
   const handleStartDateTimeChange = (value) => {
@@ -1213,7 +1300,10 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </div>
 
                 <div className="space-y-1">
-                  <Label >Technologies</Label>
+                  <Label className="flex items-center gap-2">
+                    Technologies
+                  </Label>
+                
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -1240,16 +1330,36 @@ const calendarSlotPropGetter = useCallback((date) => {
                           <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
                         ) : (
                           <div className="py-2">
-                            {filteredTechnologies.map((tech) => (
+                            {filteredTechnologies.map((tech) => {
+                              const isSelected = filterTech.includes(tech.id);
+                              const isCore = isCandidateCoreTech(tech.id);
+                              return (
                               <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
-                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
-                                <span className="font-medium">{tech.name}</span>
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${
+                                  isSelected ? (isCore ? 'bg-amber-50' : 'bg-primary/10') : ''
+                                }`}>
+                                <span className="flex items-center gap-2 font-medium">
+                                  {isCore && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
+                                  {tech.name}
+                                </span>
                                 <span className="flex items-center gap-2">
                                   <span className="text-xs text-muted-foreground">{getTechnologyCategoryLabel(tech)}</span>
-                                  {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
+                                  {isSelected && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs ${
+                                        isCore
+                                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                                          : ''
+                                      }`}
+                                    >
+                                      {isCore ? 'Candidate Core' : 'Selected'}
+                                    </Badge>
+                                  )}
                                 </span>
                               </button>
-                            ))}
+                            );
+                            })}
                           </div>
                         )}
                       </motion.div>
@@ -1261,9 +1371,20 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex flex-wrap gap-2 mt-2">
                     {filterTech.map((id) => {
                       const tech = technologies.find((t) => t.id === id);
+                      const isCore = isCandidateCoreTech(id);
                       return tech ? (
-                        <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                          {tech.name}
+                        <Badge
+                          key={id}
+                          variant="outline"
+                          className={`gap-1 pr-1 ${
+                            isCore
+                              ? 'border-amber-300 bg-amber-50 text-amber-900'
+                              : 'border-slate-200 bg-secondary text-secondary-foreground'
+                          }`}
+                        >
+                          {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+                          <span>{tech.name}</span>
+                          
                           <button onClick={() => setFilterTech(filterTech.filter((x) => x !== id))}
                             className="ml-1 hover:text-destructive rounded-full p-0.5">
                             <X className="w-3 h-3" />
@@ -1273,6 +1394,16 @@ const calendarSlotPropGetter = useCallback((date) => {
                     })}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <DomainMultiSelect
+                  label="Domains"
+                  domains={domains}
+                  selectedIds={filterDomain}
+                  onChange={setFilterDomain}
+                  placeholder="Filter by domains…"
+                />
               </div>
 
               <div className="space-y-2">
@@ -1524,26 +1655,6 @@ const calendarSlotPropGetter = useCallback((date) => {
               )}
             </AnimatePresence>
 
-
-            {/* ------- commented out for now ---- */}
-            <div className="pt-4 px-2 border-t border-slate-100 mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                disabled={creatingGoogleEvent}
-                onClick={handleCreateEventNow}
-              >
-                <CalendarPlus className="w-4 h-4" />
-                {creatingGoogleEvent ? 'Creating event…' : 'Create Event Now'}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                Creates a mock Google Calendar event starting 10 minutes from now.
-              </p>
-            </div>
-
-            {/* ------- commented out for now ---- */}
-
           </CardContent>
         </Card>
       </div>
@@ -1646,7 +1757,15 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex items-start gap-3">
                     <Code className="w-5 h-5 text-primary mt-1" />
                     <div className="flex flex-wrap gap-2">
-                      {selectedSlot.resource.skills.map((s, i) => <Badge key={i} variant="outline">{s}</Badge>)}
+                      {sortSkillsWithCoreFirst(
+                        selectedSlot.resource.skills,
+                        selectedSlot.resource.coreTechnologies,
+                      ).map((s, i) => (
+                        renderInterviewerSkillBadge(s, {
+                          key: i,
+                          coreTechnologies: selectedSlot.resource.coreTechnologies,
+                        })
+                      ))}
                     </div>
                   </div>
                 </CardContent>
@@ -1769,7 +1888,16 @@ const calendarSlotPropGetter = useCallback((date) => {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
-                          {ps.slot.resource.skills.slice(0, 2).map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
+                          {sortSkillsWithCoreFirst(
+                            ps.slot.resource.skills,
+                            ps.slot.resource.coreTechnologies,
+                          )
+                            .slice(0, 2)
+                            .map((s, i) => renderInterviewerSkillBadge(s, {
+                              key: i,
+                              className: 'text-xs',
+                              coreTechnologies: ps.slot.resource.coreTechnologies,
+                            }))}
                         </div>
                       </div>
                     );

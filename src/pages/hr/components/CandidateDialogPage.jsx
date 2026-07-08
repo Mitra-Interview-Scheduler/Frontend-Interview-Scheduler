@@ -23,12 +23,15 @@ import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
+import CandidateSkillsPanel from '@/components/CandidateSkillsPanel';
 import { DocumentDropzone } from '@/components/DocumentDropzone';
 import { downloadBlobResponse } from '@/lib/documentUtils';
 
 // Reusable Subcomponents
 import { ResourceLinkDialog } from './../../../components/ResourceLinkDialog';
 import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
+import { domainAPI } from '@/services/domainAPI';
+import DomainMultiSelect from '@/components/DomainMultiSelect';
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '',
@@ -81,6 +84,7 @@ function CandidateDialogPage({
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [pendingDocuments, setPendingDocuments] = useState([]);
+  const [pendingSkills, setPendingSkills] = useState([]);
   const [pendingDocumentDeleteIds, setPendingDocumentDeleteIds] = useState([]);
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [documentType, setDocumentType] = useState('CV');
@@ -92,6 +96,8 @@ function CandidateDialogPage({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkIndexToEdit, setLinkIndexToEdit] = useState(null);
   const [desigs, setDesigs] = useState([]);
+  const [allDomains, setAllDomains] = useState([]);
+  const [selectedDomainIds, setSelectedDomainIds] = useState([]);
 
 
   const parseResourceLinks = (rawValue) => {
@@ -136,6 +142,7 @@ function CandidateDialogPage({
     notes:                 form.notes?.trim() || null,
     resourceRequestNumber: form.resourceRequestNumber?.trim() || null,
     coordinatedHrId:       parseInt(form.coordinatedHrId),
+    domainIds:             selectedDomainIds.length > 0 ? selectedDomainIds : [],
   });
 
   const fieldErrors = useMemo(() => getCandidateFieldErrors(form), [form]);
@@ -249,9 +256,17 @@ function CandidateDialogPage({
 
   useEffect(() => {
     if (!open) return;
+    domainAPI.getAllDomains()
+      .then(setAllDomains)
+      .catch(() => setAllDomains([]));
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
 
     if (isCreate) {
       setForm(EMPTY_FORM);
+      setSelectedDomainIds([]);
       setCoordinatorUsers([]);
       setTiers([]);
       setDesigs([]);
@@ -259,6 +274,7 @@ function CandidateDialogPage({
       resetValidationState();
       setDocuments([]);
       setPendingDocuments([]);
+      setPendingSkills([]);
       setPendingDocumentDeleteIds([]);
       setDocumentType('CV');
       setResourceLinks([]);
@@ -286,6 +302,7 @@ function CandidateDialogPage({
       coordinatorDepartmentId: candidate.coordinatedHrDepartmentId?.toString() || '',
       coordinatedHrId:       candidate.coordinatedHrId?.toString() || '',
     });
+    setSelectedDomainIds((candidate.domains || []).map((d) => d.id));
 
     if (candidate.coordinatedHrDepartmentId) {
       loadCoordinatorUsers(candidate.coordinatedHrDepartmentId);
@@ -422,6 +439,27 @@ function CandidateDialogPage({
         }
       }
 
+      if (pendingSkills.length > 0) {
+        const skillResults = await Promise.allSettled(
+          pendingSkills.map((skill) =>
+            candidateAPI.addCandidateTechnology(
+              savedCandidateId,
+              skill.technology.id,
+              skill.isCore ?? false,
+            )
+          )
+        );
+        const failedSkills = skillResults.filter((result) => result.status === 'rejected');
+        if (failedSkills.length > 0) {
+          const reason = failedSkills[0].reason?.response?.data?.message
+            || failedSkills[0].reason?.message
+            || 'Skill save failed';
+          throw new Error(
+            `Candidate saved, but ${failedSkills.length} skill(s) failed to save: ${reason}`
+          );
+        }
+      }
+
       onOpenChange(false);
       onSaveSuccess?.();
     } catch (err) {
@@ -437,9 +475,11 @@ function CandidateDialogPage({
     setSaving(false);
     setDocuments([]);
     setPendingDocuments([]);
+    setPendingSkills([]);
     setPendingDocumentDeleteIds([]);
     setDocumentType('CV');
     setResourceLinks([]);
+    setSelectedDomainIds([]);
     setForm(EMPTY_FORM);
   };
 
@@ -661,6 +701,31 @@ function CandidateDialogPage({
               </Select>
             )}
           </div>
+
+            <div className="md:col-span-2">
+              {readOnly ? (
+                <div className="space-y-2">
+                  <Label>Domains</Label>
+                  {(candidate?.domains || []).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {candidate.domains.map((d) => (
+                        <Badge key={d.id} variant="secondary">{d.name}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <Input value="-" disabled className="bg-gray-50" />
+                  )}
+                </div>
+              ) : (
+                <DomainMultiSelect
+                  label="Domains"
+                  domains={allDomains}
+                  selectedIds={selectedDomainIds}
+                  onChange={setSelectedDomainIds}
+                  disabled={saving}
+                />
+              )}
+            </div>
 
             <div className="md:col-span-2 pt-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Candidate Coordinator</p>
@@ -938,6 +1003,20 @@ function CandidateDialogPage({
                 ))}
               </div>
             </div>
+            )}
+
+            {open && (
+              <div className="md:col-span-2">
+                <CandidateSkillsPanel
+                  candidateId={isCreate ? null : candidate?.id}
+                  skills={candidate?.technologies}
+                  readOnly={readOnly}
+                  disabled={saving}
+                  pendingSkills={pendingSkills}
+                  onPendingSkillsChange={setPendingSkills}
+                  variant="embedded"
+                />
+              </div>
             )}
 
             {/* Notes */}

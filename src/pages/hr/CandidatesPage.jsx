@@ -104,19 +104,10 @@ const CandidatesPage = () => {
 
   const loadInitialData = async () => {
     try {
-      setLoading(true);
-      const [cands, depts] = await Promise.all([
-        candidateAPI.getAllCandidates({}, { page: 0, size: CANDIDATES_PER_PAGE }),
-        departmentAPI.getAllDepartments(),
-      ]);
-      setCandidates(cands?.content || []);
-      setTotalCandidatesCount(cands?.totalElements ?? (cands?.content?.length || 0));
-      setTotalPages(cands?.totalPages || 1);
+      const depts = await departmentAPI.getAllDepartments();
       setDepartments(depts || []);
     } catch (err) {
-      toast({ title: 'Error', description: 'Failed to load candidates', variant: 'destructive' });
-    } finally {
-      setLoading(false);
+      toast({ title: 'Error', description: 'Failed to load departments', variant: 'destructive' });
     }
   };
 

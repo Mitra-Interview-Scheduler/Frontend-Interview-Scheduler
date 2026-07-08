@@ -127,7 +127,7 @@ export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels 
 
         const interviewKey = entry.interview.interviewScheduleId ?? entry.interview.id;
         return {
-          value: `interview-${entry.interview.interviewScheduleId}`,
+          value: `interview-${interviewKey}`,
           label: getInterviewTabLabel(entry.interview, interviewOrderMap.get(interviewKey)),
           component: InterviewDetailTab,
           editableStages: [],

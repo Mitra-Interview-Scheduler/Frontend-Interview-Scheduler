@@ -9,6 +9,11 @@ export const candidatePipelineAPI = {
   initializePipeline: async (candidateId) => {
     await api.post(`/candidatePipeline/${candidateId}`);
   },
+
+  getPipelineStatusEvents: async (candidateId) => {
+    const response = await api.get(`/candidatePipeline/${candidateId}/status-events`);
+    return response.data;
+  },
 };
 
 export default candidatePipelineAPI;

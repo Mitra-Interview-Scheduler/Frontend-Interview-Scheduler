@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import { TimeFormatProvider } from "@/context/TimeFormatContext";
 import { TimeZoneProvider } from "@/context/TimeZoneContext";
 import { PrivateRoute } from "@/components/PrivateRoute";
@@ -13,6 +14,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import UsersPage from "./pages/admin/UsersPage";
 import DesignationsPage from "./pages/admin/DesignationsPage";
 import TechnologiesPage from "./pages/admin/TechnologiesPage";
+import DomainsPage from "./pages/admin/DomainsPage";
 import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
@@ -28,6 +30,7 @@ import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
 import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
+import InterviewerProfilePage from "./pages/interviewer/ProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
@@ -37,6 +40,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <NotificationProvider>
       <TimeZoneProvider>
         <TimeFormatProvider>
           <TooltipProvider>
@@ -76,6 +80,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['ADMIN']}>
                   <TechnologiesPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/domains"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <DomainsPage />
                 </PrivateRoute>
               }
             />
@@ -120,7 +132,7 @@ const App = () => (
             <Route
               path="/hr/dashboard"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <HRDashboard />
                 </PrivateRoute>
               }
@@ -128,7 +140,7 @@ const App = () => (
             <Route
               path="/hr/candidates"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <CandidatesPage />
                 </PrivateRoute>
               }
@@ -136,7 +148,7 @@ const App = () => (
             <Route
               path="/hr/candidates/:candidateId/details"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <CandidateDetailsPage />
                 </PrivateRoute>
               }
@@ -144,7 +156,7 @@ const App = () => (
             <Route
               path="/hr/schedule"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <SchedulePage />
                 </PrivateRoute>
               }
@@ -152,7 +164,7 @@ const App = () => (
             <Route
               path="/hr/availability"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <AvailabilityViewPage />
                 </PrivateRoute>
               }
@@ -160,7 +172,7 @@ const App = () => (
             <Route
               path="/hr/urgent"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <UrgentRequestsPage />
                 </PrivateRoute>
               }
@@ -168,7 +180,7 @@ const App = () => (
             {/* <Route
               path="/hr/designations"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <DesignationsPage />
                 </PrivateRoute>
               }
@@ -176,7 +188,7 @@ const App = () => (
             {/* <Route
               path="/hr/technologies"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <TechnologiesPage />
                 </PrivateRoute>
               }
@@ -184,7 +196,7 @@ const App = () => (
             <Route
               path="/hr/rules"
               element={
-                <PrivateRoute allowedRoles={['HR']}>
+                <PrivateRoute allowedRoles={['HR', 'ADMIN']}>
                   <RulesPage />
                 </PrivateRoute>
               }
@@ -241,7 +253,11 @@ const App = () => (
             />
             <Route
               path="/interviewer/profile"
-              element={<Navigate to="/profile" replace />}
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <InterviewerProfilePage />
+                </PrivateRoute>
+              }
             />
 
             <Route
@@ -270,6 +286,7 @@ const App = () => (
           </TooltipProvider>
         </TimeFormatProvider>
       </TimeZoneProvider>
+      </NotificationProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
