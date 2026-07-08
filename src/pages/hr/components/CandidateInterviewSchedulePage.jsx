@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,12 +10,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users } from 'lucide-react';
+import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users, Code, Star } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { InterviewType } from '@/lib/statusConstants';
-import { getCandidateCoreTechnologyIds } from '@/lib/technologyHelpers';
+import { getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { TechnologyProficiencyBadge } from '@/components/technologyProficiencyUi';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
@@ -94,6 +95,18 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     setCoordinatorUsers([]);
     setCandidateTechnologies(Array.isArray(candidate?.technologies) ? candidate.technologies : []);
   }, [open, candidate?.id, candidate?.technologies]);
+
+  const displayedTechnologies = useMemo(() => {
+    const normalized = (candidateTechnologies || [])
+      .map(normalizeSkillAssignment)
+      .filter((item) => item?.technology?.name);
+    return [
+      ...normalized.filter((item) => getSkillIsCore(item)),
+      ...normalized.filter((item) => !getSkillIsCore(item)),
+    ];
+  }, [candidateTechnologies]);
+
+  const hasCoreTechnologies = displayedTechnologies.some(getSkillIsCore);
 
   if (!candidate) return null;
 
@@ -193,6 +206,29 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                   <Award className="w-4 h-4 text-amber-500" />
                   {candidate.targetDesignationName} <span className="text-slate-400 font-normal ml-1">(Level {candidate.levelOrder})</span>
                 </p>
+              </div>
+
+              <div className="col-span-2 space-y-2 pt-4 border-t border-slate-200">
+                <Label className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Technologies</Label>
+                {displayedTechnologies.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {displayedTechnologies.map((item) => (
+                      <TechnologyProficiencyBadge
+                        key={item.id ?? item.technology?.id}
+                        item={item}
+                        isEditing={false}
+                        onOpenCorePrompt={() => {}}
+                        onRemove={() => {}}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 italic flex items-center gap-2">
+                    <Code className="w-4 h-4" />
+                    No technologies listed
+                  </p>
+                )}
+                
               </div>
             </div>
           </div>

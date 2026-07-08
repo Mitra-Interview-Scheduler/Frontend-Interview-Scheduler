@@ -35,7 +35,7 @@ import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
-import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds } from '@/lib/technologyHelpers';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { candidateAPI } from '@/services/candidateAPI';
@@ -56,7 +56,8 @@ const CALENDAR_PAGE_SIZES = {
 };
 
 
-// ── Component ────────────────────────────────────────────────────────────────
+const normalizeTechName = (name) => (name ?? '').trim().toLowerCase();
+
 const resolveInterviewType = (...values) => {
   const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
   return match || InterviewType.TECHNICAL;
@@ -136,6 +137,7 @@ const AvailabilityViewPage = () => {
 
   const techDropdownRef = useRef(null);
   const appliedCandidateFiltersRef = useRef(null);
+  const loadedCandidateDetailsRef = useRef(new Set());
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
@@ -148,10 +150,56 @@ const AvailabilityViewPage = () => {
     [selectedCandidate],
   );
 
+  const candidateCoreTechNames = useMemo(() => {
+    const names = new Set();
+    (selectedCandidate?.technologies || [])
+      .map(normalizeSkillAssignment)
+      .filter(getSkillIsCore)
+      .forEach((item) => {
+        const name = item.technology?.name;
+        if (name) names.add(normalizeTechName(name));
+      });
+    return names;
+  }, [selectedCandidate]);
+
   const isCandidateCoreTech = useCallback(
     (technologyId) => candidateCoreTechIds.includes(technologyId),
     [candidateCoreTechIds],
   );
+
+  const isCoreSkillForDisplay = useCallback((skillName, coreTechnologies = []) => {
+    const normalized = normalizeTechName(skillName);
+    if (!normalized) return false;
+    if ((coreTechnologies || []).some((s) => normalizeTechName(s) === normalized)) {
+      return true;
+    }
+    return candidateCoreTechNames.has(normalized);
+  }, [candidateCoreTechNames]);
+
+  const renderInterviewerSkillBadge = useCallback((skillName, { key, className = '', coreTechnologies = [] } = {}) => {
+    const isCore = isCoreSkillForDisplay(skillName, coreTechnologies);
+    return (
+      <Badge
+        key={key ?? skillName}
+        variant="outline"
+        className={`gap-1 ${className} ${
+          isCore ? 'border-amber-300 bg-amber-50 text-amber-900' : ''
+        }`}
+      >
+        {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+        {skillName}
+      </Badge>
+    );
+  }, [isCoreSkillForDisplay]);
+
+  const sortSkillsWithCoreFirst = useCallback((skills = [], coreTechnologies = []) => (
+    [...skills].sort((a, b) => {
+      const aCore = isCoreSkillForDisplay(a, coreTechnologies);
+      const bCore = isCoreSkillForDisplay(b, coreTechnologies);
+      if (aCore === bCore) return 0;
+      return aCore ? -1 : 1;
+    })
+  ), [isCoreSkillForDisplay]);
 
   // Single-interview privilege error
   const singlePrivilegeError = selectedSlot && selectedCandidate
@@ -554,6 +602,33 @@ const AvailabilityViewPage = () => {
       }
       appliedCandidateFiltersRef.current = requestForm.candidateId;
     }
+  }, [requestForm.candidateId, candidates]);
+
+  // Load full candidate profile (technologies/domains) when missing from list payload
+  useEffect(() => {
+    if (!requestForm.candidateId) return undefined;
+    if (loadedCandidateDetailsRef.current.has(requestForm.candidateId)) return undefined;
+
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate?.technologies?.length > 0) {
+      loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+      return undefined;
+    }
+
+    let active = true;
+    loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+    candidateAPI.getCandidateById(requestForm.candidateId)
+      .then((details) => {
+        if (!active || !details) return;
+        setCandidates((prev) => {
+          const exists = prev.some((c) => c.id === details.id);
+          if (!exists) return [...prev, details];
+          return prev.map((c) => (c.id === details.id ? { ...c, ...details } : c));
+        });
+      })
+      .catch((err) => console.error('Failed to load candidate technologies:', err));
+
+    return () => { active = false; };
   }, [requestForm.candidateId, candidates]);
 
   // ── Data helpers ──────────────────────────────────────────────────────────
@@ -1682,7 +1757,15 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <div className="flex items-start gap-3">
                     <Code className="w-5 h-5 text-primary mt-1" />
                     <div className="flex flex-wrap gap-2">
-                      {selectedSlot.resource.skills.map((s, i) => <Badge key={i} variant="outline">{s}</Badge>)}
+                      {sortSkillsWithCoreFirst(
+                        selectedSlot.resource.skills,
+                        selectedSlot.resource.coreTechnologies,
+                      ).map((s, i) => (
+                        renderInterviewerSkillBadge(s, {
+                          key: i,
+                          coreTechnologies: selectedSlot.resource.coreTechnologies,
+                        })
+                      ))}
                     </div>
                   </div>
                 </CardContent>
@@ -1805,7 +1888,16 @@ const calendarSlotPropGetter = useCallback((date) => {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
-                          {ps.slot.resource.skills.slice(0, 2).map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
+                          {sortSkillsWithCoreFirst(
+                            ps.slot.resource.skills,
+                            ps.slot.resource.coreTechnologies,
+                          )
+                            .slice(0, 2)
+                            .map((s, i) => renderInterviewerSkillBadge(s, {
+                              key: i,
+                              className: 'text-xs',
+                              coreTechnologies: ps.slot.resource.coreTechnologies,
+                            }))}
                         </div>
                       </div>
                     );
