@@ -23,10 +23,11 @@ import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getInitial } from '@/lib/personUtils';
+import { env } from '@/config/env';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
-const ROOT_KEY = import.meta.env.VITE_ROOT_KEY ?? "root"; 
+const ROOT_KEY = env.ROOT_KEY;
 
 const ROLE_META = {
   ADMIN:       { label: 'Admin',       dot: 'bg-violet-500', badge: 'bg-violet-100 text-violet-700 border-violet-200' },

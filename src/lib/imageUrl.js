@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
+import { env } from '@/config/env';
+
+const API_BASE_URL = env.API_BASE_URL;
 
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 

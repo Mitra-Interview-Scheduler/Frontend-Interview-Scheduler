@@ -1,7 +1,8 @@
 import api from './api';
 import { withQuery } from './queryParams';
+import { env } from '@/config/env';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
+const API_BASE_URL = env.API_BASE_URL;
 
 /** Native fetch for multipart — avoids axios Content-Type boundary issues. */
 async function uploadMultipartFile(url, file, method = 'POST') {
