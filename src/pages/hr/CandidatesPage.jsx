@@ -31,7 +31,8 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { departmentAPI } from '@/services/departmentAPI';
 import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';

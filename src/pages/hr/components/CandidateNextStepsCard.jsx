@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquareText, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { closingReasonAPI } from '@/services/closingReasonAPI';
 import { getCandidateClosingSteps, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { getNextStepsConfig } from '@/lib/nextStepsConfig';

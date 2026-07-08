@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { candidatePipelineAPI } from '@/services/candidatePipelineApi';
 import { tierAPI } from '@/services/tierAPI';
 import { designationAPI } from '@/services/designationAPI';

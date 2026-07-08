@@ -3,7 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown, Globe2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
 

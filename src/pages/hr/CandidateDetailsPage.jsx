@@ -10,7 +10,8 @@ import StepProgressIndicator from '@/components/StepProgressIndicator';
 import CandidateNextStepsCard from './components/CandidateNextStepsCard';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
 import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
 import { getInitial } from '@/lib/personUtils';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';

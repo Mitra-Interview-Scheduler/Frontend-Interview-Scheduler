@@ -12,7 +12,8 @@ import { Loader2, Save, CheckCircle2 } from 'lucide-react';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI'; 
 import { designationAPI } from '@/services/designationAPI'; 
-import { candidateAPI } from '@/services/candidateAPI'; 
+import  candidateAPI from '@/services/candidateAPI';
+ 
 
 import COUNTRIES from '/src/data/countries.json';
 

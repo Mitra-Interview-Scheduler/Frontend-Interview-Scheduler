@@ -7,7 +7,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { getInitial } from '@/lib/personUtils';

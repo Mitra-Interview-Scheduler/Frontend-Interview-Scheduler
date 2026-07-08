@@ -14,7 +14,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Code, Search, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
 import {
