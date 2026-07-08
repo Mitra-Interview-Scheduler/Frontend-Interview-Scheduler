@@ -173,16 +173,12 @@ const Login = () => {
             </div>
 
             
-            <div className="flex justify-center">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google login failed. Please try again.')}
-                width="100%"
-                size="large"
-                theme="outline"
-                text="signin_with"
-              />
-            </div>
+              <div className="rounded-2xl bg-muted "> 
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google login failed. Please try again.')}
+                />
+              </div> 
             
           </CardContent>
         </Card>
