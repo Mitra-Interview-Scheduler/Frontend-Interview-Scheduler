@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,28 @@ const Login = () => {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [googleBtnWidth, setGoogleBtnWidth] = useState(0);
+  const googleBtnRef = useRef(null);
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const el = googleBtnRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      const width = Math.floor(el.getBoundingClientRect().width);
+      if (width > 0) {
+        // Google Identity Services caps button width at 400px.
+        setGoogleBtnWidth(Math.min(400, Math.max(40, width)));
+      }
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const navigateByRole = (user) => {
     const role = user?.role || user?.roles?.[0];
@@ -172,18 +192,19 @@ const Login = () => {
               <div className="h-px flex-1 bg-border" />
             </div>
 
-            
-            <div className="flex justify-center">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google login failed. Please try again.')}
-                width="100%"
-                size="large"
-                theme="outline"
-                text="signin_with"
-              />
+            <div ref={googleBtnRef} className="w-full">
+              {googleBtnWidth > 0 && (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google login failed. Please try again.')}
+                  width={googleBtnWidth}
+                  size="large"
+                  theme="outline"
+                  text="signin_with"
+                  shape="rectangular"
+                />
+              )}
             </div>
-            
           </CardContent>
         </Card>
       </motion.div>
