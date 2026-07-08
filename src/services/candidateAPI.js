@@ -40,7 +40,7 @@ async function uploadMultipartFile(url, file, method = 'POST') {
   return data;
 }
 
-export const candidateAPI = {
+const candidateAPI = {
   // Get all candidates with optional filters
   getAllCandidates: async (filters = {}, pagination = null) => {
     const response = await api.get(withQuery('/candidates', {
