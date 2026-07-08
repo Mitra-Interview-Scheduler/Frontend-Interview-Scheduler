@@ -61,7 +61,7 @@ const Navbar = ({ onMenuClick }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          <NotificationBell />
+          {/* <NotificationBell /> */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
