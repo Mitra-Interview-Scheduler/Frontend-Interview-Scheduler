@@ -43,12 +43,13 @@ import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
+import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
 
 
-const CALENDAR_MIN_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MIN_HOUR || '7');
-const CALENDAR_MAX_HOUR = parseInt(import.meta.env.VITE_CALENDAR_MAX_HOUR || '19');
+const CALENDAR_MIN_HOUR = env.CALENDAR_MIN_HOUR;
+const CALENDAR_MAX_HOUR = env.CALENDAR_MAX_HOUR;
 const CALENDAR_PAGE_SIZES = {
   month: 500,
   week: 200,

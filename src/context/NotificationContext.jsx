@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { notificationAPI } from '@/services/notificationAPI';
+import { env } from '@/config/env';
 
 const NotificationContext = createContext(null);
 
 const getWsBaseUrl = () => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
+  const apiBase = env.API_BASE_URL;
   return apiBase.replace(/\/api\/?$/, '');
 };
 
