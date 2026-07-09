@@ -373,7 +373,7 @@ const NotificationBell = () => {
             </NotificationSection>
 
             <p className="px-5 py-2 text-[10px] text-muted-foreground border-t">
-              Notifications older than 30 days are removed automatically.
+              Notifications older than 15 days are removed automatically at 12:00 daily.
             </p>
           </div>
         )}
