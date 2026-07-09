@@ -83,17 +83,7 @@ const BookedCalendarEvent = ({ event }) => {
       <div className="booked-event-header">
         <span className="booked-event-candidate truncate">{event.title}</span>
       </div>
-      {/* {event.meetingLink && (
-        <a
-          href={event.meetingLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="booked-event-meet-link"
-          onClick={(e) => e.stopPropagation()}
-        >
-          Join Meet
-        </a>
-      )} */}
+    
     </div>
   );
 };

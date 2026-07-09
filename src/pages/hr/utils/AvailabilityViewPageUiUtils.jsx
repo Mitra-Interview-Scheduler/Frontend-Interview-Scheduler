@@ -118,7 +118,7 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
         {timeLabel && (
           <span className="booked-event-time">{timeLabel}</span>
         )}
-        {/* {resource.meetingLink && (
+        {resource.meetingLink && (
           <a
             href={resource.meetingLink}
             target="_blank"
@@ -128,7 +128,7 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
           >
             Join Meet
           </a>
-        )} */}
+        )}
       </div>
     );
   }
