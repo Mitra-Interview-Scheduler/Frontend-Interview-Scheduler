@@ -673,6 +673,23 @@
   padding-left: 15px;
 }
 
+.booked-event-meet-link {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ecfdf5;
+  text-decoration: underline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+.booked-event-meet-link:hover {
+  color: #ffffff;
+}
+
 .availability-calendar-container .rbc-event.completed-event {
   box-shadow: 0 1px 6px rgba(5, 150, 105, 0.35);
 }

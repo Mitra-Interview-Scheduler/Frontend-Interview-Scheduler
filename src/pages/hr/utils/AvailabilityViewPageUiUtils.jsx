@@ -118,6 +118,17 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
         {timeLabel && (
           <span className="booked-event-time">{timeLabel}</span>
         )}
+        {/* {resource.meetingLink && (
+          <a
+            href={resource.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="booked-event-meet-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Join Meet
+          </a>
+        )} */}
       </div>
     );
   }
@@ -180,10 +191,11 @@ export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end)
   const timeRange = formatTimeRange(event.start, event.end);
 
   if (r?.status === SlotStatus.BOOKED) {
+    const meetLine = r.meetingLink ? `\nGoogle Meet: ${r.meetingLink}` : '';
     if (r.interviewStatus === InterviewScheduleStatus.COMPLETED) {
-      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nInterview finished — feedback locked`;
+      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nInterview finished — feedback locked`;
     }
-    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;
+    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nClick to cancel & restore slot`;
   }
 
   if (isInPanel) {

@@ -68,6 +68,7 @@ const resolveInterviewType = (...values) => {
 const EMPTY_REQUEST_FORM = {
   candidateId: null,
   candidateName: '',
+  candidateEmail: '',
   candidateDesignationId: '',
   requiredTechnologyIds: [],
   isUrgent: false,
@@ -791,26 +792,25 @@ const AvailabilityViewPage = () => {
       ...requestForm,
       candidateId: c.id,
       candidateName: c.name,
+      candidateEmail: c.email?.trim() || '',
       candidateDesignationId: c.targetDesignationId || '',
     });
     setCandidateSearchTerm('');
   };
 
   const handleClearCandidate = () =>
-    setRequestForm({ ...requestForm, candidateId: null, candidateName: '', candidateDesignationId: '' });
+    setRequestForm({
+      ...requestForm,
+      candidateId: null,
+      candidateName: '',
+      candidateEmail: '',
+      candidateDesignationId: '',
+    });
 
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
-    }
-    if (!selectedCandidate?.email?.trim()) {
-      toast({
-        title: 'Candidate email required',
-        description: 'Add an email to the candidate profile before scheduling a Google Calendar interview.',
-        variant: 'destructive',
-      });
-      return;
     }
     // Privilege gate
     if (singlePrivilegeError) {
@@ -825,6 +825,7 @@ const AvailabilityViewPage = () => {
       await hrAvailabilityAPI.createInterviewRequest({
         candidateId: requestForm.candidateId,
         candidateName: requestForm.candidateName,
+        candidateEmail: requestForm.candidateEmail?.trim() || null,
         candidateDesignationId: requestForm.candidateDesignationId || null,
         requiredTechnologyIds: requestForm.requiredTechnologyIds,
         availabilitySlotId: selectedSlot.id,
@@ -851,14 +852,6 @@ const AvailabilityViewPage = () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
-    if (!selectedCandidate?.email?.trim()) {
-      toast({
-        title: 'Candidate email required',
-        description: 'Add an email to the candidate profile before scheduling a Google Calendar panel interview.',
-        variant: 'destructive',
-      });
-      return;
-    }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
     }
@@ -879,9 +872,10 @@ const AvailabilityViewPage = () => {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
     try {
-      await hrAvailabilityAPI.createPanelInterview({
+      const panel = await hrAvailabilityAPI.createPanelInterview({
         candidateId: requestForm.candidateId,
         candidateName: requestForm.candidateName,
+        candidateEmail: requestForm.candidateEmail?.trim() || null,
         candidateDesignationId: requestForm.candidateDesignationId || null,
         startDateTime: formatLocalDateTime(bookStart),
         endDateTime: formatLocalDateTime(bookEnd),
@@ -893,7 +887,12 @@ const AvailabilityViewPage = () => {
         interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
         interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
-      toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
+      toast({
+        title: '✓ Panel interview scheduled',
+        description: panel?.meetingLink
+          ? `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Google Meet link created.`
+          : `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Connect Google Calendar on at least one interviewer to generate a Meet link.`,
+      });
       setPanelDialogOpen(false);
       setPanelSlots([]);
       setPanelBookStartOverride('');
@@ -1177,9 +1176,6 @@ const calendarSlotPropGetter = useCallback((date) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">{requestForm.candidateName}</p>
-                <p className="text-sm text-muted-foreground">
-                  {candidates.find((c) => c.id === requestForm.candidateId)?.email}
-                </p>
                 {selectedCandidate?.targetDesignationName && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Target: {selectedCandidate.targetDesignationName}
@@ -1221,6 +1217,20 @@ const calendarSlotPropGetter = useCallback((date) => {
             )}
           </>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="candidate-invite-email">Calendar invite email (optional)</Label>
+        <Input
+          id="candidate-invite-email"
+          type="email"
+          placeholder="e.g. candidate@gmail.com"
+          value={requestForm.candidateEmail}
+          onChange={(e) => setRequestForm({ ...requestForm, candidateEmail: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Any email for the Google Calendar invite. Does not need to be a Mitra account.
+        </p>
       </div>
 
       <div className="space-y-2">

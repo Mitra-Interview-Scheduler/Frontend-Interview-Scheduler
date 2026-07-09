@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock } from 'lucide-react';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock, Video, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import  candidateAPI from '@/services/candidateAPI';
 
@@ -153,8 +153,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
 
                 {interviewDetails && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-blue-900 mb-3">Interview Schedule</h3>
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-4">
+                <h3 className="text-sm font-semibold text-blue-900">Interview Schedule</h3>
                 <div className="grid grid-cols-2 gap-4">
                   {interviewDetails.preferredStartDateTime && (
                     <div className="flex items-center gap-3">
@@ -184,6 +184,29 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   )}
                 </div>
+
+                {interviewDetails.meetingLink && !isCompleted && (
+                  <div className="rounded-lg border border-blue-200 bg-white p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-blue-100 p-2 rounded-lg shrink-0">
+                        <Video className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-blue-600 font-medium">Google Meet</p>
+                        <a
+                          href={interviewDetails.meetingLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:text-blue-900 break-all"
+                        >
+                          Join meeting
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        </a>
+                        <p className="mt-1 text-xs text-slate-500 break-all">{interviewDetails.meetingLink}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -263,6 +286,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
+         
           {!loading && !error && !isCompleted && interviewScheduleId && (
             <Button
               variant="secondary"

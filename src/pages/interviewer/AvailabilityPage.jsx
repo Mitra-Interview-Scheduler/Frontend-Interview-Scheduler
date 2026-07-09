@@ -72,6 +72,32 @@ const CALENDAR_PAGE_SIZES = {
   day: 100,
 };
 
+const BookedCalendarEvent = ({ event }) => {
+  const isBookedLike = event.status === 'booked' || event.status === 'completed';
+  if (!isBookedLike) {
+    return <span className="truncate">{event.title}</span>;
+  }
+
+  return (
+    <div className="booked-event-content">
+      <div className="booked-event-header">
+        <span className="booked-event-candidate truncate">{event.title}</span>
+      </div>
+      {/* {event.meetingLink && (
+        <a
+          href={event.meetingLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="booked-event-meet-link"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Join Meet
+        </a>
+      )} */}
+    </div>
+  );
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Returns true when the date is strictly before today (midnight normalised). */
@@ -150,8 +176,6 @@ const AvailabilityPage = () => {
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState('week');
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const navTimerRef = useRef(null);
-  const viewTimerRef = useRef(null);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
   const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
   const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
@@ -199,6 +223,10 @@ const AvailabilityPage = () => {
       recurrenceGroupId: slot.recurrenceGroupId,
       isRecurring: slot.isRecurring,
       googleCalendarSynced: Boolean(slot.googleCalendarSynced),
+      meetingLink: slot.status === SlotStatus.BOOKED
+        && slot.interviewStatus === InterviewScheduleStatus.SCHEDULED
+        ? (slot.meetingLink || null)
+        : null,
     };
   });
 
@@ -215,11 +243,19 @@ const AvailabilityPage = () => {
   }));
 
   // ── Data loading
+  // Drives both Mitra availability slots and Google Calendar read-only events.
   const computeRangeForView = (view, date) => {
     const d = date ? new Date(date) : new Date();
     switch ((view || 'week')) {
-      case 'month':
-        return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'month': {
+        const monthStart = startOfMonth(d);
+        const monthEnd = endOfMonth(d);
+        // Match react-big-calendar month grid (includes leading/trailing week days).
+        return {
+          start: startOfWeek(monthStart, { weekStartsOn: 0 }),
+          end: endOfWeek(monthEnd, { weekStartsOn: 0 }),
+        };
+      }
       case 'day':
         return { start: startOfDay(d), end: endOfDay(d) };
       case 'week':
@@ -682,22 +718,14 @@ const handleSelectSlot = ({ start, end }) => {
                       <Calendar
                         localizer={localizer}
                         events={events}
+                        date={calendarDate}
+                        view={currentView}
                         startAccessor="start"
                         endAccessor="end"
                         onSelectSlot={handleSelectSlot}
                         onSelectEvent={handleEventClick}
-                        onNavigate={(nextDate) => {
-                          if (navTimerRef.current) clearTimeout(navTimerRef.current);
-                          navTimerRef.current = setTimeout(() => {
-                            setCalendarDate(nextDate);
-                          }, 200);
-                        }}
-                        onView={(view) => {
-                          if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
-                          viewTimerRef.current = setTimeout(() => {
-                            setCurrentView(view);
-                          }, 200);
-                        }}
+                        onNavigate={setCalendarDate}
+                        onView={setCurrentView}
                         selectable
                         eventPropGetter={eventStyleGetter}
                         slotPropGetter={slotPropGetter}
@@ -720,17 +748,19 @@ const handleSelectSlot = ({ start, end }) => {
                               onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
                             />
                           ),
+                          event: BookedCalendarEvent,
                         }}
                         tooltipAccessor={(event) => {
                           const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                           if (event.status === 'google_external') {
                             return `📅 Google Calendar (read-only)\n${event.title}\n${timeRange}`;
                           }
+                          const meetLine = event.meetingLink ? `\n📹 ${event.meetingLink}` : '';
                           const syncLine = event.status === 'available'
                             ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
                             : '';
-                          if (event.status === 'booked') {
-                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${syncLine}`;
+                          if (event.status === 'booked' || event.status === 'completed') {
+                            return `🔒 ${event.status === 'completed' ? 'Completed' : 'Booked'}${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}${syncLine}`;
                           }
                           return `✏️ Click to edit\n${event.title}\n${timeRange}${syncLine}`;
                         }}
