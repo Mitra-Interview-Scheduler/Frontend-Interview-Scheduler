@@ -13,7 +13,7 @@ export const availabilityAPI = {
     return response.data;
   },
 
-  /** Availability slots in a date range */
+  /** Availability slots in a date range, plus read-only Google Calendar events when connected */
   getAvailabilityByDateRange: async (start, end, page = 0, size = 200) => {
     const response = await api.get('/availability/range', {
       params: {
@@ -23,7 +23,17 @@ export const availabilityAPI = {
         size,
       },
     });
-    return response.data?.items || response.data;
+    const data = response.data;
+    if (data && Array.isArray(data.items)) {
+      return {
+        items: data.items,
+        googleExternalEvents: data.googleExternalEvents || [],
+      };
+    }
+    return {
+      items: data || [],
+      googleExternalEvents: [],
+    };
   },
 
   /** Available + booked slot counts */

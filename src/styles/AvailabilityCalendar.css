@@ -677,6 +677,27 @@
   box-shadow: 0 1px 6px rgba(5, 150, 105, 0.35);
 }
 
+/* ══════════════════════════════════════════════════════════
+   GOOGLE CALENDAR READ-ONLY EVENTS
+   ══════════════════════════════════════════════════════════ */
+.availability-calendar-container .rbc-event.google-external-event {
+  background-color: #4b5563 !important;
+  color: #ffffff !important;
+  border-left: 3px solid #1f2937 !important;
+}
+
+.availability-calendar-container .rbc-event.google-external-event .rbc-event-label,
+.availability-calendar-container .rbc-event.google-external-event .rbc-event-content {
+  color: #ffffff !important;
+  opacity: 1;
+  font-weight: 600;
+}
+
+.availability-calendar-container .rbc-event.google-external-event:hover {
+  filter: brightness(0.95);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25) !important;
+}
+
 .completed-event-icon {
   color: #ecfdf5;
 }

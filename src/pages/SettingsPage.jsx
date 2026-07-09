@@ -381,7 +381,7 @@ const SettingsPage = () => {
 
               <div className="flex gap-2">
                 {calendarStatus.connected ? (
-                  !hasInterviewerRole(getNormalizedRoles(user)) && (
+                   (
                     <Button
                       variant="outline"
                       onClick={handleDisconnectGoogleCalendar}

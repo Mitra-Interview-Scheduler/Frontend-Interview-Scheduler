@@ -12,13 +12,16 @@ import {
 } from '@/components/ui/card';
 import { Button }   from '@/components/ui/button';
 import {
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw,
 } from 'lucide-react';
-import Layout   from '@/components/layout/Layout';
+import { Badge } from '@/components/ui/badge';
+import Layout from '@/components/layout/Layout';
+import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
+import { googleCalendarAPI }      from '@/services/api';
 import { InterviewScheduleStatus, SlotStatus } from '@/lib/statusConstants';
 import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
@@ -54,6 +57,12 @@ const STATUS_COLORS = {
     border: '#92400e',
     solid: '#f59e0b',
     label: 'Blocked',
+  },
+  google_external: {
+    bg: '#4b5563',
+    border: '#1f2937',
+    solid: '#4b5563',
+    label: 'Google Calendar',
   },
 };
 
@@ -145,6 +154,9 @@ const AvailabilityPage = () => {
   const viewTimerRef = useRef(null);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
   const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
+  const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const calendarInitializedRef = useRef(false);
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
@@ -163,7 +175,6 @@ const AvailabilityPage = () => {
   // Interview start dialog state
   const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
-  // ── Data loading 
   const mapSlotsToEvents = (data) => data.map((slot) => {
     const isCompleted = slot.interviewStatus === InterviewScheduleStatus.COMPLETED;
     const statusKey = slot.status === SlotStatus.BOOKED
@@ -187,9 +198,23 @@ const AvailabilityPage = () => {
       durationHours: computeSlotDurationHours(slot.startDateTime, slot.endDateTime, slot.durationHours),
       recurrenceGroupId: slot.recurrenceGroupId,
       isRecurring: slot.isRecurring,
+      googleCalendarSynced: Boolean(slot.googleCalendarSynced),
     };
   });
 
+  const mapGoogleEventsToCalendar = (items) => (items || []).map((event) => ({
+    id: `google-${event.googleEventId}`,
+    googleEventId: event.googleEventId,
+    title: event.title || 'Google Calendar event',
+    start: new Date(event.startDateTime),
+    end: new Date(event.endDateTime),
+    status: 'google_external',
+    readOnly: true,
+    source: 'google',
+    allDay: Boolean(event.allDay),
+  }));
+
+  // ── Data loading
   const computeRangeForView = (view, date) => {
     const d = date ? new Date(date) : new Date();
     switch ((view || 'week')) {
@@ -213,19 +238,17 @@ const AvailabilityPage = () => {
         ? opts
         : computeRangeForView(view, opts.date || calendarDate);
       const pageSize = getCalendarPageSize(view);
-      console.log('[Availability] Loading paged range:', { view, start, end, pageSize });
-      const data = await availabilityAPI.getAvailabilityByDateRange(start, end, 0, pageSize);
-      console.log(`[Availability] Range result count: ${(data || []).length}`);
+      const { items, googleExternalEvents } = await availabilityAPI.getAvailabilityByDateRange(
+        start,
+        end,
+        0,
+        pageSize,
+      );
 
-      const mapped = mapSlotsToEvents(data || []);
-        console.log('[Availability] Mapped events (sample):', mapped.slice(0, 8));
-        // Log weekday distribution to help debug missing Sunday events
-        const weekdayCounts = mapped.reduce((acc, ev) => {
-          const wd = new Date(ev.start).getDay();
-          acc[wd] = (acc[wd] || 0) + 1;
-          return acc;
-        }, {});
-        console.log('[Availability] Weekday counts (0=Sun..6=Sat):', weekdayCounts);
+      const mapped = [
+        ...mapSlotsToEvents(items || []),
+        ...mapGoogleEventsToCalendar(googleExternalEvents),
+      ];
       setEvents(mapped);
     } catch (error) {
       toast({
@@ -285,10 +308,80 @@ const AvailabilityPage = () => {
     await loadAvailability({ start, end, view: currentView });
   }, [calendarDate, currentView, loadAvailability]);
 
+  const syncGoogleCalendarAvailability = useCallback(async ({ showToast = true } = {}) => {
+    try {
+      setSyncingCalendar(true);
+      const result = await googleCalendarAPI.syncAvailability();
+      await refreshCalendarAvailability();
+      await refreshUpcomingEvents();
+
+      if (showToast && result.syncedCount > 0) {
+        toast({
+          title: 'Google Calendar synced',
+          description: `${result.syncedCount} availability slot${result.syncedCount === 1 ? '' : 's'} synced to your Google Calendar.`,
+        });
+      }
+      return result;
+    } catch (error) {
+      if (showToast) {
+        toast({
+          title: 'Google Calendar sync failed',
+          description: error.response?.data?.message || error.message,
+          variant: 'destructive',
+        });
+      }
+      return null;
+    } finally {
+      setSyncingCalendar(false);
+    }
+  }, [refreshCalendarAvailability, refreshUpcomingEvents]);
+
+  const loadCalendarStatus = useCallback(async () => {
+    try {
+      const status = await googleCalendarAPI.getStatus();
+      setCalendarStatus(status);
+      return status;
+    } catch (error) {
+      console.error('Failed to load Google Calendar status', error);
+      return { connected: false, googleAccountEmail: null };
+    }
+  }, []);
+
   useEffect(() => {
-    const { start, end } = computeRangeForView(currentView, calendarDate);
-    loadAvailability({ start, end, view: currentView });
-  }, [loadAvailability, currentView, calendarDate]);
+    if (calendarInitializedRef.current) {
+      const { start, end } = computeRangeForView(currentView, calendarDate);
+      loadAvailability({ start, end, view: currentView });
+      return;
+    }
+
+    calendarInitializedRef.current = true;
+
+    const initializeCalendarPage = async () => {
+      const handled = handleGoogleCalendarOAuthResult({
+        toast,
+        dashboardPath: null,
+        onConnected: async () => {
+          const status = await loadCalendarStatus();
+          if (status.connected) {
+            await syncGoogleCalendarAvailability({ showToast: true });
+          }
+        },
+      });
+
+      if (!handled) {
+        const status = await loadCalendarStatus();
+        if (status.connected) {
+          await syncGoogleCalendarAvailability({ showToast: false });
+        }
+      }
+
+      const { start, end } = computeRangeForView(currentView, calendarDate);
+      await loadAvailability({ start, end, view: currentView });
+    };
+
+    initializeCalendarPage();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, calendarDate]);
 
   useEffect(() => {
     loadStats();
@@ -333,6 +426,14 @@ const handleSelectSlot = ({ start, end }) => {
 
 /** Clicking an existing event. */
   const handleEventClick = (event) => {
+    if (event.readOnly || event.status === 'google_external') {
+      toast({
+        title: 'Google Calendar event',
+        description: 'This event is from Google Calendar and can only be edited or deleted in Google Calendar.',
+      });
+      return;
+    }
+
     if (event.status === 'booked' || event.status === 'completed') {
       if (!event.interviewScheduleId) return;
       setSelectedInterviewScheduleId(event.interviewScheduleId);
@@ -364,6 +465,13 @@ const handleSelectSlot = ({ start, end }) => {
 
   const openDeleteDialog = async (event, e) => {
     if (e) e.stopPropagation();
+    if (event?.readOnly || event?.status === 'google_external') {
+      toast({
+        title: 'Google Calendar event',
+        description: 'This event cannot be deleted from Mitra.',
+      });
+      return;
+    }
     setDeleteTarget(event);
     setDeleteDialogOpen(true);
   };
@@ -433,24 +541,32 @@ const handleSelectSlot = ({ start, end }) => {
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
     const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
+    const isGoogleExternal = event.status === 'google_external';
     const isBookedLike = event.status === 'booked' || event.status === 'completed';
     return {
-      className: event.status === 'completed'
-        ? 'booked-event completed-event'
-        : (event.status === 'booked' ? 'booked-event' : 'available-event'),
+      className: isGoogleExternal
+        ? 'google-external-event'
+        : (event.status === 'completed'
+          ? 'booked-event completed-event'
+          : (event.status === 'booked' ? 'booked-event' : 'available-event')),
       style: {
         background:   colors.bg,
         borderRadius: '5px',
-        opacity:      isBookedLike ? 0.88 : 0.96,
-        color:        'white',
+        opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
+        color:        isGoogleExternal ? '#ffffff' : 'white',
         borderLeft:   `3px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
         padding:      '4px 8px',
         fontSize:     '12px',
-        fontWeight:   '500',
-        boxShadow:    `0 2px 6px ${colors.solid}40`,
-        cursor:       'pointer',
+        fontWeight:   isGoogleExternal ? '600' : '500',
+        boxShadow:    isGoogleExternal
+          ? '0 2px 6px rgba(0, 0, 0, 0.2)'
+          : `0 2px 6px ${colors.solid}40`,
+        cursor:       isGoogleExternal ? 'not-allowed' : 'pointer',
         overflow:     'hidden',
+        backgroundImage: isGoogleExternal
+          ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 6px, transparent 6px, transparent 12px)'
+          : undefined,
       },
     };
   };
@@ -504,12 +620,41 @@ const handleSelectSlot = ({ start, end }) => {
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
             <p className="text-muted-foreground text-lg">
-              Manage your interview availability · click an{' '}
-              <span className="text-indigo-600 font-semibold"></span> event to edit it
+              Manage your interview availability · slots sync to Google Calendar when connected
             </p>
           </div>
-         
         </motion.div>
+
+        {calendarStatus.connected && (
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg bg-primary/10 p-2">
+                <CalendarIcon className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Google Calendar connected</p>
+                <p className="text-sm text-muted-foreground">
+                  {calendarStatus.googleAccountEmail
+                    ? `Mitra slots sync to ${calendarStatus.googleAccountEmail}. Other Google Calendar events appear in gray and are read-only here.`
+                    : 'Mitra slots sync to Google Calendar. Other Google Calendar events appear in gray and are read-only here.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="whitespace-nowrap">Auto-sync on</Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncGoogleCalendarAvailability({ showToast: true })}
+                disabled={syncingCalendar}
+                className="gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncingCalendar ? 'animate-spin' : ''}`} />
+                {syncingCalendar ? 'Syncing...' : 'Sync now'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Calendar + Sidebar */}
         <div className="flex flex-col lg:flex-row gap-3 ">
@@ -577,9 +722,17 @@ const handleSelectSlot = ({ start, end }) => {
                           ),
                         }}
                         tooltipAccessor={(event) => {
-                          if (event.status === 'booked')
-                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
-                          return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                          const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                          if (event.status === 'google_external') {
+                            return `📅 Google Calendar (read-only)\n${event.title}\n${timeRange}`;
+                          }
+                          const syncLine = event.status === 'available'
+                            ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
+                            : '';
+                          if (event.status === 'booked') {
+                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${syncLine}`;
+                          }
+                          return `✏️ Click to edit\n${event.title}\n${timeRange}${syncLine}`;
                         }}
                         formats={{
                       timeGutterFormat: calendarFormats.timeGutterFormat,

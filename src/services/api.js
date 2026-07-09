@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { env } from '@/config/env';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
 
 const API_BASE_URL = env.API_BASE_URL;
 
@@ -44,8 +45,9 @@ api.interceptors.response.use(
       const isAuthRequest = requestUrl.includes('/auth/login')
         || requestUrl.includes('/auth/register')
         || requestUrl.includes('/auth/google');
+      const isCalendarIntegrationRequest = requestUrl.includes('/integrations/google-calendar');
       const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
-      if (!isAuthRequest && hadAuthHeader) {
+      if (!isAuthRequest && !isCalendarIntegrationRequest && hadAuthHeader) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         if (!window.location.pathname.startsWith('/login')) {
@@ -147,6 +149,19 @@ export const googleCalendarAPI = {
   },
   disconnect: async () => {
     await api.delete('/integrations/google-calendar');
+  },
+  syncAvailability: async () => {
+    const response = await api.post('/integrations/google-calendar/sync-availability');
+    return response.data;
+  },
+  getExternalEvents: async (start, end) => {
+    const response = await api.get('/integrations/google-calendar/external-events', {
+      params: {
+        start: formatLocalDateTime(start),
+        end: formatLocalDateTime(end),
+      },
+    });
+    return response.data;
   },
 };
 

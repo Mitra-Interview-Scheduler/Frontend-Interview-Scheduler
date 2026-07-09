@@ -13,6 +13,7 @@ import {
 } from '@/lib/roleHelpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import Layout from '@/components/layout/Layout';
 
 const ConnectGoogleCalendarPage = () => {
   const navigate = useNavigate();
@@ -38,6 +39,7 @@ const ConnectGoogleCalendarPage = () => {
       dashboardPath: returnPath,
     });
     if (handled) {
+      setLoading(false);
       return;
     }
 
@@ -79,14 +81,17 @@ const ConnectGoogleCalendarPage = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
-      </div>
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center gradient-subtle p-4">
+    <Layout>
+      <div className="flex items-center justify-center min-h-[60vh] p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -116,7 +121,8 @@ const ConnectGoogleCalendarPage = () => {
           </CardContent>
         </Card>
       </motion.div>
-    </div>
+      </div>
+    </Layout>
   );
 };
 
