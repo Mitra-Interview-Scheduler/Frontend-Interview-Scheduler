@@ -14,6 +14,7 @@ import { Menu, LogOut, User, Calendar } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
+import { getNormalizedRoles } from '@/lib/roleHelpers';
 import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const Navbar = ({ onMenuClick }) => {
@@ -35,6 +36,7 @@ const Navbar = ({ onMenuClick }) => {
   };
 
   const profileImage = normalizeImageUrl(user?.profilePicture || user?.profilePictureUrl || null);
+  const userRoles = getNormalizedRoles(user);
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 shadow-sm">
@@ -72,8 +74,8 @@ const Navbar = ({ onMenuClick }) => {
                       {user?.firstName} {user?.lastName}
                     </p>
                     <div className="flex gap-1 flex-wrap justify-end">
-                      {user?.roles && user.roles.length > 0 ? (
-                        user.roles.map((role) => (
+                      {userRoles.length > 0 ? (
+                        userRoles.map((role) => (
                           <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
                             {role}
                           </Badge>
@@ -104,9 +106,9 @@ const Navbar = ({ onMenuClick }) => {
                 <div>
                   <p className="font-medium">{user?.firstName} {user?.lastName}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
-                  {user?.roles && user.roles.length > 0 && (
+                  {userRoles.length > 0 && (
                     <div className="flex gap-1 flex-wrap mt-2">
-                      {user.roles.map((role) => (
+                      {userRoles.map((role) => (
                         <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
                           {role}
                         </Badge>

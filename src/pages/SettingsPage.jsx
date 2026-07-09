@@ -2,7 +2,10 @@ import React, { useState, useCallback,useEffect } from 'react';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useTimeZone } from '@/context/TimeZoneContext';
 import { useAuth } from '@/context/AuthContext';
-import { userSettingsAPI } from '@/services/api';
+import { userSettingsAPI, googleCalendarAPI } from '@/services/api';
+import { hasInterviewerRole, getNormalizedRoles } from '@/lib/roleHelpers';
+import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
+import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 const SettingsPage = () => {
 
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const dateFormats = [
     { value: 'yyyy-MM-dd', label: 'YYYY-MM-DD', example: '2024-05-15' },
@@ -38,6 +42,9 @@ const SettingsPage = () => {
   
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [calendarActionLoading, setCalendarActionLoading] = useState(false);
 
   const handleTimeFormatChange = (format) => {
     setTimeFormat(format);
@@ -130,6 +137,72 @@ const SettingsPage = () => {
 
   fetchSettings();
 }, []);
+
+  const loadCalendarStatus = useCallback(async () => {
+    try {
+      setCalendarLoading(true);
+      const status = await googleCalendarAPI.getStatus();
+      setCalendarStatus(status);
+    } catch (error) {
+      console.error('Failed to load Google Calendar status', error);
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCalendarStatus();
+  }, [loadCalendarStatus]);
+
+  useEffect(() => {
+    handleGoogleCalendarOAuthResult({
+      navigate,
+      toast,
+      onConnected: loadCalendarStatus,
+      dashboardPath: hasInterviewerRole(getNormalizedRoles(user))
+        ? '/interviewer/dashboard'
+        : null,
+    });
+  }, [loadCalendarStatus, toast, navigate, user]);
+
+  const handleConnectGoogleCalendar = async () => {
+    try {
+      setCalendarActionLoading(true);
+      const { authorizationUrl } = await googleCalendarAPI.connect(
+        hasInterviewerRole(getNormalizedRoles(user))
+          ? '/interviewer/dashboard'
+          : '/settings'
+      );
+      window.location.href = authorizationUrl;
+    } catch (error) {
+      toast({
+        title: 'Unable to start Google Calendar connection',
+        description: error.response?.data?.message || error.message,
+        variant: 'destructive',
+      });
+      setCalendarActionLoading(false);
+    }
+  };
+
+  const handleDisconnectGoogleCalendar = async () => {
+    try {
+      setCalendarActionLoading(true);
+      await googleCalendarAPI.disconnect();
+      setCalendarStatus({ connected: false, googleAccountEmail: null });
+      toast({
+        title: 'Google Calendar disconnected',
+        description: 'Calendar sync has been turned off for your account.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to disconnect Google Calendar',
+        description: error.response?.data?.message || error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCalendarActionLoading(false);
+    }
+  };
   
 
   return (
@@ -277,6 +350,55 @@ const SettingsPage = () => {
                   Use Auto-detected Time Zone
                 </Button>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Google Calendar Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-sm">Google Calendar</h2>
+                <Badge variant="outline" className="ml-auto">
+                  {calendarLoading ? 'Checking...' : calendarStatus.connected ? 'Connected' : 'Not connected'}
+                </Badge>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                {hasInterviewerRole(getNormalizedRoles(user))
+                  ? 'Google Calendar is required for interviewer accounts. Connect your calendar to sync availability slots and interview bookings with Google Meet links.'
+                  : 'Connect your Google Calendar to sync availability slots and interview bookings with Google Meet links.'}
+              </p>
+
+              {calendarStatus.connected && calendarStatus.googleAccountEmail && (
+                <div className="rounded-md border bg-muted/40 p-3">
+                  <p className="text-sm font-medium">{calendarStatus.googleAccountEmail}</p>
+                  <p className="text-xs text-muted-foreground">Linked Google account</p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {calendarStatus.connected ? (
+                  !hasInterviewerRole(getNormalizedRoles(user)) && (
+                    <Button
+                      variant="outline"
+                      onClick={handleDisconnectGoogleCalendar}
+                      disabled={calendarActionLoading || calendarLoading}
+                    >
+                      {calendarActionLoading ? 'Disconnecting...' : 'Disconnect'}
+                    </Button>
+                  )
+                ) : (
+                  <Button
+                    onClick={handleConnectGoogleCalendar}
+                    disabled={calendarActionLoading || calendarLoading}
+                  >
+                    {calendarActionLoading ? 'Redirecting...' : 'Connect Google Calendar'}
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

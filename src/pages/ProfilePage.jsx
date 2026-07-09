@@ -15,7 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
 import { technologyAPI } from '@/services/technologyAPI';
 import { normalizeImageUrl } from '@/lib/imageUrl';
-import { hasInterviewerRole, shouldLoadInterviewerTechnologies } from '@/lib/roleHelpers';
+import { hasInterviewerRole, getNormalizedRoles, shouldLoadInterviewerTechnologies } from '@/lib/roleHelpers';
 import { normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import InterviewerTechnologiesPanel from '@/components/InterviewerTechnologiesPanel';
 
@@ -23,9 +23,7 @@ import InterviewerTechnologiesPanel from '@/components/InterviewerTechnologiesPa
 
 const ProfilePage = () => {
   const { user, syncUser, loading: authLoading } = useAuth();
-  const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
-    ? user.roles
-    : (user?.role ? [user.role] : []);
+  const userRoles = getNormalizedRoles(user);
   const isInterviewer = hasInterviewerRole(userRoles);
   const isAdmin = userRoles.includes('ADMIN');
   const canEditProfessionalDetails = isAdmin;

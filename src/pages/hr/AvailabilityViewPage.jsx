@@ -804,6 +804,14 @@ const AvailabilityViewPage = () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
+    if (!selectedCandidate?.email?.trim()) {
+      toast({
+        title: 'Candidate email required',
+        description: 'Add an email to the candidate profile before scheduling a Google Calendar interview.',
+        variant: 'destructive',
+      });
+      return;
+    }
     // Privilege gate
     if (singlePrivilegeError) {
       toast({ title: '⛔ Insufficient interviewer privilege', description: singlePrivilegeError, variant: 'destructive' }); return;
@@ -842,6 +850,14 @@ const AvailabilityViewPage = () => {
   const handleSendPanelRequest = async () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
+    }
+    if (!selectedCandidate?.email?.trim()) {
+      toast({
+        title: 'Candidate email required',
+        description: 'Add an email to the candidate profile before scheduling a Google Calendar panel interview.',
+        variant: 'destructive',
+      });
+      return;
     }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
@@ -1693,6 +1709,19 @@ const calendarSlotPropGetter = useCallback((date) => {
               {cancelTarget.resource.coordinatedHrName && (
                 <p className="text-sm">
                   Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.meetingLink && (
+                <p className="text-sm break-all">
+                  Google Meet:{' '}
+                  <a
+                    href={cancelTarget.resource.meetingLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-600 underline"
+                  >
+                    {cancelTarget.resource.meetingLink}
+                  </a>
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

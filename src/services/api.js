@@ -134,4 +134,20 @@ export const userSettingsAPI = {
   }
 };
 
+export const googleCalendarAPI = {
+  getStatus: async () => {
+    const response = await api.get('/integrations/google-calendar/status');
+    return response.data;
+  },
+  connect: async (returnTo) => {
+    const response = await api.get('/integrations/google-calendar/connect', {
+      params: returnTo ? { returnTo } : undefined,
+    });
+    return response.data;
+  },
+  disconnect: async () => {
+    await api.delete('/integrations/google-calendar');
+  },
+};
+
 export default api;

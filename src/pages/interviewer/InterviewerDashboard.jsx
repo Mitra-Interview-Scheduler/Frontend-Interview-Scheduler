@@ -8,6 +8,7 @@ import { Calendar, Clock, CheckCircle, TrendingUp, Settings, Bell } from 'lucide
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import { toast } from '@/hooks/use-toast';
+import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { interviewRequestAPI } from '@/services/interviewRequestAPI';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
@@ -56,6 +57,10 @@ const InterviewerDashboard = () => {
     completedThisMonth: 0,
   });
   const [upcomingInterviews, setUpcomingInterviews] = useState([]);
+
+  useEffect(() => {
+    handleGoogleCalendarOAuthResult({ navigate, toast });
+  }, [navigate]);
 
   useEffect(() => {
     loadDashboardData();

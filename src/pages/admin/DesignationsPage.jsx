@@ -17,11 +17,11 @@ import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 
+import { getNormalizedRoles } from '@/lib/roleHelpers';
+
 const DesignationsPage = () => {
   const { user } = useAuth();
-  const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
-    ? user.roles
-    : (user?.role ? [user.role] : []);
+  const userRoles = getNormalizedRoles(user);
   const isAdmin = userRoles.includes('ADMIN');
   const canCreateMasterData = userRoles.some((role) => ['ADMIN', 'HR', 'INTERVIEWER'].includes(role));
 
