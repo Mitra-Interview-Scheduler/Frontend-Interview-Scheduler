@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Bell, CheckCheck, ChevronDown, Loader2 } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -32,183 +32,132 @@ const TYPE_LABELS = {
 const isCancelledNotification = (type) =>
   type === 'INTERVIEW_CANCELLED' || (type && type.includes('CANCELLED'));
 
-const READ_BEFORE_MARK_MS = 4000;
-const READ_BEFORE_MARK_SEC = READ_BEFORE_MARK_MS / 1000;
-const EXIT_ANIMATION_MS = 420;
-
-const EXIT_EASE = [0.4, 0, 0.2, 1];
-
-const ReadCountdown = ({ pendingRead, cancelled }) => {
-  const [secondsLeft, setSecondsLeft] = useState(READ_BEFORE_MARK_SEC);
-
-  useEffect(() => {
-    if (!pendingRead) {
-      setSecondsLeft(READ_BEFORE_MARK_SEC);
-      return undefined;
-    }
-
-    setSecondsLeft(READ_BEFORE_MARK_SEC);
-    const interval = window.setInterval(() => {
-      setSecondsLeft((current) => Math.max(0, current - 1));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [pendingRead]);
-
-  if (!pendingRead) {
-    return null;
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
-      transition={{ duration: 0.2 }}
-      className="mt-3 flex items-center gap-2"
-    >
-      <div className="h-1 flex-1 rounded-full bg-muted overflow-hidden">
-        <motion.div
-          className={cn('h-full rounded-full', cancelled ? 'bg-destructive' : 'bg-primary')}
-          initial={{ width: '0%' }}
-          animate={{ width: '100%' }}
-          transition={{ duration: READ_BEFORE_MARK_SEC, ease: 'linear' }}
-        />
-      </div>
-      <span
-        className={cn(
-          'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold tabular-nums',
-          cancelled
-            ? 'border-destructive/40 text-destructive bg-destructive/5'
-            : 'border-primary/40 text-primary bg-primary/5'
-        )}
-        aria-label={`${secondsLeft} seconds remaining`}
-      >
-        {secondsLeft}
-      </span>
-    </motion.div>
-  );
-};
-
 const NotificationItem = ({
   notification,
   expanded,
-  pendingRead = false,
-  isExiting = false,
   onClick,
+  onMarkAsRead,
 }) => {
   const cancelled = isCancelledNotification(notification.type);
 
   return (
-    <motion.button
-      type="button"
-      layout
-      initial={false}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+    <div
       className={cn(
-        'w-full text-left rounded-lg border px-4 shadow-sm transition-all duration-200',
-        expanded ? 'py-4' : 'py-3.5',
+        'rounded-lg border shadow-sm transition-all duration-200',
+        expanded ? 'py-1' : 'py-0',
         cancelled
           ? notification.read
-            ? 'border-destructive/20 bg-destructive/5 border-l-[3px] border-l-destructive/60 hover:bg-destructive/10'
-            : 'border-destructive/30 bg-destructive/10 border-l-4 border-l-destructive hover:bg-destructive/15 shadow-md'
+            ? 'border-destructive/20 bg-destructive/5 border-l-[3px] border-l-destructive/60'
+            : 'border-destructive/30 bg-destructive/10 border-l-4 border-l-destructive shadow-md'
           : notification.read
-            ? 'border-border/80 bg-muted/30 border-l-[3px] border-l-muted-foreground/25 hover:bg-muted/45'
-            : 'border-primary/25 bg-primary/10 border-l-4 border-l-primary hover:bg-primary/15 shadow-md',
-        expanded && (cancelled ? 'bg-destructive/15 shadow-md' : 'bg-primary/10 shadow-md'),
-        pendingRead && (cancelled
-          ? 'ring-2 ring-destructive/40 shadow-md'
-          : 'ring-2 ring-primary/40 shadow-md')
+            ? 'border-border/80 bg-muted/30 border-l-[3px] border-l-muted-foreground/25'
+            : 'border-primary/25 bg-primary/10 border-l-4 border-l-primary shadow-md',
+        expanded && (cancelled ? 'bg-destructive/15 shadow-md' : 'bg-primary/10 shadow-md')
       )}
-      onPointerDown={(event) => event.preventDefault()}
-      onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className={cn('flex items-center gap-2 mb-1', expanded && 'flex-wrap')}>
-            <motion.p
-              layout
+      <button
+        type="button"
+        className={cn(
+          'w-full text-left rounded-lg px-4 transition-colors',
+          expanded ? 'py-4' : 'py-3.5',
+          cancelled ? 'hover:bg-destructive/10' : 'hover:bg-primary/5'
+        )}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={onClick}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className={cn('flex items-center gap-2 mb-1', expanded && 'flex-wrap')}>
+              <p
+                className={cn(
+                  notification.read ? 'font-medium' : 'font-semibold',
+                  expanded ? 'text-base whitespace-normal' : 'text-sm truncate',
+                  cancelled && 'text-destructive',
+                  !cancelled && !notification.read && 'text-foreground',
+                  notification.read && !cancelled && 'text-foreground/85'
+                )}
+              >
+                {notification.subject}
+              </p>
+              <Badge
+                variant={cancelled ? 'destructive' : notification.read ? 'secondary' : 'default'}
+                className="text-[10px] shrink-0"
+              >
+                {TYPE_LABELS[notification.type] || notification.type}
+              </Badge>
+            </div>
+            <div
               className={cn(
-                notification.read ? 'font-medium' : 'font-semibold',
-                expanded ? 'text-base whitespace-normal' : 'text-sm truncate',
-                cancelled && 'text-destructive',
-                !cancelled && !notification.read && 'text-foreground',
-                notification.read && !cancelled && 'text-foreground/85'
+                'overflow-hidden',
+                expanded ? 'h-auto' : 'h-10'
               )}
             >
-              {notification.subject}
-            </motion.p>
-            <Badge
-              variant={cancelled ? 'destructive' : notification.read ? 'secondary' : 'default'}
-              className="text-[10px] shrink-0"
-            >
-              {TYPE_LABELS[notification.type] || notification.type}
-            </Badge>
+              <p
+                className={cn(
+                  expanded ? 'text-sm leading-relaxed whitespace-normal' : 'text-xs line-clamp-2',
+                  cancelled
+                    ? 'text-destructive/90'
+                    : notification.read
+                      ? 'text-muted-foreground'
+                      : 'text-foreground/75'
+                )}
+              >
+                {notification.message}
+              </p>
+            </div>
           </div>
-          <motion.div
-            layout
-            initial={false}
-            animate={{ height: expanded ? 'auto' : '2.5rem' }}
-            transition={
-              expanded
-                ? { duration: 0.28, ease: 'easeOut' }
-                : { type: 'spring', stiffness: 420, damping: 32 }
-            }
-            className="overflow-hidden"
-          >
-            <p
-              className={cn(
-                expanded ? 'text-sm leading-relaxed whitespace-normal' : 'text-xs line-clamp-2',
-                cancelled
-                  ? 'text-destructive/90'
-                  : notification.read
-                    ? 'text-muted-foreground'
-                    : 'text-foreground/75'
-              )}
-            >
-              {notification.message}
-            </p>
-          </motion.div>
-        </div>
-        <AnimatePresence mode="wait">
-          {!notification.read && !isExiting && (
-            <motion.span
-              key="dot"
-              initial={{ scale: 0 }}
-              animate={{ scale: pendingRead ? [1, 1.35, 1] : 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={
-                pendingRead
-                  ? { duration: 0.8, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 0.2 }
-              }
+          {!notification.read && (
+            <span
               className={cn(
                 'mt-1 h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-background',
                 cancelled ? 'bg-destructive' : 'bg-primary'
               )}
             />
           )}
-        </AnimatePresence>
-      </div>
+        </div>
 
-      <AnimatePresence>
-        {pendingRead && (
-          <ReadCountdown pendingRead={pendingRead} cancelled={cancelled} />
+        {notification.createdAt && (
+          <p
+            className={cn(
+              'mt-2',
+              expanded ? 'text-xs' : 'text-[11px]',
+              cancelled ? 'text-destructive/70' : 'text-muted-foreground'
+            )}
+          >
+            {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+          </p>
         )}
-      </AnimatePresence>
+      </button>
 
-      {notification.createdAt && !pendingRead && (
-        <p
+      {expanded && !notification.read && (
+        <div
           className={cn(
-            'mt-2',
-            expanded ? 'text-xs' : 'text-[11px]',
-            cancelled ? 'text-destructive/70' : 'text-muted-foreground'
+            'mx-4 mb-3 mt-1 border-t pt-3',
+            cancelled ? 'border-destructive/20' : 'border-primary/15'
           )}
         >
-          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-        </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn(
+              'w-full h-9 gap-2 text-xs font-medium shadow-sm',
+              cancelled
+                ? 'border-destructive/35 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive'
+                : 'border-primary/35 bg-background text-primary hover:bg-primary/10 hover:text-primary'
+            )}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onMarkAsRead(notification.id);
+            }}
+          >
+            <CheckCheck className="w-4 h-4" />
+            Mark as read
+          </Button>
+        </div>
       )}
-    </motion.button>
+    </div>
   );
 };
 
@@ -263,21 +212,7 @@ const NotificationBell = () => {
   const [expandedId, setExpandedId] = useState(null);
   const [readOpen, setReadOpen] = useState(false);
   const [unreadOpen, setUnreadOpen] = useState(true);
-  const [pendingReadId, setPendingReadId] = useState(null);
-  const [exitingReadId, setExitingReadId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const readTimerRef = useRef(null);
-
-  const clearReadTimer = () => {
-    if (readTimerRef.current) {
-      clearTimeout(readTimerRef.current);
-      readTimerRef.current = null;
-    }
-    setPendingReadId(null);
-    setExitingReadId(null);
-  };
-
-  useEffect(() => () => clearReadTimer(), []);
 
   const { unread, read } = useMemo(() => ({
     unread: notifications.filter((item) => !item.read),
@@ -295,39 +230,16 @@ const NotificationBell = () => {
     }
   }, [unread.length, read.length]);
 
-  const handleExitComplete = (notificationId) => {
-    if (exitingReadId === notificationId) {
-      markAsRead(notificationId);
-      setExitingReadId(null);
-      setExpandedId((current) => (current === notificationId ? null : current));
-    }
-  };
-
   const handleNotificationClick = (notification) => {
-    if (exitingReadId === notification.id) {
-      return;
-    }
-
-    if (expandedId === notification.id) {
-      clearReadTimer();
-      setExpandedId(null);
-      return;
-    }
-
-    clearReadTimer();
-    setExpandedId(notification.id);
-
-    if (!notification.read) {
-      setPendingReadId(notification.id);
-      readTimerRef.current = setTimeout(() => {
-        setPendingReadId(null);
-        setExitingReadId(notification.id);
-        readTimerRef.current = null;
-      }, READ_BEFORE_MARK_MS);
-    }
+    setExpandedId((current) => (current === notification.id ? null : notification.id));
   };
 
-  const renderList = (items, { emptyMessage, showExit = false }) => {
+  const handleMarkAsRead = (notificationId) => {
+    markAsRead(notificationId);
+    setExpandedId((current) => (current === notificationId ? null : current));
+  };
+
+  const renderList = (items, { emptyMessage }) => {
     if (items.length === 0) {
       return (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -337,60 +249,17 @@ const NotificationBell = () => {
     }
 
     return (
-      <motion.div layout className="px-1 py-1">
-        <AnimatePresence initial={false}>
-          {items.map((notification) => {
-            const exiting = showExit && exitingReadId === notification.id;
-
-            return (
-              <motion.div
-                key={notification.id}
-                layout
-                className="m-1 origin-top overflow-hidden"
-                initial={false}
-                animate={
-                  exiting
-                    ? { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }
-                    : { height: 'auto', opacity: 1 }
-                }
-                transition={{
-                  height: { duration: EXIT_ANIMATION_MS / 1000, ease: EXIT_EASE },
-                  opacity: { duration: (EXIT_ANIMATION_MS - 80) / 1000, ease: 'easeIn' },
-                  margin: { duration: EXIT_ANIMATION_MS / 1000, ease: EXIT_EASE },
-                  layout: { duration: 0.28, ease: EXIT_EASE },
-                }}
-                onAnimationComplete={() => {
-                  if (exiting) {
-                    handleExitComplete(notification.id);
-                  }
-                }}
-              >
-                <motion.div
-                  initial={false}
-                  animate={
-                    exiting
-                      ? { opacity: 0, y: -14, scale: 0.94, rotateX: -6 }
-                      : { opacity: 1, y: 0, scale: 1, rotateX: 0 }
-                  }
-                  transition={{
-                    duration: EXIT_ANIMATION_MS / 1000,
-                    ease: EXIT_EASE,
-                  }}
-                  style={{ perspective: 600, transformOrigin: 'top center' }}
-                >
-                  <NotificationItem
-                    notification={notification}
-                    expanded={expandedId === notification.id}
-                    pendingRead={pendingReadId === notification.id}
-                    isExiting={exiting}
-                    onClick={() => handleNotificationClick(notification)}
-                  />
-                </motion.div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </motion.div>
+      <div className="px-1 py-1 space-y-2">
+        {items.map((notification) => (
+          <NotificationItem
+            key={notification.id}
+            notification={notification}
+            expanded={expandedId === notification.id}
+            onClick={() => handleNotificationClick(notification)}
+            onMarkAsRead={handleMarkAsRead}
+          />
+        ))}
+      </div>
     );
   };
 
@@ -401,7 +270,6 @@ const NotificationBell = () => {
       setUnreadOpen(unreadCount > 0);
       setReadOpen(unreadCount === 0 && read.length > 0);
     } else {
-      clearReadTimer();
       setExpandedId(null);
       setReadOpen(false);
       setUnreadOpen(true);
@@ -460,7 +328,6 @@ const NotificationBell = () => {
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                clearReadTimer();
                 setExpandedId(null);
                 markAllAsRead();
               }}
@@ -490,7 +357,6 @@ const NotificationBell = () => {
             >
               {renderList(unread, {
                 emptyMessage: 'No unread notifications.',
-                showExit: true,
               })}
             </NotificationSection>
 
@@ -505,6 +371,10 @@ const NotificationBell = () => {
                 emptyMessage: 'No read notifications.',
               })}
             </NotificationSection>
+
+            <p className="px-5 py-2 text-[10px] text-muted-foreground border-t">
+              Notifications older than 30 days are removed automatically.
+            </p>
           </div>
         )}
       </DropdownMenuContent>
