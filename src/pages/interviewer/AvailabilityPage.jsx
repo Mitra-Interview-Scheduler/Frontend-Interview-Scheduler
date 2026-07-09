@@ -110,19 +110,31 @@ const minimumAllowedStart = () => {
   return addMinutes(new Date(), 30);
 };
 
-const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingSlots, onToggleUpcomingSlots, loading }) => {
+const CalendarToolbar = ({
+  label,
+  onNavigate,
+  onView,
+  view,
+  views,
+  showUpcomingSlots,
+  onToggleUpcomingSlots,
+  loading,
+  calendarConnected,
+  onSyncCalendar,
+  syncingCalendar,
+}) => {
   const viewList = Array.isArray(views) ? views : Object.keys(views || {});
 
   return (
     <div className="rbc-toolbar flex flex-col gap-3 px-2 py-2 md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => onNavigate('PREV')} className="h-9 w-9 p-0">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('PREV')} className="calendar-toolbar-btn h-9 w-9 p-0">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')} className="h-9 px-3 text-sm font-medium">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')} className="calendar-toolbar-btn h-9 px-3 text-sm font-medium">
           Today
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onNavigate('NEXT')} className="h-9 w-9 p-0">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('NEXT')} className="calendar-toolbar-btn h-9 w-9 p-0">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -141,16 +153,29 @@ const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingS
             variant={view === availableView ? 'default' : 'outline'}
             size="sm"
             onClick={() => onView(availableView)}
-            className="h-9 px-3 capitalize"
+            className="calendar-toolbar-btn h-9 px-3 capitalize"
           >
             {availableView}
           </Button>
         ))}
+        {calendarConnected && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSyncCalendar}
+            disabled={syncingCalendar}
+            className="calendar-toolbar-btn h-9 px-3"
+            title="Sync availability slots to Google Calendar"
+          >
+            <RefreshCw className={`h-4 w-4 shrink-0 ${syncingCalendar ? 'animate-spin' : ''}`} />
+            <span>{syncingCalendar ? 'Syncing...' : 'Sync now'}</span>
+          </Button>
+        )}
         <Button
           variant={showUpcomingSlots ? 'default' : 'outline'}
           size="sm"
           onClick={onToggleUpcomingSlots}
-          className="h-9 gap-2 px-3"
+          className="calendar-toolbar-btn h-9 px-3"
         >
           {showUpcomingSlots ? 'Hide Upcoming' : 'Show Upcoming'}
         </Button>
@@ -171,6 +196,7 @@ const AvailabilityPage = () => {
   const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
   const [syncingCalendar, setSyncingCalendar] = useState(false);
   const calendarInitializedRef = useRef(false);
+  const loadAvailabilityRequestRef = useRef(0);
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
@@ -258,25 +284,28 @@ const AvailabilityPage = () => {
   const getCalendarPageSize = (view) => CALENDAR_PAGE_SIZES[view] || CALENDAR_PAGE_SIZES.week;
 
   const loadAvailability = useCallback(async (opts = {}) => {
+    const requestId = ++loadAvailabilityRequestRef.current;
+    const view = opts.view || currentView;
+    const { start, end } = opts.start && opts.end
+      ? opts
+      : computeRangeForView(view, opts.date || calendarDate);
+    const pageSize = getCalendarPageSize(view);
+
     try {
       setLoading(true);
-      const view = opts.view || currentView;
-      const { start, end } = opts.start && opts.end
-        ? opts
-        : computeRangeForView(view, opts.date || calendarDate);
-      const pageSize = getCalendarPageSize(view);
-      const { items, googleExternalEvents } = await availabilityAPI.getAvailabilityByDateRange(
+      const { items } = await availabilityAPI.getAvailabilityByDateRange(
         start,
         end,
         0,
         pageSize,
+        false,
       );
 
-      const mapped = [
-        ...mapSlotsToEvents(items || []),
-        ...mapGoogleEventsToCalendar(googleExternalEvents),
-      ];
-      setEvents(mapped);
+      if (requestId !== loadAvailabilityRequestRef.current) {
+        return;
+      }
+
+      setEvents(mapSlotsToEvents(items || []));
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -284,7 +313,23 @@ const AvailabilityPage = () => {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (requestId === loadAvailabilityRequestRef.current) {
+        setLoading(false);
+      }
+    }
+
+    try {
+      const googleExternalEvents = await googleCalendarAPI.getExternalEvents(start, end);
+      if (requestId !== loadAvailabilityRequestRef.current) {
+        return;
+      }
+
+      setEvents((prev) => {
+        const mitraEvents = prev.filter((event) => event.status !== 'google_external');
+        return [...mitraEvents, ...mapGoogleEventsToCalendar(googleExternalEvents)];
+      });
+    } catch (error) {
+      console.error('Failed to load Google Calendar events', error);
     }
   }, [calendarDate, currentView]);
 
@@ -384,7 +429,7 @@ const AvailabilityPage = () => {
     calendarInitializedRef.current = true;
 
     const initializeCalendarPage = async () => {
-      const handled = handleGoogleCalendarOAuthResult({
+      handleGoogleCalendarOAuthResult({
         toast,
         dashboardPath: null,
         onConnected: async () => {
@@ -395,12 +440,7 @@ const AvailabilityPage = () => {
         },
       });
 
-      if (!handled) {
-        const status = await loadCalendarStatus();
-        if (status.connected) {
-          await syncGoogleCalendarAvailability({ showToast: false });
-        }
-      }
+      loadCalendarStatus();
 
       const { start, end } = computeRangeForView(currentView, calendarDate);
       await loadAvailability({ start, end, view: currentView });
@@ -411,8 +451,11 @@ const AvailabilityPage = () => {
   }, [currentView, calendarDate]);
 
   useEffect(() => {
-    loadStats();
-    refreshUpcomingEvents();
+    const timer = setTimeout(() => {
+      loadStats();
+      refreshUpcomingEvents();
+    }, 150);
+    return () => clearTimeout(timer);
   }, [loadStats, refreshUpcomingEvents]);
 
 
@@ -652,36 +695,7 @@ const handleSelectSlot = ({ start, end }) => {
           </div>
         </motion.div>
 
-        {calendarStatus.connected && (
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 rounded-lg bg-primary/10 p-2">
-                <CalendarIcon className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Google Calendar connected</p>
-                <p className="text-sm text-muted-foreground">
-                  {calendarStatus.googleAccountEmail
-                    ? `Mitra slots sync to ${calendarStatus.googleAccountEmail}. Other Google Calendar events appear in gray and are read-only here.`
-                    : 'Mitra slots sync to Google Calendar. Other Google Calendar events appear in gray and are read-only here.'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="whitespace-nowrap">Auto-sync on</Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => syncGoogleCalendarAvailability({ showToast: true })}
-                disabled={syncingCalendar}
-                className="gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncingCalendar ? 'animate-spin' : ''}`} />
-                {syncingCalendar ? 'Syncing...' : 'Sync now'}
-              </Button>
-            </div>
-          </div>
-        )}
+        
 
         {/* Calendar + Sidebar */}
         <div className="flex flex-col lg:flex-row gap-3 ">
@@ -735,8 +749,12 @@ const handleSelectSlot = ({ start, end }) => {
                           toolbar: (toolbarProps) => (
                             <CalendarToolbar
                               {...toolbarProps}
+                              loading={loading}
                               showUpcomingSlots={showUpcomingSlots}
                               onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
+                              calendarConnected={calendarStatus.connected}
+                              onSyncCalendar={() => syncGoogleCalendarAvailability({ showToast: true })}
+                              syncingCalendar={syncingCalendar}
                             />
                           ),
                           event: BookedCalendarEvent,
