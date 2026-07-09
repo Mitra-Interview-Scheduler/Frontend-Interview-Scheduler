@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { googleCalendarAPI } from '@/services/api';
 import { getNormalizedRoles, hasInterviewerRole } from '@/lib/roleHelpers';
 
-const EXEMPT_PATHS = ['/login', '/interviewer/connect-calendar'];
+const EXEMPT_PATHS = ['/login', '/interviewer/connect-calendar', '/settings'];
 
 export const InterviewerCalendarGuard = ({ children }) => {
   const { user, loading: authLoading } = useAuth();

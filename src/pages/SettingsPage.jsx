@@ -188,10 +188,13 @@ const SettingsPage = () => {
     try {
       setCalendarActionLoading(true);
       await googleCalendarAPI.disconnect();
-      setCalendarStatus({ connected: false, googleAccountEmail: null });
+      const status = await googleCalendarAPI.getStatus();
+      setCalendarStatus(status);
       toast({
         title: 'Google Calendar disconnected',
-        description: 'Calendar sync has been turned off for your account.',
+        description: status.required
+          ? 'You can reconnect below or from the connect calendar page to use interviewer availability again.'
+          : 'Calendar sync has been turned off for your account.',
       });
     } catch (error) {
       toast({
@@ -368,8 +371,8 @@ const SettingsPage = () => {
 
               <p className="text-sm text-muted-foreground">
                 {hasInterviewerRole(getNormalizedRoles(user))
-                  ? 'Google Calendar is required for interviewer accounts. Connect your calendar to sync availability slots and interview bookings with Google Meet links.'
-                  : 'Connect your Google Calendar to sync availability slots and interview bookings with Google Meet links.'}
+                  ? 'Google Calendar is required for interviewer availability. You can disconnect to switch Google accounts or refresh permissions, then connect again.'
+                  : 'Connect your Google Calendar to sync availability and show events from all calendars you have enabled in Google (read-only on the availability view).'}
               </p>
 
               {calendarStatus.connected && calendarStatus.googleAccountEmail && (

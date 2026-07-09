@@ -224,6 +224,7 @@ const AvailabilityPage = () => {
     id: `google-${event.googleEventId}`,
     googleEventId: event.googleEventId,
     title: event.title || 'Google Calendar event',
+    calendarName: event.calendarName || null,
     start: new Date(event.startDateTime),
     end: new Date(event.endDateTime),
     status: 'google_external',
@@ -743,7 +744,8 @@ const handleSelectSlot = ({ start, end }) => {
                         tooltipAccessor={(event) => {
                           const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
                           if (event.status === 'google_external') {
-                            return `📅 Google Calendar (read-only)\n${event.title}\n${timeRange}`;
+                            const calLine = event.calendarName ? `\nCalendar: ${event.calendarName}` : '';
+                            return `📅 Google Calendar (read-only)\n${event.title}${calLine}\n${timeRange}`;
                           }
                           const meetLine = event.meetingLink ? `\n📹 ${event.meetingLink}` : '';
                           const syncLine = event.status === 'available'
