@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Star, Clock, Calendar as CalendarIcon } from 'lucide-react';
+import { Star, Clock, ArrowRight } from 'lucide-react';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
 import { SlotStatus } from '@/lib/statusConstants';
-import { addDays, addMonths, endOfDay, startOfDay } from 'date-fns';
+import {
+  addDays, addMonths, endOfDay, format, differenceInMinutes, isSameDay, isToday, isTomorrow, parseISO,
+} from 'date-fns';
 
 const EMPTY_MATCH = {
   both: [],
@@ -16,11 +16,79 @@ const EMPTY_MATCH = {
   domains: [],
 };
 
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function toDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    return parseISO(value.includes('T') ? value : `${value}T00:00:00`);
+  }
+  return new Date(value);
+}
+
+function formatDuration(start, end) {
+  const mins = differenceInMinutes(end, start);
+  if (!Number.isFinite(mins) || mins <= 0) return null;
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function dayHeading(date) {
+  if (isToday(date)) return { primary: 'Today', secondary: format(date, 'MMM d') };
+  if (isTomorrow(date)) return { primary: 'Tomorrow', secondary: format(date, 'MMM d') };
+  return { primary: format(date, 'EEE'), secondary: format(date, 'MMM d') };
+}
+
+function MatchGroup({ label, tone, items, icon }) {
+  if (!items?.length) return null;
+
+  const bar = {
+    amber: 'bg-amber-400',
+    sky: 'bg-sky-400',
+    teal: 'bg-teal-500',
+  }[tone];
+
+  const chip = {
+    amber: 'bg-amber-50 text-amber-950 border-amber-200/70',
+    sky: 'bg-sky-50 text-sky-950 border-sky-200/70',
+    teal: 'bg-teal-50 text-teal-950 border-teal-200/70',
+  }[tone];
+
+  return (
+    <div className="relative pl-3">
+      <span className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-full ${bar}`} />
+      <div className="flex items-baseline justify-between gap-2 mb-2">
+        <p className="text-[13px] font-semibold text-slate-800">{label}</p>
+        <span className="text-[11px] tabular-nums text-slate-400">{items.length}</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((name) => (
+          <span
+            key={`${label}-${name}`}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-[5px] text-xs font-medium ${chip}`}
+          >
+            {icon}
+            {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function MatchingInterviewerDetailDialog({
   open,
   onOpenChange,
   match,
-  formatDateTimeRange,
+  onSelectFreeSlot,
 }) {
   const [rangeMode, setRangeMode] = useState('week');
   const [slots, setSlots] = useState([]);
@@ -28,11 +96,11 @@ export function MatchingInterviewerDetailDialog({
   const [error, setError] = useState(null);
 
   const range = useMemo(() => {
-    const start = startOfDay(new Date());
+    const now = new Date();
     const end = rangeMode === 'month'
-      ? endOfDay(addMonths(start, 1))
-      : endOfDay(addDays(start, 7));
-    return { start, end };
+      ? endOfDay(addMonths(now, 1))
+      : endOfDay(addDays(now, 7));
+    return { start: now, end };
   }, [rangeMode]);
 
   useEffect(() => {
@@ -72,136 +140,235 @@ export function MatchingInterviewerDetailDialog({
     return () => { active = false; };
   }, [open, match?.interviewerId, range.start, range.end]);
 
-  const availableSlots = useMemo(
-    () => slots.filter((slot) => slot.status === SlotStatus.AVAILABLE),
-    [slots],
-  );
+  const availableSlots = useMemo(() => {
+    const now = Date.now();
+    return slots
+      .filter((slot) => (
+        slot.status === SlotStatus.AVAILABLE
+        && toDate(slot.endDateTime)?.getTime() > now
+      ))
+      .sort((a, b) => toDate(a.startDateTime) - toDate(b.startDateTime));
+  }, [slots]);
+
+  const slotsByDay = useMemo(() => {
+    const groups = [];
+    availableSlots.forEach((slot) => {
+      const start = toDate(slot.startDateTime);
+      const last = groups[groups.length - 1];
+      if (last && isSameDay(last.date, start)) {
+        last.slots.push(slot);
+      } else {
+        groups.push({ date: start, slots: [slot] });
+      }
+    });
+    return groups;
+  }, [availableSlots]);
 
   if (!match) return null;
 
+  const hasCore = (match.matchedCore || []).length > 0;
+  const hasNonCore = (match.matchedNonCore || []).length > 0;
+  const hasDomains = (match.matchedDomains || []).length > 0;
+  const hasAnyMatch = hasCore || hasNonCore || hasDomains;
+
+  const roleLine = [match.designation, match.department].filter(Boolean).join(' · ');
+  const rankLine = [
+    match.interviewerTierOrder != null ? `Tier ${match.interviewerTierOrder}` : null,
+    match.interviewerLevelOrder != null ? `Level ${match.interviewerLevelOrder}` : null,
+    match.yearsOfExperience != null ? `${match.yearsOfExperience} yrs exp` : null,
+  ].filter(Boolean).join(' · ');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-2">
-          <DialogTitle className="text-lg">{match.interviewerName}</DialogTitle>
-          <DialogDescription>
-            {[match.designation, match.department].filter(Boolean).join(' · ') || 'Matching interviewer'}
-            {match.yearsOfExperience != null ? ` · ${match.yearsOfExperience} yrs` : ''}
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogBody className="px-6 py-4 space-y-5">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Why it matches
-            </p>
-            {(match.matchedCore || []).length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] uppercase tracking-wide text-amber-700 font-semibold mr-1">
-                  Core
-                </span>
-                {match.matchedCore.map((name) => (
-                  <Badge
-                    key={`core-${name}`}
-                    variant="outline"
-                    className="border-amber-300 bg-amber-50 text-amber-900"
-                  >
-                    <Star className="h-3 w-3 fill-amber-500 text-amber-500 mr-1" />
-                    {name}
-                  </Badge>
-                ))}
+      <DialogContent className="w-[min(96vw,880px)] max-w-[880px] p-0 overflow-hidden">
+        <DialogHeader className="px-0 py-0 border-0">
+          <div className="px-6 pt-5 pb-4 pr-14">
+            <div className="flex gap-4">
+              <div
+                className={`h-12 w-12 shrink-0 rounded-xl flex items-center justify-center text-[15px] font-semibold tracking-wide text-white ${
+                  match.hasFreeTimeInWeek
+                    ? 'bg-[linear-gradient(145deg,#0f766e,#134e4a)]'
+                    : 'bg-[linear-gradient(145deg,#475569,#334155)]'
+                }`}
+              >
+                {getInitials(match.interviewerName)}
               </div>
-            )}
-            {(match.matchedNonCore || []).length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] uppercase tracking-wide text-sky-700 font-semibold mr-1">
-                  Non-core
-                </span>
-                {match.matchedNonCore.map((name) => (
-                  <Badge
-                    key={`noncore-${name}`}
-                    variant="outline"
-                    className="border-sky-300 bg-sky-50 text-sky-900"
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <DialogTitle className="text-xl font-semibold tracking-tight text-slate-900">
+                    {match.interviewerName}
+                  </DialogTitle>
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${
+                      match.hasFreeTimeInWeek ? 'text-teal-700' : 'text-slate-500'
+                    }`}
                   >
-                    {name}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            {(match.matchedDomains || []).length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold mr-1">
-                  Domains
-                </span>
-                {match.matchedDomains.map((name) => (
-                  <Badge
-                    key={`domain-${name}`}
-                    variant="outline"
-                    className="border-emerald-300 bg-emerald-50 text-emerald-900"
-                  >
-                    {name}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                <CalendarIcon className="w-3.5 h-3.5" />
-                Free time
-              </p>
-              <div className="flex gap-1 rounded-md border border-slate-200 p-0.5 bg-slate-50">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={rangeMode === 'week' ? 'default' : 'ghost'}
-                  className="h-7 px-3 text-xs"
-                  onClick={() => setRangeMode('week')}
-                >
-                  Week
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={rangeMode === 'month' ? 'default' : 'ghost'}
-                  className="h-7 px-3 text-xs"
-                  onClick={() => setRangeMode('month')}
-                >
-                  Month
-                </Button>
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        match.hasFreeTimeInWeek ? 'bg-teal-500' : 'bg-slate-400'
+                      }`}
+                    />
+                    {match.hasFreeTimeInWeek ? 'Free this week' : 'Busy this week'}
+                  </span>
+                </div>
+                <DialogDescription className="mt-1 text-sm text-slate-600">
+                  {roleLine || 'Matching interviewer'}
+                </DialogDescription>
+                {rankLine && (
+                  <p className="mt-0.5 text-xs text-slate-500">{rankLine}</p>
+                )}
               </div>
             </div>
+          </div>
+        </DialogHeader>
 
-            {loading && (
-              <p className="text-sm text-muted-foreground">Loading free time…</p>
-            )}
-            {!loading && error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            {!loading && !error && availableSlots.length === 0 && (
-              <p className="text-sm text-muted-foreground italic">
-                No available slots in the selected {rangeMode}.
+        <DialogBody className="px-0 py-0 border-t border-slate-200">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            {/* Match reasons */}
+            <section className="px-6 py-5 border-b lg:border-b-0 lg:border-r border-slate-200">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400 mb-4">
+                Why this match
               </p>
-            )}
-            {!loading && !error && availableSlots.length > 0 && (
-              <div className="max-h-56 overflow-y-auto space-y-2 rounded-lg border border-slate-200 p-2">
-                {availableSlots.map((slot) => (
-                  <div
-                    key={slot.slotId}
-                    className="flex items-start gap-2 rounded-md bg-emerald-50/70 border border-emerald-100 px-3 py-2"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
-                    <p className="text-sm text-emerald-900">
-                      {formatDateTimeRange
-                        ? formatDateTimeRange(new Date(slot.startDateTime), new Date(slot.endDateTime))
-                        : `${slot.startDateTime} – ${slot.endDateTime}`}
-                    </p>
-                  </div>
-                ))}
+
+              {!hasAnyMatch ? (
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  No overlapping technologies or domains found.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  <MatchGroup
+                    label="Core technologies"
+                    tone="amber"
+                    items={match.matchedCore}
+                    icon={<Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+                  />
+                  <MatchGroup
+                    label="Non-core technologies"
+                    tone="sky"
+                    items={match.matchedNonCore}
+                  />
+                  <MatchGroup
+                    label="Domains"
+                    tone="teal"
+                    items={match.matchedDomains}
+                  />
+                </div>
+              )}
+            </section>
+
+            {/* Schedule */}
+            <section className="px-6 py-5 bg-[#f7faf9] flex flex-col min-h-[360px]">
+              <div className="flex items-end justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                    Pick a time
+                  </p>
+                  <p className="text-sm text-slate-700 mt-1">
+                    {loading
+                      ? 'Loading availability…'
+                      : error
+                        ? 'Could not load slots'
+                        : availableSlots.length === 0
+                          ? 'No open slots in this range'
+                          : `${availableSlots.length} open slot${availableSlots.length === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+                <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
+                  {[
+                    { id: 'week', label: '7 days' },
+                    { id: 'month', label: '30 days' },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setRangeMode(mode.id)}
+                      className={`h-7 min-w-[4.25rem] rounded-md px-2.5 text-xs font-medium transition-colors ${
+                        rangeMode === mode.id
+                          ? 'bg-teal-700 text-white'
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
+
+              {loading && (
+                <div className="space-y-3 animate-pulse">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="h-3 w-24 rounded bg-slate-200/80" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="h-11 rounded-lg bg-white border border-slate-200" />
+                        <div className="h-11 rounded-lg bg-white border border-slate-200" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!loading && error && (
+                <div className="flex-1 flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-4 py-8">
+                  <p className="text-sm text-red-700 text-center">{error}</p>
+                </div>
+              )}
+
+              {!loading && !error && availableSlots.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white/70 px-6 py-10 text-center">
+                  <Clock className="w-6 h-6 text-slate-300 mb-2" />
+                  <p className="text-sm font-medium text-slate-700">Nothing available</p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-[240px] leading-relaxed">
+                    Try 30 days, or choose another interviewer from the list.
+                  </p>
+                </div>
+              )}
+
+              {!loading && !error && availableSlots.length > 0 && (
+                <div className="max-h-[440px] overflow-y-auto space-y-5 -mr-1 pr-1">
+                  {slotsByDay.map((group) => {
+                    const heading = dayHeading(group.date);
+                    return (
+                      <div key={group.date.toISOString()}>
+                        <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-[#f7faf9]/95 backdrop-blur-sm pb-2">
+                          <span className="text-sm font-semibold text-slate-900">{heading.primary}</span>
+                          <span className="text-xs text-slate-400">{heading.secondary}</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {group.slots.map((slot) => {
+                            const start = toDate(slot.startDateTime);
+                            const end = toDate(slot.endDateTime);
+                            const duration = formatDuration(start, end);
+                            return (
+                              <button
+                                key={slot.slotId}
+                                type="button"
+                                onClick={() => onSelectFreeSlot?.(slot)}
+                                className="group flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-all hover:border-teal-400 hover:bg-teal-50/70 hover:shadow-[0_1px_0_rgba(15,118,110,0.08)] active:scale-[0.99]"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-[13px] font-semibold tabular-nums text-slate-900">
+                                    {format(start, 'h:mm a')}
+                                    <span className="font-normal text-slate-400"> – </span>
+                                    {format(end, 'h:mm a')}
+                                  </p>
+                                  {duration && (
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                      {duration}
+                                    </p>
+                                  )}
+                                </div>
+                                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-all group-hover:text-teal-700 group-hover:translate-x-0.5" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         </DialogBody>
       </DialogContent>

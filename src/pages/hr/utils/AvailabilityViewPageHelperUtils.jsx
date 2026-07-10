@@ -21,7 +21,8 @@ export const checkInterviewerPrivilege = (slotResource, candidate) => {
 
   if (interviewerTier == null || candidateTier == null) return null;
 
-  if (interviewerTier < candidateTier) {
+  // Lower tierOrder / levelOrder = more senior (same as calendar + match filters).
+  if (interviewerTier > candidateTier) {
     return `The interviewer's tier (Tier ${interviewerTier}) is below the candidate's required tier (Tier ${candidateTier}). Please choose a more senior interviewer.`;
   }
 
@@ -29,7 +30,7 @@ export const checkInterviewerPrivilege = (slotResource, candidate) => {
     interviewerTier === candidateTier &&
     interviewerLevel != null &&
     candidateLevel != null &&
-    interviewerLevel < candidateLevel
+    interviewerLevel > candidateLevel
   ) {
     return `The interviewer is at the same tier but a lower level (Level ${interviewerLevel}) than the candidate requires (Level ${candidateLevel}). Please choose a more senior interviewer.`;
   }

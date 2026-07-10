@@ -151,7 +151,7 @@ const AvailabilityViewPage = () => {
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
-    ? candidates.find((c) => c.id === requestForm.candidateId) || null
+    ? candidates.find((c) => Number(c.id) === Number(requestForm.candidateId)) || null
     : null;
 
   const candidateTechIds = useMemo(
@@ -620,7 +620,7 @@ const AvailabilityViewPage = () => {
     }
   }, [requestForm.candidateId, candidates]);
 
-  // Load matching interviewers from backend when candidate / narrowing filters change
+  // Load matching interviewers when candidate or dept/tier/level filters change.
   useEffect(() => {
     if (!requestForm.candidateId) {
       setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
@@ -628,8 +628,16 @@ const AvailabilityViewPage = () => {
       setMatchingDetailOpen(false);
       return undefined;
     }
-    loadMatchingInterviewers();
-    return undefined;
+
+    // Wait until async tier/level option lists are ready when those filters are set
+    if (selectedTierInDept && tiersForSelectedDept.length === 0) return undefined;
+    if (minDesignationLevel && designationsForSelectedTier.length === 0) return undefined;
+
+    const timer = setTimeout(() => {
+      loadMatchingInterviewers();
+    }, 250);
+
+    return () => clearTimeout(timer);
   }, [
     requestForm.candidateId,
     filterDept,
@@ -637,6 +645,8 @@ const AvailabilityViewPage = () => {
     selectedDeptForDesignation,
     selectedTierInDept,
     minDesignationLevel,
+    tiersForSelectedDept,
+    designationsForSelectedTier,
   ]);
 
   // Load full candidate profile (technologies/domains) when missing from list payload
@@ -885,6 +895,27 @@ const AvailabilityViewPage = () => {
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
     
+  };
+
+  const handleMatchingFreeSlotSelect = (slotDto) => {
+    if (!slotDto) return;
+
+    const end = new Date(slotDto.endDateTime);
+    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) {
+      toast({
+        title: 'Slot unavailable',
+        description: 'This free time has already passed. Pick another slot.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const [event] = formatSlots([slotDto], interviewerColorMap);
+    if (!event) return;
+
+    setMatchingDetailOpen(false);
+    setSelectedMatchingInterviewer(null);
+    handleEventClick(event);
   };
 
 
@@ -1709,7 +1740,7 @@ const calendarSlotPropGetter = useCallback((date) => {
         </Card>
 
         {/* ── Top Matching Interviewers ─────────────────────────────────────── */}
-        {selectedCandidate && (
+        {requestForm.candidateId && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1725,7 +1756,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
               ) : !hasMatchingInterviewers ? (
                 <p className="text-sm text-muted-foreground italic">
-                  No overlapping technologies or domains found for {selectedCandidate.name}.
+                  No matching interviewers for{' '}
+                  {selectedCandidate?.name || requestForm.candidateName || 'this candidate'}
+                  {' '}with the current department / tier / level filters.
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -1755,6 +1788,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           }}
           match={selectedMatchingInterviewer}
           formatDateTimeRange={formatDateTimeRange}
+          onSelectFreeSlot={handleMatchingFreeSlotSelect}
         />
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
