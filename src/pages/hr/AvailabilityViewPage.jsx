@@ -35,7 +35,7 @@ import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
-import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateTechnologyIds, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import  candidateAPI from '@/services/candidateAPI';
@@ -43,6 +43,7 @@ import  candidateAPI from '@/services/candidateAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -117,6 +118,10 @@ const AvailabilityViewPage = () => {
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
+  const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
+  const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
+  const [selectedMatchingInterviewer, setSelectedMatchingInterviewer] = useState(null);
+  const [matchingDetailOpen, setMatchingDetailOpen] = useState(false);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -149,8 +154,18 @@ const AvailabilityViewPage = () => {
     ? candidates.find((c) => c.id === requestForm.candidateId) || null
     : null;
 
+  const candidateTechIds = useMemo(
+    () => getCandidateTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
+
   const candidateCoreTechIds = useMemo(
     () => getCandidateCoreTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
+
+  const candidateDomainIds = useMemo(
+    () => (selectedCandidate?.domains || []).map((d) => d.id).filter(Boolean),
     [selectedCandidate],
   );
 
@@ -165,6 +180,11 @@ const AvailabilityViewPage = () => {
       });
     return names;
   }, [selectedCandidate]);
+
+  const isCandidateTech = useCallback(
+    (technologyId) => candidateTechIds.includes(technologyId),
+    [candidateTechIds],
+  );
 
   const isCandidateCoreTech = useCallback(
     (technologyId) => candidateCoreTechIds.includes(technologyId),
@@ -600,6 +620,25 @@ const AvailabilityViewPage = () => {
     }
   }, [requestForm.candidateId, candidates]);
 
+  // Load matching interviewers from backend when candidate / narrowing filters change
+  useEffect(() => {
+    if (!requestForm.candidateId) {
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      setSelectedMatchingInterviewer(null);
+      setMatchingDetailOpen(false);
+      return undefined;
+    }
+    loadMatchingInterviewers();
+    return undefined;
+  }, [
+    requestForm.candidateId,
+    filterDept,
+    minExperience,
+    selectedDeptForDesignation,
+    selectedTierInDept,
+    minDesignationLevel,
+  ]);
+
   // Load full candidate profile (technologies/domains) when missing from list payload
   useEffect(() => {
     if (!requestForm.candidateId) return undefined;
@@ -640,6 +679,59 @@ const AvailabilityViewPage = () => {
       const data = await designationAPI.getDesignationsByTier(tierId);
       setDesignationsForSelectedTier(data.sort((a, b) => a.levelOrder - b.levelOrder));
     } catch (e) { console.error(e); }
+  };
+
+  const loadMatchingInterviewers = async () => {
+    if (!requestForm.candidateId) {
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      return;
+    }
+
+    try {
+      setMatchingInterviewersLoading(true);
+
+      let tierOrderToSend = null;
+      if (selectedTierInDept) {
+        const t = tiersForSelectedDept.find((tier) => tier.id.toString() === selectedTierInDept);
+        tierOrderToSend = t ? t.tierOrder : null;
+      }
+
+      let levelOrderToSend = null;
+      if (minDesignationLevel) {
+        const d = designationsForSelectedTier.find(
+          (desig) => desig.levelOrder.toString() === minDesignationLevel,
+        );
+        levelOrderToSend = d ? d.levelOrder : null;
+      }
+
+      const data = await hrAvailabilityAPI.getMatchingInterviewers({
+        candidateId: requestForm.candidateId,
+        departmentIds: filterDept.length > 0 ? filterDept : null,
+        minYearsOfExperience: minExperience ? parseInt(minExperience, 10) : null,
+        departmentIdForDesignationFilter: selectedDeptForDesignation
+          ? parseInt(selectedDeptForDesignation, 10)
+          : null,
+        minTierId: tierOrderToSend,
+        minDesignationLevelInDepartment: levelOrderToSend,
+        limit: 5,
+      });
+
+      setMatchingInterviewers({
+        both: data?.both || [],
+        technologies: data?.technologies || [],
+        domains: data?.domains || [],
+      });
+    } catch (err) {
+      console.error('Failed to load matching interviewers:', err);
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      toast({
+        title: 'Could not load matching interviewers',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setMatchingInterviewersLoading(false);
+    }
   };
 
   const applyFilters = async () => {
@@ -1072,6 +1164,60 @@ const calendarSlotPropGetter = useCallback((date) => {
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
 
+  const hasMatchingInterviewers = (
+    matchingInterviewers.both.length
+    + matchingInterviewers.technologies.length
+    + matchingInterviewers.domains.length
+  ) > 0;
+
+  const openMatchingDetail = (match) => {
+    setSelectedMatchingInterviewer(match);
+    setMatchingDetailOpen(true);
+  };
+
+  const renderMatchingCard = (match) => {
+    const hasFreeTime = Boolean(match.hasFreeTimeInWeek);
+    return (
+      <button
+        key={match.interviewerId}
+        type="button"
+        onClick={() => openMatchingDetail(match)}
+        className={`min-w-[180px] max-w-[220px] flex-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+          hasFreeTime
+            ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80'
+            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+        }`}
+      >
+        <p className={`text-sm font-semibold truncate ${hasFreeTime ? 'text-emerald-900' : 'text-slate-800'}`}>
+          {match.interviewerName}
+        </p>
+        <p className={`text-xs truncate mt-0.5 ${hasFreeTime ? 'text-emerald-700' : 'text-muted-foreground'}`}>
+          {[match.designation, match.department].filter(Boolean).join(' · ') || 'Interviewer'}
+        </p>
+        <p className={`text-[11px] mt-1.5 font-medium ${hasFreeTime ? 'text-emerald-700' : 'text-slate-500'}`}>
+          {hasFreeTime ? 'Free within a week' : 'No free time this week'}
+          {' · '}
+          {match.totalMatches} match{match.totalMatches === 1 ? '' : 'es'}
+        </p>
+      </button>
+    );
+  };
+
+  const renderMatchingGroup = (title, items) => {
+    if (!items.length) return null;
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+          <span className="ml-1 font-normal normal-case tracking-normal">({items.length})</span>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {items.map((match) => renderMatchingCard(match))}
+        </div>
+      </div>
+    );
+  };
+
   // ── Interview type (shared between single + panel dialogs) ───────────────
   const renderInterviewTypeSection = () => (
     <Card className="border-slate-200">
@@ -1375,10 +1521,18 @@ const calendarSlotPropGetter = useCallback((date) => {
                             {filteredTechnologies.map((tech) => {
                               const isSelected = filterTech.includes(tech.id);
                               const isCore = isCandidateCoreTech(tech.id);
+                              const isCandidate = isCandidateTech(tech.id);
+                              const isCandidateNonCore = isCandidate && !isCore;
                               return (
                               <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
                                 className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${
-                                  isSelected ? (isCore ? 'bg-amber-50' : 'bg-primary/10') : ''
+                                  isSelected
+                                    ? (isCore
+                                      ? 'bg-amber-50'
+                                      : isCandidateNonCore
+                                        ? 'bg-sky-50'
+                                        : 'bg-primary/10')
+                                    : ''
                                 }`}>
                                 <span className="flex items-center gap-2 font-medium">
                                   {isCore && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
@@ -1392,10 +1546,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                                       className={`text-xs ${
                                         isCore
                                           ? 'border-amber-300 bg-amber-50 text-amber-900'
-                                          : ''
+                                          : isCandidateNonCore
+                                            ? 'border-sky-300 bg-sky-50 text-sky-900'
+                                            : ''
                                       }`}
                                     >
-                                      {isCore ? 'Candidate Core' : 'Selected'}
+                                      {isCore ? 'Candidate Core' : isCandidate ? 'Candidate' : 'Selected'}
                                     </Badge>
                                   )}
                                 </span>
@@ -1414,6 +1570,8 @@ const calendarSlotPropGetter = useCallback((date) => {
                     {filterTech.map((id) => {
                       const tech = technologies.find((t) => t.id === id);
                       const isCore = isCandidateCoreTech(id);
+                      const isCandidate = isCandidateTech(id);
+                      const isCandidateNonCore = isCandidate && !isCore;
                       return tech ? (
                         <Badge
                           key={id}
@@ -1421,7 +1579,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                           className={`gap-1 pr-1 ${
                             isCore
                               ? 'border-amber-300 bg-amber-50 text-amber-900'
-                              : 'border-slate-200 bg-secondary text-secondary-foreground'
+                              : isCandidateNonCore
+                                ? 'border-sky-300 bg-sky-50 text-sky-900'
+                                : 'border-slate-200 bg-secondary text-secondary-foreground'
                           }`}
                         >
                           {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
@@ -1443,6 +1603,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   label="Domains"
                   domains={domains}
                   selectedIds={filterDomain}
+                  highlightIds={candidateDomainIds}
                   onChange={setFilterDomain}
                   placeholder="Filter by domains…"
                 />
@@ -1543,6 +1704,55 @@ const calendarSlotPropGetter = useCallback((date) => {
           </CardContent>
           )}
         </Card>
+
+        {/* ── Top Matching Interviewers ─────────────────────────────────────── */}
+        {selectedCandidate && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                Top Matching Interviewers
+              </CardTitle>
+              <CardDescription>
+                Green = free within a week. Click a card for match details and free time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {matchingInterviewersLoading ? (
+                <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
+              ) : !hasMatchingInterviewers ? (
+                <p className="text-sm text-muted-foreground italic">
+                  No overlapping technologies or domains found for {selectedCandidate.name}.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {renderMatchingGroup(
+                    'Matches both technologies & domains',
+                    matchingInterviewers.both,
+                  )}
+                  {renderMatchingGroup(
+                    'Matches technologies only',
+                    matchingInterviewers.technologies,
+                  )}
+                  {renderMatchingGroup(
+                    'Matches domains only',
+                    matchingInterviewers.domains,
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <MatchingInterviewerDetailDialog
+          open={matchingDetailOpen}
+          onOpenChange={(open) => {
+            setMatchingDetailOpen(open);
+            if (!open) setSelectedMatchingInterviewer(null);
+          }}
+          match={selectedMatchingInterviewer}
+          formatDateTimeRange={formatDateTimeRange}
+        />
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>

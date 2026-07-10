@@ -96,6 +96,27 @@ export const hrAvailabilityAPI = {
     const response = await api.get(`/hr/interviews/candidate/${candidateId}`);
     return response.data;
   },
+
+  /**
+   * Match interviewers to a candidate by technologies and domains (profile-based).
+   */
+  getMatchingInterviewers: async (payload) => {
+    const response = await api.post('/hr/availability/match', payload);
+    return response.data;
+  },
+
+  /**
+   * Get an interviewer's slots within a date range (for match detail free-time view).
+   */
+  getInterviewerSlots: async (interviewerId, { startDateTime, endDateTime } = {}) => {
+    const response = await api.get(
+      withQuery(`/hr/availability/interviewers/${interviewerId}/slots`, {
+        startDateTime,
+        endDateTime,
+      }),
+    );
+    return response.data;
+  },
 };
 
 export default hrAvailabilityAPI;

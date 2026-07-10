@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { InterviewType } from '@/lib/statusConstants';
-import { getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { getCandidateTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { TechnologyProficiencyBadge } from '@/components/technologyProficiencyUi';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
@@ -113,7 +113,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const handleGoToAvailability = () => {
     if (!availabilityDate || !interviewType) return;
 
-    const technologyIds = getCandidateCoreTechnologyIds(candidateTechnologies);
+    const technologyIds = getCandidateTechnologyIds(candidateTechnologies);
 
     const domainIds = (candidate.domains || [])
       .map((d) => d.id)

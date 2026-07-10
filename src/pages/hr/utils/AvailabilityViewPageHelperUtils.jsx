@@ -59,6 +59,7 @@ export const formatSlots = (data, colorMap) =>
     const palette = INTERVIEWER_PALETTES[paletteIdx];
     const skills = slot.technologies || [];
     const coreTechnologies = slot.coreTechnologies || [];
+    const domains = slot.domains || [];
     const skillLabel = skills.length
       ? ` - ${skills.slice(0, 2).join(', ')}${skills.length > 2 ? ' +' + (skills.length - 2) : ''}`
       : '';
@@ -79,6 +80,7 @@ export const formatSlots = (data, colorMap) =>
         designation: slot.designation,
         skills,
         coreTechnologies,
+        domains,
         yearsOfExperience: slot.yearsOfExperience,
         status: slot.status,
         candidateName: slot.candidateName,
