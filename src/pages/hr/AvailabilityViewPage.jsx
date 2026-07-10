@@ -135,6 +135,7 @@ const AvailabilityViewPage = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
@@ -564,7 +565,7 @@ const AvailabilityViewPage = () => {
 
   
   
-  // ── Auto-set candidate filters once when a candidate is first selected ──
+  // ── Validate candidate + fill designation only (do not touch calendar filters) ──
   useEffect(() => {
     if (!requestForm.candidateId || candidates.length === 0) {
       if (!requestForm.candidateId) {
@@ -595,14 +596,6 @@ const AvailabilityViewPage = () => {
       }));
     }
     if (candidate) {
-      const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
-      if (ids.length > 0) {
-        setFilterTech(ids);
-      }
-      const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
-      if (domainIds.length > 0) {
-        setFilterDomain(domainIds);
-      }
       appliedCandidateFiltersRef.current = requestForm.candidateId;
     }
   }, [requestForm.candidateId, candidates]);
@@ -707,13 +700,28 @@ const AvailabilityViewPage = () => {
     if (!cancelTarget) return;
     setCancelling(true);
     try {
+      const panelId = cancelTarget.resource.panelId;
       const requestId = cancelTarget.resource.requestId;
-      if (!requestId) throw new Error('No request ID on this slot — cannot cancel from calendar.');
-      await hrAvailabilityAPI.cancelInterviewRequest(requestId);
-      toast({
-        title: '✓ Interview cancelled',
-        description: `${cancelTarget.resource.interviewer}'s slot is now available again. Interviewer notified.`,
-      });
+
+      if (panelId) {
+        await hrAvailabilityAPI.cancelPanelInterview(panelId);
+        const panelInterviewerCount = events.filter(
+          (e) => e.resource?.panelId === panelId && e.resource?.status === SlotStatus.BOOKED,
+        ).length;
+        toast({
+          title: '✓ Panel interview cancelled',
+          description: panelInterviewerCount > 0
+            ? `All ${panelInterviewerCount} interviewer slot${panelInterviewerCount === 1 ? '' : 's'} restored. Interviewers notified.`
+            : 'All panel interviewer slots restored. Interviewers notified.',
+        });
+      } else {
+        if (!requestId) throw new Error('No request ID on this slot — cannot cancel from calendar.');
+        await hrAvailabilityAPI.cancelInterviewRequest(requestId);
+        toast({
+          title: '✓ Interview cancelled',
+          description: `${cancelTarget.resource.interviewer}'s slot is now available again. Interviewer notified.`,
+        });
+      }
       setCancelDialogOpen(false);
       setCancelTarget(null);
       await refreshCalendar();
@@ -821,6 +829,7 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
+    setScheduling(true);
     try {
       await hrAvailabilityAPI.createInterviewRequest({
         candidateId: requestForm.candidateId,
@@ -844,6 +853,8 @@ const AvailabilityViewPage = () => {
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -871,6 +882,7 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
+    setScheduling(true);
     try {
       const panel = await hrAvailabilityAPI.createPanelInterview({
         candidateId: requestForm.candidateId,
@@ -901,6 +913,8 @@ const AvailabilityViewPage = () => {
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -1695,14 +1709,42 @@ const calendarSlotPropGetter = useCallback((date) => {
               <Trash2 className="w-5 h-5" /> Cancel Interview
             </DialogTitle>
             <DialogDescription>
-              The slot will be immediately restored to <strong>Available</strong> and the interviewer will be notified.
+              {cancelTarget?.resource?.panelId ? (
+                <>
+                  This is a <strong>panel interview</strong>. Cancelling will restore slots for{' '}
+                  <strong>all panel interviewers</strong> and notify them.
+                </>
+              ) : (
+                <>
+                  The slot will be immediately restored to <strong>Available</strong> and the interviewer will be notified.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           {cancelTarget && (
             <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 space-y-2">
-              <p className="font-semibold text-sm">🔒 Booked Interview</p>
+              <p className="font-semibold text-sm">
+                {cancelTarget.resource.panelId ? '👥 Panel Interview' : '🔒 Booked Interview'}
+              </p>
               <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
+              {cancelTarget.resource.panelId && (
+                <p className="text-sm text-red-700">
+                  Also cancelling:{' '}
+                  <strong>
+                    {events
+                      .filter(
+                        (e) =>
+                          e.resource?.panelId === cancelTarget.resource.panelId
+                          && e.resource?.status === SlotStatus.BOOKED
+                          && e.id !== cancelTarget.id,
+                      )
+                      .map((e) => e.resource.interviewer)
+                      .filter(Boolean)
+                      .join(', ') || 'other panel interviewers'}
+                  </strong>
+                </p>
+              )}
               {cancelTarget.resource.candidateName && (
                 <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
               )}
@@ -1747,6 +1789,8 @@ const calendarSlotPropGetter = useCallback((date) => {
             <Button variant="destructive" onClick={handleCancelBooked} disabled={cancelling} className="gap-2">
               {cancelling ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Cancelling…</>
+              ) : cancelTarget?.resource?.panelId ? (
+                <><Trash2 className="w-4 h-4" /> Cancel Panel & Restore Slots</>
               ) : (
                 <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>
               )}
@@ -1756,7 +1800,13 @@ const calendarSlotPropGetter = useCallback((date) => {
       </Dialog>
 
       {/* ══ SINGLE INTERVIEW DIALOG ════════════════════════════════════════ */}
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
+      <Dialog
+        open={requestDialogOpen}
+        onOpenChange={(open) => {
+          if (scheduling) return;
+          setRequestDialogOpen(open);
+        }}
+      >
         <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -1871,21 +1921,33 @@ const calendarSlotPropGetter = useCallback((date) => {
           </DialogBody>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRequestDialogOpen(false)} disabled={scheduling}>
+              Cancel
+            </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError}
+              disabled={!!singlePrivilegeError || scheduling}
               className="gap-2"
               title={singlePrivilegeError ? 'Interviewer privilege too low for this candidate' : undefined}
             >
-              <Send className="w-4 h-4" /> Schedule Interview
+              {scheduling ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
+              ) : (
+                <><Send className="w-4 h-4" /> Schedule Interview</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ══ PANEL INTERVIEW DIALOG ════════════════════════════════════════ */}
-      <Dialog open={panelDialogOpen} onOpenChange={setPanelDialogOpen}>
+      <Dialog
+        open={panelDialogOpen}
+        onOpenChange={(open) => {
+          if (scheduling) return;
+          setPanelDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -2004,14 +2066,20 @@ const calendarSlotPropGetter = useCallback((date) => {
           </div>
         </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setPanelDialogOpen(false)} disabled={scheduling}>
+              Cancel
+            </Button>
             <Button
               onClick={handleSendPanelRequest}
               className="gap-2 bg-sky-600 hover:bg-sky-700"
-              disabled={panelTimeOptions.length === 0 || panelPrivilegeErrors.length > 0}
+              disabled={panelTimeOptions.length === 0 || panelPrivilegeErrors.length > 0 || scheduling}
               title={panelPrivilegeErrors.length > 0 ? 'One or more interviewers have insufficient privilege' : undefined}
             >
-              <Users className="w-4 h-4" /> Schedule Panel Interview
+              {scheduling ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
+              ) : (
+                <><Users className="w-4 h-4" /> Schedule Panel Interview</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

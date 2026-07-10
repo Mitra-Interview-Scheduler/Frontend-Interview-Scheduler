@@ -706,7 +706,7 @@ const handleSelectSlot = ({ start, end }) => {
             <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
                 <AnimatePresence mode="wait">
-                  {loading ? (
+                  {loading && !syncingCalendar ? (
                     <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="h-[700px] flex items-center justify-center">
                       <div className="text-center">
@@ -719,66 +719,82 @@ const handleSelectSlot = ({ start, end }) => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
-                      <Calendar
-                        localizer={localizer}
-                        events={events}
-                        date={calendarDate}
-                        view={currentView}
-                        startAccessor="start"
-                        endAccessor="end"
-                        onSelectSlot={handleSelectSlot}
-                        onSelectEvent={handleEventClick}
-                        onNavigate={setCalendarDate}
-                        onView={setCurrentView}
-                        selectable
-                        eventPropGetter={eventStyleGetter}
-                        slotPropGetter={slotPropGetter}
-                        dayPropGetter={dayPropGetter}
-                        style={{ height: '100%' }}
-                        views={['month', 'week', 'day']}
-                        defaultView="week"
-                        step={60}
-                        timeslots={1}
-                        min={new Date(1970, 0, 1, 0, 0, 0)}
-                        max={new Date(1970, 0, 1, 23, 59, 59)}
-                        scrollToTime={new Date(1970, 0, 1, 8, 0)}
-                        popup
-                        showMultiDayTimes
-                        components={{
-                          toolbar: (toolbarProps) => (
-                            <CalendarToolbar
-                              {...toolbarProps}
-                              loading={loading}
-                              showUpcomingSlots={showUpcomingSlots}
-                              onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
-                              calendarConnected={calendarStatus.connected}
-                              onSyncCalendar={() => syncGoogleCalendarAvailability({ showToast: true })}
-                              syncingCalendar={syncingCalendar}
-                            />
-                          ),
-                          event: BookedCalendarEvent,
-                        }}
-                        tooltipAccessor={(event) => {
-                          const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
-                          if (event.status === 'google_external') {
-                            const calLine = event.calendarName ? `\nCalendar: ${event.calendarName}` : '';
-                            return `📅 Google Calendar (read-only)\n${event.title}${calLine}\n${timeRange}`;
-                          }
-                          const meetLine = event.meetingLink ? `\n📹 ${event.meetingLink}` : '';
-                          const syncLine = event.status === 'available'
-                            ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
-                            : '';
-                          if (event.status === 'booked' || event.status === 'completed') {
-                            return `🔒 ${event.status === 'completed' ? 'Completed' : 'Booked'}${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}${syncLine}`;
-                          }
-                          return `✏️ Click to edit\n${event.title}\n${timeRange}${syncLine}`;
-                        }}
-                        formats={{
-                      timeGutterFormat: calendarFormats.timeGutterFormat,
-                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
-                    }}
-                      />
+                      className="availability-calendar-container relative" style={{ width: '100%', height : '75vh' }}>
+                      <div
+                        className={`h-full transition-[filter] duration-200 ${syncingCalendar ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
+                      >
+                        <Calendar
+                          localizer={localizer}
+                          events={events}
+                          date={calendarDate}
+                          view={currentView}
+                          startAccessor="start"
+                          endAccessor="end"
+                          onSelectSlot={handleSelectSlot}
+                          onSelectEvent={handleEventClick}
+                          onNavigate={setCalendarDate}
+                          onView={setCurrentView}
+                          selectable={!syncingCalendar}
+                          eventPropGetter={eventStyleGetter}
+                          slotPropGetter={slotPropGetter}
+                          dayPropGetter={dayPropGetter}
+                          style={{ height: '100%' }}
+                          views={['month', 'week', 'day']}
+                          defaultView="week"
+                          step={60}
+                          timeslots={1}
+                          min={new Date(1970, 0, 1, 0, 0, 0)}
+                          max={new Date(1970, 0, 1, 23, 59, 59)}
+                          scrollToTime={new Date(1970, 0, 1, 8, 0)}
+                          popup
+                          showMultiDayTimes
+                          components={{
+                            toolbar: (toolbarProps) => (
+                              <CalendarToolbar
+                                {...toolbarProps}
+                                loading={loading}
+                                showUpcomingSlots={showUpcomingSlots}
+                                onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
+                                calendarConnected={calendarStatus.connected}
+                                onSyncCalendar={() => syncGoogleCalendarAvailability({ showToast: true })}
+                                syncingCalendar={syncingCalendar}
+                              />
+                            ),
+                            event: BookedCalendarEvent,
+                          }}
+                          tooltipAccessor={(event) => {
+                            const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                            if (event.status === 'google_external') {
+                              const calLine = event.calendarName ? `\nCalendar: ${event.calendarName}` : '';
+                              return `📅 Google Calendar (read-only)\n${event.title}${calLine}\n${timeRange}`;
+                            }
+                            const meetLine = event.meetingLink ? `\n📹 ${event.meetingLink}` : '';
+                            const syncLine = event.status === 'available'
+                              ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
+                              : '';
+                            if (event.status === 'booked' || event.status === 'completed') {
+                              return `🔒 ${event.status === 'completed' ? 'Completed' : 'Booked'}${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}${syncLine}`;
+                            }
+                            return `✏️ Click to edit\n${event.title}\n${timeRange}${syncLine}`;
+                          }}
+                          formats={{
+                            timeGutterFormat: calendarFormats.timeGutterFormat,
+                            eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
+                          }}
+                        />
+                      </div>
+                      {syncingCalendar && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
+                          <div className="rounded-lg border bg-background/95 px-6 py-5 shadow-lg text-center">
+                            <div className="relative w-12 h-12 mx-auto mb-3">
+                              <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
+                              <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
+                            </div>
+                            <p className="text-sm font-medium text-foreground">Syncing with Google Calendar…</p>
+                            <p className="text-xs text-muted-foreground mt-1">Updating availability results</p>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

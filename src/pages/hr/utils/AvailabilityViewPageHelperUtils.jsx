@@ -83,6 +83,7 @@ export const formatSlots = (data, colorMap) =>
         status: slot.status,
         candidateName: slot.candidateName,
         requestId: slot.requestId ?? null,
+        panelId: slot.panelId ?? null,
         interviewType: slot.interviewType ?? null,
         interviewScheduleId: slot.interviewScheduleId ?? null,
         interviewStatus: slot.interviewStatus ?? null,
