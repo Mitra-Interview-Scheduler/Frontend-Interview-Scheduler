@@ -138,17 +138,48 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
   );
 };
 
-export const getEventStyle = (event, panelSlots) => {
+export const isEventBeforeDateFilter = (event, lockStart) =>
+  Boolean(lockStart && event?.start && event.start < lockStart);
+
+export const getEventStyle = (event, panelSlots, lockStart = null) => {
   const isBooked = event.resource?.status === SlotStatus.BOOKED;
   const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
+  const isBeforeFilter = isEventBeforeDateFilter(event, lockStart);
   const deptPalette = getDepartmentPalette(event.resource?.department);
   const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
   const typePalette = isBooked && !isCompleted ? getBookedTypePalette(event.resource?.interviewType) : null;
   const completedPalette = isCompleted ? COMPLETED_EVENT_PALETTE : null;
-  const leftBorderColor = isCompleted
-    ? completedPalette.border
-    : (isBooked && typePalette ? typePalette.border || typePalette.solid : basePalette.border || basePalette.solid);
+  const leftBorderColor = isBeforeFilter
+    ? '#94a3b8'
+    : (isCompleted
+      ? completedPalette.border
+      : (isBooked && typePalette ? typePalette.border || typePalette.solid : basePalette.border || basePalette.solid));
+
+  if (isBeforeFilter) {
+    return {
+      className: 'available-event outside-date-filter-event',
+      style: {
+        background: 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
+        borderRadius: '5px',
+        opacity: 0.42,
+        color: '#f8fafc',
+        borderLeft: '3px solid #94a3b8',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
+        padding: '3px 6px',
+        fontSize: '11px',
+        fontWeight: '500',
+        boxShadow: 'none',
+        cursor: 'not-allowed',
+        overflow: 'hidden',
+        maxWidth: '100%',
+        outline: 'none',
+        filter: 'grayscale(1)',
+      },
+    };
+  }
 
   return {
     className: isCompleted ? 'booked-event completed-event' : (isBooked ? 'booked-event' : 'available-event'),
@@ -175,10 +206,19 @@ export const getEventStyle = (event, panelSlots) => {
   };
 };
 
-export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`) => {
+export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`, lockStart = null) => {
   const r = event.resource;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const timeRange = formatTimeRange(event.start, event.end);
+
+  if (isEventBeforeDateFilter(event, lockStart)) {
+    return [
+      `Interviewer: ${r?.interviewer || event.title}`,
+      `Time: ${timeRange}`,
+      '',
+      'Outside selected From date — not bookable',
+    ].join('\n');
+  }
 
   if (r?.status === SlotStatus.BOOKED) {
     const meetLine = r.meetingLink ? `\nGoogle Meet: ${r.meetingLink}` : '';

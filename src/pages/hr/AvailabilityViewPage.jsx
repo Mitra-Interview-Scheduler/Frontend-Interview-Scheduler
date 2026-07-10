@@ -41,7 +41,7 @@ import { tierAPI } from '@/services/tierAPI';
 import  candidateAPI from '@/services/candidateAPI';
 
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, isEventBeforeDateFilter } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
@@ -236,12 +236,12 @@ const AvailabilityViewPage = () => {
     : [];
 
     const eventStyleGetter = useCallback((event) => 
-    getEventStyle(event, panelSlots), 
-  [panelSlots]);
+    getEventStyle(event, panelSlots, calendarLockStart), 
+  [panelSlots, calendarLockStart]);
 
   const tooltipAccessor = useCallback((event) => 
-    getTooltipText(event, panelSlots, formatTimeRange), 
-  [panelSlots, formatTimeRange]);
+    getTooltipText(event, panelSlots, formatTimeRange, calendarLockStart), 
+  [panelSlots, formatTimeRange, calendarLockStart]);
 
   // For the calendar components prop
   const calendarComponents = useMemo(() => ({
@@ -749,9 +749,11 @@ const AvailabilityViewPage = () => {
       }
 
       const visibleRange = computeRangeForView(currentView, calendarDate);
+      // Always load the full visible calendar range so slots before "From"
+      // still appear (grayed out). Booking is blocked client-side by calendarLockStart.
       const filters = {
         ...buildCalendarAvailabilityFilters(currentView, calendarDate),
-        startDateTime: formatLocalDateTime(dateRange.start || visibleRange.start),
+        startDateTime: formatLocalDateTime(visibleRange.start),
         endDateTime: formatLocalDateTime(dateRange.end || visibleRange.end),
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
@@ -1156,11 +1158,12 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const availableCount = events.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
-  const bookedCount = events.filter(
+  const countableEvents = events.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
+  const availableCount = countableEvents.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
+  const bookedCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
   ).length;
-  const completedCount = events.filter(
+  const completedCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
 
@@ -1691,7 +1694,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
-                    <span className="text-sm"><span className="font-bold text-slate-600">{events.length}</span><span className="text-muted-foreground ml-1">total</span></span>
+                    <span className="text-sm"><span className="font-bold text-slate-600">{countableEvents.length}</span><span className="text-muted-foreground ml-1">total</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={clearFilters} className="gap-2">
