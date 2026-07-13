@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
-import { Star, Clock, ArrowRight } from 'lucide-react';
+import { Clock, ArrowRight } from 'lucide-react';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
 import { SlotStatus } from '@/lib/statusConstants';
 import {
   addDays, addMonths, endOfDay, format, differenceInMinutes, isSameDay, isToday, isTomorrow, parseISO,
 } from 'date-fns';
+import { MatchingInterviewerProfileSections } from './MatchingInterviewerProfileSections';
 
 const EMPTY_MATCH = {
   both: [],
@@ -45,43 +46,6 @@ function dayHeading(date) {
   if (isToday(date)) return { primary: 'Today', secondary: format(date, 'MMM d') };
   if (isTomorrow(date)) return { primary: 'Tomorrow', secondary: format(date, 'MMM d') };
   return { primary: format(date, 'EEE'), secondary: format(date, 'MMM d') };
-}
-
-function MatchGroup({ label, tone, items, icon }) {
-  if (!items?.length) return null;
-
-  const bar = {
-    amber: 'bg-amber-400',
-    sky: 'bg-sky-400',
-    teal: 'bg-teal-500',
-  }[tone];
-
-  const chip = {
-    amber: 'bg-amber-50 text-amber-950 border-amber-200/70',
-    sky: 'bg-sky-50 text-sky-950 border-sky-200/70',
-    teal: 'bg-teal-50 text-teal-950 border-teal-200/70',
-  }[tone];
-
-  return (
-    <div className="relative pl-3">
-      <span className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-full ${bar}`} />
-      <div className="flex items-baseline justify-between gap-2 mb-2">
-        <p className="text-[13px] font-semibold text-slate-800">{label}</p>
-        <span className="text-[11px] tabular-nums text-slate-400">{items.length}</span>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((name) => (
-          <span
-            key={`${label}-${name}`}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-[5px] text-xs font-medium ${chip}`}
-          >
-            {icon}
-            {name}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export function MatchingInterviewerDetailDialog({
@@ -166,11 +130,6 @@ export function MatchingInterviewerDetailDialog({
 
   if (!match) return null;
 
-  const hasCore = (match.matchedCore || []).length > 0;
-  const hasNonCore = (match.matchedNonCore || []).length > 0;
-  const hasDomains = (match.matchedDomains || []).length > 0;
-  const hasAnyMatch = hasCore || hasNonCore || hasDomains;
-
   const roleLine = [match.designation, match.department].filter(Boolean).join(' · ');
   const rankLine = [
     match.interviewerTierOrder != null ? `Tier ${match.interviewerTierOrder}` : null,
@@ -224,36 +183,9 @@ export function MatchingInterviewerDetailDialog({
 
         <DialogBody className="px-0 py-0 border-t border-slate-200">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            {/* Match reasons */}
-            <section className="px-6 py-5 border-b lg:border-b-0 lg:border-r border-slate-200">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400 mb-4">
-                Why this match
-              </p>
-
-              {!hasAnyMatch ? (
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  No overlapping technologies or domains found.
-                </p>
-              ) : (
-                <div className="space-y-5">
-                  <MatchGroup
-                    label="Core technologies"
-                    tone="amber"
-                    items={match.matchedCore}
-                    icon={<Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
-                  />
-                  <MatchGroup
-                    label="Non-core technologies"
-                    tone="sky"
-                    items={match.matchedNonCore}
-                  />
-                  <MatchGroup
-                    label="Domains"
-                    tone="teal"
-                    items={match.matchedDomains}
-                  />
-                </div>
-              )}
+            {/* Match + full profile */}
+            <section className="px-6 py-5 border-b lg:border-b-0 lg:border-r border-slate-200 max-h-[520px] overflow-y-auto">
+              <MatchingInterviewerProfileSections match={match} />
             </section>
 
             {/* Schedule */}

@@ -195,8 +195,10 @@ const AvailabilityPage = () => {
   const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
   const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
   const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [loadingGoogleEvents, setLoadingGoogleEvents] = useState(false);
   const calendarInitializedRef = useRef(false);
   const loadAvailabilityRequestRef = useRef(0);
+  const isCalendarSyncing = syncingCalendar || loadingGoogleEvents;
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
@@ -290,9 +292,14 @@ const AvailabilityPage = () => {
       ? opts
       : computeRangeForView(view, opts.date || calendarDate);
     const pageSize = getCalendarPageSize(view);
+    const googleConnected = Boolean(opts.googleConnected ?? calendarStatus.connected);
 
     try {
       setLoading(true);
+      if (googleConnected) {
+        setLoadingGoogleEvents(true);
+      }
+
       const { items } = await availabilityAPI.getAvailabilityByDateRange(
         start,
         end,
@@ -306,6 +313,22 @@ const AvailabilityPage = () => {
       }
 
       setEvents(mapSlotsToEvents(items || []));
+
+      if (googleConnected) {
+        try {
+          const googleExternalEvents = await googleCalendarAPI.getExternalEvents(start, end);
+          if (requestId !== loadAvailabilityRequestRef.current) {
+            return;
+          }
+
+          setEvents((prev) => {
+            const mitraEvents = prev.filter((event) => event.status !== 'google_external');
+            return [...mitraEvents, ...mapGoogleEventsToCalendar(googleExternalEvents)];
+          });
+        } catch (error) {
+          console.error('Failed to load Google Calendar events', error);
+        }
+      }
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -315,23 +338,10 @@ const AvailabilityPage = () => {
     } finally {
       if (requestId === loadAvailabilityRequestRef.current) {
         setLoading(false);
+        setLoadingGoogleEvents(false);
       }
     }
-
-    try {
-      const googleExternalEvents = await googleCalendarAPI.getExternalEvents(start, end);
-      if (requestId !== loadAvailabilityRequestRef.current) {
-        return;
-      }
-
-      setEvents((prev) => {
-        const mitraEvents = prev.filter((event) => event.status !== 'google_external');
-        return [...mitraEvents, ...mapGoogleEventsToCalendar(googleExternalEvents)];
-      });
-    } catch (error) {
-      console.error('Failed to load Google Calendar events', error);
-    }
-  }, [calendarDate, currentView]);
+  }, [calendarDate, calendarStatus.connected, currentView]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -440,10 +450,18 @@ const AvailabilityPage = () => {
         },
       });
 
-      loadCalendarStatus();
+      const status = await loadCalendarStatus();
+      if (status.connected) {
+        setLoadingGoogleEvents(true);
+      }
 
       const { start, end } = computeRangeForView(currentView, calendarDate);
-      await loadAvailability({ start, end, view: currentView });
+      await loadAvailability({
+        start,
+        end,
+        view: currentView,
+        googleConnected: status.connected,
+      });
     };
 
     initializeCalendarPage();
@@ -706,7 +724,7 @@ const handleSelectSlot = ({ start, end }) => {
             <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
                 <AnimatePresence mode="wait">
-                  {loading && !syncingCalendar ? (
+                  {loading && !isCalendarSyncing ? (
                     <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="h-[700px] flex items-center justify-center">
                       <div className="text-center">
@@ -721,7 +739,7 @@ const handleSelectSlot = ({ start, end }) => {
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="availability-calendar-container relative" style={{ width: '100%', height : '75vh' }}>
                       <div
-                        className={`h-full transition-[filter] duration-200 ${syncingCalendar ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
+                        className={`h-full transition-[filter] duration-200 ${isCalendarSyncing ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
                       >
                         <Calendar
                           localizer={localizer}
@@ -734,7 +752,7 @@ const handleSelectSlot = ({ start, end }) => {
                           onSelectEvent={handleEventClick}
                           onNavigate={setCalendarDate}
                           onView={setCurrentView}
-                          selectable={!syncingCalendar}
+                          selectable={!isCalendarSyncing}
                           eventPropGetter={eventStyleGetter}
                           slotPropGetter={slotPropGetter}
                           dayPropGetter={dayPropGetter}
@@ -757,7 +775,7 @@ const handleSelectSlot = ({ start, end }) => {
                                 onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
                                 calendarConnected={calendarStatus.connected}
                                 onSyncCalendar={() => syncGoogleCalendarAvailability({ showToast: true })}
-                                syncingCalendar={syncingCalendar}
+                                syncingCalendar={isCalendarSyncing}
                               />
                             ),
                             event: BookedCalendarEvent,
@@ -783,15 +801,19 @@ const handleSelectSlot = ({ start, end }) => {
                           }}
                         />
                       </div>
-                      {syncingCalendar && (
+                      {isCalendarSyncing && (
                         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
                           <div className="rounded-lg border bg-background/95 px-6 py-5 shadow-lg text-center">
                             <div className="relative w-12 h-12 mx-auto mb-3">
                               <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
                               <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
                             </div>
-                            <p className="text-sm font-medium text-foreground">Syncing with Google Calendar…</p>
-                            <p className="text-xs text-muted-foreground mt-1">Updating availability results</p>
+                            <p className="text-sm font-medium text-foreground">
+                              {syncingCalendar ? 'Syncing with Google Calendar…' : 'Loading Google Calendar events…'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {syncingCalendar ? 'Updating availability results' : 'Fetching connected calendars'}
+                            </p>
                           </div>
                         </div>
                       )}

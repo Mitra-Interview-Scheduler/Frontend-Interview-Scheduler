@@ -163,6 +163,16 @@ export const googleCalendarAPI = {
     });
     return response.data;
   },
+  listCalendars: async () => {
+    const response = await api.get('/integrations/google-calendar/calendars');
+    return response.data;
+  },
+  saveCalendarSelection: async (calendarIds) => {
+    const response = await api.put('/integrations/google-calendar/calendars/selection', {
+      calendarIds,
+    });
+    return response.data;
+  },
 };
 
 export default api;

@@ -99,3 +99,49 @@ export const formatSlots = (data, colorMap) =>
       },
     };
   });
+
+/**
+ * Find overlapping free windows across multiple interviewers' AVAILABLE slots.
+ * @param {Array<Array<{ start: Date, end: Date, event: object }>>} interviewerIntervals
+ * @param {number} [minDurationMs=30 * 60 * 1000]
+ * @returns {Array<{ start: Date, end: Date, panelSlots: Array }>}
+ */
+export const findCommonFreeWindows = (interviewerIntervals, minDurationMs = 30 * 60 * 1000) => {
+  if (!Array.isArray(interviewerIntervals) || interviewerIntervals.length === 0) {
+    return [];
+  }
+
+  let current = interviewerIntervals[0]
+    .filter((item) => item?.start && item?.end && item.end > item.start)
+    .map((item) => ({
+      start: item.start,
+      end: item.end,
+      panelSlots: [{ slot: item.event, bookStart: item.start, bookEnd: item.end }],
+    }));
+
+  for (let i = 1; i < interviewerIntervals.length; i += 1) {
+    const nextList = interviewerIntervals[i] || [];
+    const next = [];
+    for (const window of current) {
+      for (const item of nextList) {
+        if (!item?.start || !item?.end) continue;
+        const start = new Date(Math.max(window.start.getTime(), item.start.getTime()));
+        const end = new Date(Math.min(window.end.getTime(), item.end.getTime()));
+        if (end.getTime() - start.getTime() >= minDurationMs) {
+          next.push({
+            start,
+            end,
+            panelSlots: [
+              ...window.panelSlots,
+              { slot: item.event, bookStart: item.start, bookEnd: item.end },
+            ],
+          });
+        }
+      }
+    }
+    current = next;
+    if (current.length === 0) break;
+  }
+
+  return current.sort((a, b) => a.start.getTime() - b.start.getTime());
+};

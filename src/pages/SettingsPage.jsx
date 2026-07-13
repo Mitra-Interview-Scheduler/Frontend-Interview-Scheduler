@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Clock, Check, Globe, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -45,6 +46,10 @@ const SettingsPage = () => {
   const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
   const [calendarLoading, setCalendarLoading] = useState(true);
   const [calendarActionLoading, setCalendarActionLoading] = useState(false);
+  const [googleCalendars, setGoogleCalendars] = useState([]);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState([]);
+  const [calendarsLoading, setCalendarsLoading] = useState(false);
+  const [calendarsSaving, setCalendarsSaving] = useState(false);
 
   const handleTimeFormatChange = (format) => {
     setTimeFormat(format);
@@ -143,10 +148,28 @@ const SettingsPage = () => {
       setCalendarLoading(true);
       const status = await googleCalendarAPI.getStatus();
       setCalendarStatus(status);
+      return status;
     } catch (error) {
       console.error('Failed to load Google Calendar status', error);
+      return null;
     } finally {
       setCalendarLoading(false);
+    }
+  }, []);
+
+  const loadGoogleCalendars = useCallback(async () => {
+    try {
+      setCalendarsLoading(true);
+      const calendars = await googleCalendarAPI.listCalendars();
+      const list = Array.isArray(calendars) ? calendars : [];
+      setGoogleCalendars(list);
+      setSelectedCalendarIds(list.filter((c) => c.selected).map((c) => c.id));
+    } catch (error) {
+      console.error('Failed to load Google calendars', error);
+      setGoogleCalendars([]);
+      setSelectedCalendarIds([]);
+    } finally {
+      setCalendarsLoading(false);
     }
   }, []);
 
@@ -155,15 +178,29 @@ const SettingsPage = () => {
   }, [loadCalendarStatus]);
 
   useEffect(() => {
+    if (calendarStatus.connected && hasInterviewerRole(getNormalizedRoles(user))) {
+      loadGoogleCalendars();
+    } else {
+      setGoogleCalendars([]);
+      setSelectedCalendarIds([]);
+    }
+  }, [calendarStatus.connected, loadGoogleCalendars, user]);
+
+  useEffect(() => {
     handleGoogleCalendarOAuthResult({
       navigate,
       toast,
-      onConnected: loadCalendarStatus,
+      onConnected: async () => {
+        const status = await loadCalendarStatus();
+        if (status?.connected) {
+          await loadGoogleCalendars();
+        }
+      },
       dashboardPath: hasInterviewerRole(getNormalizedRoles(user))
         ? '/interviewer/dashboard'
         : null,
     });
-  }, [loadCalendarStatus, toast, navigate, user]);
+  }, [loadCalendarStatus, loadGoogleCalendars, toast, navigate, user]);
 
   const handleConnectGoogleCalendar = async () => {
     try {
@@ -190,6 +227,8 @@ const SettingsPage = () => {
       await googleCalendarAPI.disconnect();
       const status = await googleCalendarAPI.getStatus();
       setCalendarStatus(status);
+      setGoogleCalendars([]);
+      setSelectedCalendarIds([]);
       toast({
         title: 'Google Calendar disconnected',
         description: status.required
@@ -204,6 +243,36 @@ const SettingsPage = () => {
       });
     } finally {
       setCalendarActionLoading(false);
+    }
+  };
+
+  const toggleCalendarSelection = (calendarId, checked) => {
+    setSelectedCalendarIds((prev) => {
+      if (checked) {
+        return prev.includes(calendarId) ? prev : [...prev, calendarId];
+      }
+      return prev.filter((id) => id !== calendarId);
+    });
+  };
+
+  const handleSaveCalendarSelection = async () => {
+    try {
+      setCalendarsSaving(true);
+      const result = await googleCalendarAPI.saveCalendarSelection(selectedCalendarIds);
+      setSelectedCalendarIds(result?.calendarIds || selectedCalendarIds);
+      toast({
+        title: 'Calendar selection saved',
+        description: 'Availability will load events from the calendars you selected.',
+      });
+      await loadGoogleCalendars();
+    } catch (error) {
+      toast({
+        title: 'Failed to save calendar selection',
+        description: error.response?.data?.message || error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCalendarsSaving(false);
     }
   };
   
@@ -371,14 +440,85 @@ const SettingsPage = () => {
 
               <p className="text-sm text-muted-foreground">
                 {hasInterviewerRole(getNormalizedRoles(user))
-                  ? 'Google Calendar is required for interviewer availability. You can disconnect to switch Google accounts or refresh permissions, then connect again.'
-                  : 'Connect your Google Calendar to sync availability and show events from all calendars you have enabled in Google (read-only on the availability view).'}
+                  ? 'Google Calendar is required for interviewer availability. Choose which calendars Mitra should show on your availability view.'
+                  : 'Connect your Google Calendar to sync availability and show events on the availability view.'}
               </p>
 
               {calendarStatus.connected && calendarStatus.googleAccountEmail && (
                 <div className="rounded-md border bg-muted/40 p-3">
                   <p className="text-sm font-medium">{calendarStatus.googleAccountEmail}</p>
                   <p className="text-xs text-muted-foreground">Linked Google account</p>
+                </div>
+              )}
+
+              {calendarStatus.connected && hasInterviewerRole(getNormalizedRoles(user)) && (
+                <div className="rounded-md border p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Calendars to show</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Events from selected calendars appear read-only on My Availability (up to 25).
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={loadGoogleCalendars}
+                      disabled={calendarsLoading || calendarsSaving}
+                    >
+                      {calendarsLoading ? 'Refreshing…' : 'Refresh'}
+                    </Button>
+                  </div>
+
+                  {calendarsLoading && googleCalendars.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Loading calendars…</p>
+                  ) : googleCalendars.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No calendars found for this account.</p>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                      {googleCalendars.map((cal) => {
+                        const checked = selectedCalendarIds.includes(cal.id);
+                        return (
+                          <label
+                            key={cal.id}
+                            className="flex items-start gap-2.5 rounded-md border border-transparent px-2 py-1.5 hover:bg-muted/50 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) => toggleCalendarSelection(cal.id, value === true)}
+                              disabled={calendarsSaving}
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-foreground truncate">
+                                {cal.name}
+                                {cal.primary ? ' (Primary)' : ''}
+                              </span>
+                              <span className="block text-[11px] text-muted-foreground truncate">
+                                {cal.accessRole || 'reader'}
+                                {cal.googleSelected ? ' · shown in Google' : ''}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <p className="text-xs text-muted-foreground">
+                      {selectedCalendarIds.length} selected
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveCalendarSelection}
+                      disabled={calendarsLoading || calendarsSaving || selectedCalendarIds.length === 0}
+                    >
+                      {calendarsSaving ? 'Saving…' : 'Save calendar selection'}
+                    </Button>
+                  </div>
                 </div>
               )}
 

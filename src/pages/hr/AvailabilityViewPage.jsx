@@ -21,14 +21,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
-import { format, startOfDay } from 'date-fns';
+import {
+  format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  endOfDay,
+} from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert, Star,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star, Globe,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
@@ -44,6 +46,7 @@ import { departmentUsersAPI } from '@/services/departmentUsersAPI';
 import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, isEventBeforeDateFilter } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
+import MatchingPanelDetailDialog from './components/MatchingPanelDetailDialog';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -122,6 +125,9 @@ const AvailabilityViewPage = () => {
   const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
   const [selectedMatchingInterviewer, setSelectedMatchingInterviewer] = useState(null);
   const [matchingDetailOpen, setMatchingDetailOpen] = useState(false);
+  const [matchingPanelMode, setMatchingPanelMode] = useState(false);
+  const [selectedMatchPanelIds, setSelectedMatchPanelIds] = useState([]);
+  const [matchingPanelDetailOpen, setMatchingPanelDetailOpen] = useState(false);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -168,6 +174,15 @@ const AvailabilityViewPage = () => {
     () => (selectedCandidate?.domains || []).map((d) => d.id).filter(Boolean),
     [selectedCandidate],
   );
+
+  const candidateDomainNames = useMemo(() => {
+    const names = new Set();
+    (selectedCandidate?.domains || []).forEach((d) => {
+      const name = d?.name || d;
+      if (name) names.add(String(name).trim().toLowerCase());
+    });
+    return names;
+  }, [selectedCandidate]);
 
   const candidateCoreTechNames = useMemo(() => {
     const names = new Set();
@@ -726,11 +741,32 @@ const AvailabilityViewPage = () => {
         limit: 5,
       });
 
-      setMatchingInterviewers({
-        both: data?.both || [],
-        technologies: data?.technologies || [],
-        domains: data?.domains || [],
-      });
+      // Re-bucket by match counts so dual matches always land in "both"
+      // (never duplicated under tech-only / domain-only).
+      const byId = new Map();
+      for (const match of [
+        ...(data?.both || []),
+        ...(data?.technologies || []),
+        ...(data?.domains || []),
+      ]) {
+        if (match?.interviewerId == null) continue;
+        byId.set(Number(match.interviewerId), match);
+      }
+
+      const both = [];
+      const technologies = [];
+      const domains = [];
+      for (const match of byId.values()) {
+        const techCount = Number(match.techMatchCount)
+          || ((match.matchedCore || []).length + (match.matchedNonCore || []).length);
+        const domainCount = Number(match.domainMatchCount)
+          || (match.matchedDomains || []).length;
+        if (techCount > 0 && domainCount > 0) both.push(match);
+        else if (techCount > 0) technologies.push(match);
+        else if (domainCount > 0) domains.push(match);
+      }
+
+      setMatchingInterviewers({ both, technologies, domains });
     } catch (err) {
       console.error('Failed to load matching interviewers:', err);
       setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
@@ -916,6 +952,65 @@ const AvailabilityViewPage = () => {
     setMatchingDetailOpen(false);
     setSelectedMatchingInterviewer(null);
     handleEventClick(event);
+  };
+
+  const allMatchingInterviewers = useMemo(() => {
+    const byId = new Map();
+    for (const match of [
+      ...(matchingInterviewers.both || []),
+      ...(matchingInterviewers.technologies || []),
+      ...(matchingInterviewers.domains || []),
+    ]) {
+      if (match?.interviewerId == null) continue;
+      byId.set(Number(match.interviewerId), match);
+    }
+    return Array.from(byId.values());
+  }, [matchingInterviewers]);
+
+  const selectedMatchPanelInterviewers = useMemo(
+    () => allMatchingInterviewers.filter((m) => selectedMatchPanelIds.includes(Number(m.interviewerId))),
+    [allMatchingInterviewers, selectedMatchPanelIds],
+  );
+
+  const toggleMatchPanelSelection = (match) => {
+    const id = Number(match.interviewerId);
+    setSelectedMatchPanelIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      if (next.length >= 2) {
+        setMatchingPanelDetailOpen(true);
+      } else {
+        setMatchingPanelDetailOpen(false);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setMatchingPanelMode(false);
+    setSelectedMatchPanelIds([]);
+    setMatchingPanelDetailOpen(false);
+  }, [requestForm.candidateId]);
+
+  const openPanelFromMatchingOverlap = (overlap) => {
+    if (!overlap?.panelSlots?.length) return;
+    setMatchingPanelDetailOpen(false);
+    setPanelMode(true);
+    setPanelSlots(overlap.panelSlots);
+    setPanelBookStartOverride(format(overlap.start, 'HH:mm'));
+    setPanelBookEndOverride(format(overlap.end, 'HH:mm'));
+    setRequestForm((prev) => ({
+      candidateId: prev.candidateId,
+      candidateName: prev.candidateName,
+      candidateDesignationId: prev.candidateDesignationId,
+      interviewType: prev.interviewType,
+      interviewCoordinatorId: prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
+      requiredTechnologyIds: [],
+      isUrgent: false,
+      notes: '',
+    }));
+    setCandidateSearchTerm('');
+    setPanelDialogOpen(true);
   };
 
 
@@ -1209,35 +1304,102 @@ const calendarSlotPropGetter = useCallback((date) => {
     setMatchingDetailOpen(true);
   };
 
-  const renderMatchingCard = (match) => {
+  const renderMatchingCard = (match, groupKey) => {
     const hasFreeTime = Boolean(match.hasFreeTimeInWeek);
+    const interviewerId = Number(match.interviewerId);
+    const isSelectedForPanel = selectedMatchPanelIds.includes(interviewerId);
+
     return (
-      <button
-        key={match.interviewerId}
-        type="button"
-        onClick={() => openMatchingDetail(match)}
+      <div
+        key={`${groupKey}-${match.interviewerId}`}
         className={`min-w-[180px] max-w-[220px] flex-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-          hasFreeTime
-            ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80'
-            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+          matchingPanelMode && isSelectedForPanel
+            ? 'border-sky-400 bg-sky-50 ring-1 ring-sky-300'
+            : hasFreeTime
+              ? 'border-emerald-300 bg-emerald-50'
+              : 'border-slate-200 bg-slate-50'
         }`}
       >
-        <p className={`text-sm font-semibold truncate ${hasFreeTime ? 'text-emerald-900' : 'text-slate-800'}`}>
-          {match.interviewerName}
-        </p>
-        <p className={`text-xs truncate mt-0.5 ${hasFreeTime ? 'text-emerald-700' : 'text-muted-foreground'}`}>
-          {[match.designation, match.department].filter(Boolean).join(' · ') || 'Interviewer'}
-        </p>
-        <p className={`text-[11px] mt-1.5 font-medium ${hasFreeTime ? 'text-emerald-700' : 'text-slate-500'}`}>
-          {hasFreeTime ? 'Free within a week' : 'No free time this week'}
-          {' · '}
-          {match.totalMatches} match{match.totalMatches === 1 ? '' : 'es'}
-        </p>
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (matchingPanelMode) {
+              toggleMatchPanelSelection(match);
+              return;
+            }
+            openMatchingDetail(match);
+          }}
+          className="w-full text-left"
+        >
+          <div className="flex items-start gap-2">
+            {matchingPanelMode && (
+              <span
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
+                  isSelectedForPanel
+                    ? 'border-sky-500 bg-sky-600 text-white'
+                    : 'border-slate-300 bg-white'
+                }`}
+              >
+                {isSelectedForPanel && <CheckCircle2 className="h-3 w-3" />}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm font-semibold truncate ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-900'
+                  : hasFreeTime ? 'text-emerald-900' : 'text-slate-800'
+              }`}
+              >
+                {match.interviewerName}
+              </p>
+              <p className={`text-xs truncate mt-0.5 ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-700'
+                  : hasFreeTime ? 'text-emerald-700' : 'text-muted-foreground'
+              }`}
+              >
+                {[match.designation, match.department].filter(Boolean).join(' · ') || 'Interviewer'}
+              </p>
+              {match.email && (
+                <p className={`text-[10px] truncate mt-0.5 ${
+                  matchingPanelMode && isSelectedForPanel
+                    ? 'text-sky-600/80'
+                    : hasFreeTime ? 'text-emerald-600/80' : 'text-slate-400'
+                }`}
+                >
+                  {match.email}
+                </p>
+              )}
+              <p className={`text-[11px] mt-1.5 font-medium ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-700'
+                  : hasFreeTime ? 'text-emerald-700' : 'text-slate-500'
+              }`}
+              >
+                {hasFreeTime ? 'Free within a week' : 'No free time this week'}
+                {' · '}
+                {match.totalMatches} match{match.totalMatches === 1 ? '' : 'es'}
+              </p>
+            </div>
+          </div>
+        </button>
+        {matchingPanelMode && (
+          <button
+            type="button"
+            className="mt-2 text-[11px] text-sky-700 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              openMatchingDetail(match);
+            }}
+          >
+            View details
+          </button>
+        )}
+      </div>
     );
   };
 
-  const renderMatchingGroup = (title, items) => {
+  const renderMatchingGroup = (title, items, groupKey) => {
     if (!items.length) return null;
     return (
       <div className="space-y-2">
@@ -1246,7 +1408,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           <span className="ml-1 font-normal normal-case tracking-normal">({items.length})</span>
         </p>
         <div className="flex flex-wrap gap-2">
-          {items.map((match) => renderMatchingCard(match))}
+          {items.map((match) => renderMatchingCard(match, groupKey))}
         </div>
       </div>
     );
@@ -1743,15 +1905,44 @@ const calendarSlotPropGetter = useCallback((date) => {
         {requestForm.candidateId && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" />
-                Top Matching Interviewers
-              </CardTitle>
-              <CardDescription>
-                Green = free within a week. Click a card for match details and free time.
-              </CardDescription>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    Top Matching Interviewers
+                    {matchingPanelMode && (
+                      <Badge className="bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {matchingPanelMode
+                      ? 'Select 2+ interviewers to find overlapping free times and schedule a panel.'
+                      : 'Green = free within a week. Click a card for match details and free time.'}
+                  </CardDescription>
+                </div>
+                {hasMatchingInterviewers && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={matchingPanelMode ? 'default' : 'outline'}
+                    className="gap-2 shrink-0"
+                    onClick={() => {
+                      setMatchingPanelMode((value) => {
+                        if (value) {
+                          setSelectedMatchPanelIds([]);
+                          setMatchingPanelDetailOpen(false);
+                        }
+                        return !value;
+                      });
+                    }}
+                  >
+                    <Users className="w-4 h-4" />
+                    {matchingPanelMode ? 'Exit Panel Mode' : 'Panel Mode'}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               {matchingInterviewersLoading ? (
                 <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
               ) : !hasMatchingInterviewers ? (
@@ -1761,20 +1952,72 @@ const calendarSlotPropGetter = useCallback((date) => {
                   {' '}with the current department / tier / level filters.
                 </p>
               ) : (
-                <div className="space-y-4">
-                  {renderMatchingGroup(
-                    'Matches both technologies & domains',
-                    matchingInterviewers.both,
+                <>
+                  <div className="space-y-4">
+                    {renderMatchingGroup(
+                      'Matches both technologies & domains',
+                      matchingInterviewers.both,
+                      'both',
+                    )}
+                    {renderMatchingGroup(
+                      'Matches technologies only',
+                      matchingInterviewers.technologies,
+                      'tech',
+                    )}
+                    {renderMatchingGroup(
+                      'Matches domains only',
+                      matchingInterviewers.domains,
+                      'domain',
+                    )}
+                  </div>
+
+                  {matchingPanelMode && (
+                    <div className="rounded-xl border border-sky-300 bg-sky-50/80 p-3 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-sky-900">
+                            Panel selection ({selectedMatchPanelIds.length})
+                          </p>
+                          <p className="text-xs text-sky-700/80 mt-0.5">
+                            {selectedMatchPanelIds.length < 2
+                              ? 'Select at least 2 interviewers, then pick an overlapping free time.'
+                              : 'Pick a time opens the panel schedule view with shared free windows.'}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={selectedMatchPanelIds.length < 2}
+                          className="gap-2 shrink-0"
+                          onClick={() => setMatchingPanelDetailOpen(true)}
+                        >
+                          <Clock className="w-4 h-4" />
+                          Pick a time
+                        </Button>
+                      </div>
+
+                      {selectedMatchPanelInterviewers.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedMatchPanelInterviewers.map((match) => (
+                            <Badge
+                              key={`panel-sel-${match.interviewerId}`}
+                              className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1"
+                            >
+                              {match.interviewerName}
+                              <button
+                                type="button"
+                                onClick={() => toggleMatchPanelSelection(match)}
+                                className="ml-0.5 hover:text-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {renderMatchingGroup(
-                    'Matches technologies only',
-                    matchingInterviewers.technologies,
-                  )}
-                  {renderMatchingGroup(
-                    'Matches domains only',
-                    matchingInterviewers.domains,
-                  )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -1789,6 +2032,15 @@ const calendarSlotPropGetter = useCallback((date) => {
           match={selectedMatchingInterviewer}
           formatDateTimeRange={formatDateTimeRange}
           onSelectFreeSlot={handleMatchingFreeSlotSelect}
+        />
+
+        <MatchingPanelDetailDialog
+          open={matchingPanelDetailOpen}
+          onOpenChange={setMatchingPanelDetailOpen}
+          interviewers={selectedMatchPanelInterviewers}
+          interviewerColorMap={interviewerColorMap}
+          onRemoveInterviewer={toggleMatchPanelSelection}
+          onSelectOverlap={openPanelFromMatchingOverlap}
         />
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
@@ -2106,6 +2358,30 @@ const calendarSlotPropGetter = useCallback((date) => {
                       ))}
                     </div>
                   </div>
+                  {(selectedSlot.resource.domains || []).length > 0 && (
+                    <div className="flex items-start gap-3">
+                      <Globe className="w-5 h-5 text-primary mt-1" />
+                      <div className="flex flex-wrap gap-2">
+                        {selectedSlot.resource.domains.map((domain) => {
+                          const isMatch = candidateDomainNames.has(String(domain).trim().toLowerCase());
+                          return (
+                            <Badge
+                              key={`domain-${domain}`}
+                              variant="outline"
+                              className={
+                                isMatch
+                                  ? 'bg-teal-50 text-teal-900 border-teal-300'
+                                  : 'bg-white text-slate-600 border-slate-200'
+                              }
+                              title={isMatch ? 'Matches candidate domain' : undefined}
+                            >
+                              {domain}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
