@@ -262,7 +262,9 @@ const SettingsPage = () => {
       setSelectedCalendarIds(result?.calendarIds || selectedCalendarIds);
       toast({
         title: 'Calendar selection saved',
-        description: 'Availability will load events from the calendars you selected.',
+        description: (result?.calendarIds?.length ?? selectedCalendarIds.length) === 0
+          ? 'No Google calendars will show on My Availability.'
+          : 'Availability will load events from the calendars you selected.',
       });
       await loadGoogleCalendars();
     } catch (error) {
@@ -458,6 +460,7 @@ const SettingsPage = () => {
                       <p className="text-sm font-medium">Calendars to show</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Events from selected calendars appear read-only on My Availability (up to 25).
+                        Leave all unchecked to hide Google events.
                       </p>
                     </div>
                     <Button
@@ -514,7 +517,7 @@ const SettingsPage = () => {
                       type="button"
                       size="sm"
                       onClick={handleSaveCalendarSelection}
-                      disabled={calendarsLoading || calendarsSaving || selectedCalendarIds.length === 0}
+                      disabled={calendarsLoading || calendarsSaving}
                     >
                       {calendarsSaving ? 'Saving…' : 'Save calendar selection'}
                     </Button>
