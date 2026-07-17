@@ -47,6 +47,7 @@ import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltip
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
 import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
 import MatchingPanelDetailDialog from './components/MatchingPanelDetailDialog';
+import ScheduleConflictDialog from './components/ScheduleConflictDialog';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -134,6 +135,15 @@ const AvailabilityViewPage = () => {
   const [panelSlots, setPanelSlots] = useState([]);
   const [panelDialogOpen, setPanelDialogOpen] = useState(false);
 
+  // Google Calendar conflict blocking dialog (shown on submit)
+  const [conflictDialog, setConflictDialog] = useState({ open: false, conflicts: [] });
+  // Live conflict preview for the chosen interview window
+  const [slotWindowConflicts, setSlotWindowConflicts] = useState({
+    loading: false,
+    conflicts: [],
+    error: null,
+  });
+
   // Single interview dialog
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -153,6 +163,7 @@ const AvailabilityViewPage = () => {
   const techDropdownRef = useRef(null);
   const appliedCandidateFiltersRef = useRef(null);
   const loadedCandidateDetailsRef = useRef(new Set());
+  const conflictPreviewRequestIdRef = useRef(0);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
@@ -1035,6 +1046,126 @@ const AvailabilityViewPage = () => {
       candidateDesignationId: '',
     });
 
+  // ── Google Calendar conflict check (blocks booking) ─────────────────────
+  const formatConflictSummary = (conflicts) => {
+    if (!Array.isArray(conflicts) || conflicts.length === 0) return '';
+    return conflicts.map((ic) => {
+      const first = ic.conflicts?.[0];
+      if (!first) return ic.interviewerName;
+      const title = first.title || 'Untitled event';
+      const calendar = first.calendarName ? ` (${first.calendarName})` : '';
+      return `${ic.interviewerName}: "${title}"${calendar}`;
+    }).join('; ');
+  };
+
+  const flattenConflictEvents = (conflicts) => {
+    if (!Array.isArray(conflicts)) return [];
+    return conflicts.flatMap((ic) =>
+      (ic.conflicts || []).map((event) => ({
+        interviewerName: ic.interviewerName,
+        title: event.title || 'Untitled event',
+        calendarName: event.calendarName,
+        startDateTime: event.startDateTime,
+        endDateTime: event.endDateTime,
+        googleEventId: event.googleEventId,
+      })),
+    );
+  };
+
+  const previewConflictEvents = flattenConflictEvents(slotWindowConflicts.conflicts);
+  const hasSlotWindowConflict = previewConflictEvents.length > 0;
+
+  const fetchSlotWindowConflicts = useCallback(async (interviewerIds, bookStart, bookEnd) => {
+    const ids = (interviewerIds || []).filter((id) => id != null);
+    const requestId = ++conflictPreviewRequestIdRef.current;
+
+    if (ids.length === 0 || !bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return;
+    }
+
+    setSlotWindowConflicts((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const conflicts = await hrAvailabilityAPI.checkConflicts({
+        interviewerIds: ids,
+        startDateTime: formatLocalDateTime(bookStart),
+        endDateTime: formatLocalDateTime(bookEnd),
+      });
+      if (requestId !== conflictPreviewRequestIdRef.current) return;
+      setSlotWindowConflicts({
+        loading: false,
+        conflicts: Array.isArray(conflicts) ? conflicts : [],
+        error: null,
+      });
+    } catch (e) {
+      if (requestId !== conflictPreviewRequestIdRef.current) return;
+      setSlotWindowConflicts({
+        loading: false,
+        conflicts: [],
+        error: e.response?.data?.message || e.message || 'Could not verify Google Calendar',
+      });
+    }
+  }, []);
+
+  const checkSchedulingConflicts = async (interviewerIds, bookStart, bookEnd) => {
+    const ids = (interviewerIds || []).filter((id) => id != null);
+    if (ids.length === 0) return false;
+    try {
+      const conflicts = await hrAvailabilityAPI.checkConflicts({
+        interviewerIds: ids,
+        startDateTime: formatLocalDateTime(bookStart),
+        endDateTime: formatLocalDateTime(bookEnd),
+      });
+      if (Array.isArray(conflicts) && conflicts.length > 0) {
+        setConflictDialog({ open: true, conflicts });
+        setSlotWindowConflicts({ loading: false, conflicts, error: null });
+        toast({
+          title: 'Cannot schedule interview',
+          description: formatConflictSummary(conflicts),
+          variant: 'destructive',
+        });
+        return true;
+      }
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+    } catch (e) {
+      toast({
+        title: 'Could not verify Google Calendar',
+        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
+        variant: 'destructive',
+      });
+      return true;
+    }
+    return false;
+  };
+
+  // Live conflict preview while choosing the interview window (single)
+  useEffect(() => {
+    if (!requestDialogOpen || !selectedSlot || !bookStartTime || !bookEndTime) {
+      if (!requestDialogOpen && !panelDialogOpen) {
+        setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      }
+      return undefined;
+    }
+    const bookStart = parseTimeOnDate(bookStartTime, selectedSlot.start);
+    const bookEnd = parseTimeOnDate(bookEndTime, selectedSlot.start);
+    if (!bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return undefined;
+    }
+    const interviewerId = selectedSlot?.interviewerId ?? selectedSlot?.resource?.interviewerId;
+    const timerId = window.setTimeout(() => {
+      fetchSlotWindowConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd);
+    }, 250);
+    return () => window.clearTimeout(timerId);
+  }, [
+    requestDialogOpen,
+    panelDialogOpen,
+    selectedSlot,
+    bookStartTime,
+    bookEndTime,
+    fetchSlotWindowConflicts,
+  ]);
+
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
     if (!requestForm.candidateId) {
@@ -1049,33 +1180,43 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
-    setScheduling(true);
-    try {
-      await hrAvailabilityAPI.createInterviewRequest({
-        candidateId: requestForm.candidateId,
-        candidateName: requestForm.candidateName,
-        candidateEmail: requestForm.candidateEmail?.trim() || null,
-        candidateDesignationId: requestForm.candidateDesignationId || null,
-        requiredTechnologyIds: requestForm.requiredTechnologyIds,
-        availabilitySlotId: selectedSlot.id,
-        preferredStartDateTime: formatLocalDateTime(bookStart),
-        preferredEndDateTime: formatLocalDateTime(bookEnd),
-        isUrgent: requestForm.isUrgent,
-        notes: requestForm.notes,
-        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
-        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
-        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
-      });
-      toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
-      setRequestDialogOpen(false);
-      setSelectedSlot(null);
-      finalizeScheduledInterview(cameFromCandidateFlow);
-      await refreshCalendar();
-    } catch (err) {
-      toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
-    } finally {
-      setScheduling(false);
+    const performSubmit = async () => {
+      setScheduling(true);
+      try {
+        await hrAvailabilityAPI.createInterviewRequest({
+          candidateId: requestForm.candidateId,
+          candidateName: requestForm.candidateName,
+          candidateEmail: requestForm.candidateEmail?.trim() || null,
+          candidateDesignationId: requestForm.candidateDesignationId || null,
+          requiredTechnologyIds: requestForm.requiredTechnologyIds,
+          availabilitySlotId: selectedSlot.id,
+          preferredStartDateTime: formatLocalDateTime(bookStart),
+          preferredEndDateTime: formatLocalDateTime(bookEnd),
+          isUrgent: requestForm.isUrgent,
+          notes: requestForm.notes,
+          interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+          interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+          interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+        });
+        toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
+        setConflictDialog({ open: false, conflicts: [] });
+        setRequestDialogOpen(false);
+        setSelectedSlot(null);
+        finalizeScheduledInterview(cameFromCandidateFlow);
+        await refreshCalendar();
+      } catch (err) {
+        toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      } finally {
+        setScheduling(false);
+      }
+    };
+
+    // Block if the interviewer's Google Calendar has an overlapping event.
+    const interviewerId = selectedSlot?.interviewerId ?? selectedSlot?.resource?.interviewerId;
+    if (await checkSchedulingConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd)) {
+      return;
     }
+    await performSubmit();
   };
 
   // ── Submit panel interview ────────────────────────────────────────────────
@@ -1102,40 +1243,52 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
-    setScheduling(true);
-    try {
-      const panel = await hrAvailabilityAPI.createPanelInterview({
-        candidateId: requestForm.candidateId,
-        candidateName: requestForm.candidateName,
-        candidateEmail: requestForm.candidateEmail?.trim() || null,
-        candidateDesignationId: requestForm.candidateDesignationId || null,
-        startDateTime: formatLocalDateTime(bookStart),
-        endDateTime: formatLocalDateTime(bookEnd),
-        availabilitySlotIds: panelSlots.map((ps) => ps.slot.id),
-        requiredTechnologyIds: requestForm.requiredTechnologyIds,
-        isUrgent: requestForm.isUrgent,
-        notes: requestForm.notes,
-        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
-        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
-        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
-      });
-      toast({
-        title: '✓ Panel interview scheduled',
-        description: panel?.meetingLink
-          ? `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Google Meet link created.`
-          : `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Connect Google Calendar on at least one interviewer to generate a Meet link.`,
-      });
-      setPanelDialogOpen(false);
-      setPanelSlots([]);
-      setPanelBookStartOverride('');
-      setPanelBookEndOverride('');
-      finalizeScheduledInterview(cameFromCandidateFlow);
-      await refreshCalendar();
-    } catch (err) {
-      toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
-    } finally {
-      setScheduling(false);
+    const performSubmit = async () => {
+      setScheduling(true);
+      try {
+        const panel = await hrAvailabilityAPI.createPanelInterview({
+          candidateId: requestForm.candidateId,
+          candidateName: requestForm.candidateName,
+          candidateEmail: requestForm.candidateEmail?.trim() || null,
+          candidateDesignationId: requestForm.candidateDesignationId || null,
+          startDateTime: formatLocalDateTime(bookStart),
+          endDateTime: formatLocalDateTime(bookEnd),
+          availabilitySlotIds: panelSlots.map((ps) => ps.slot.id),
+          requiredTechnologyIds: requestForm.requiredTechnologyIds,
+          isUrgent: requestForm.isUrgent,
+          notes: requestForm.notes,
+          interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+          interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+          interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+        });
+        toast({
+          title: '✓ Panel interview scheduled',
+          description: panel?.meetingLink
+            ? `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Google Meet link created.`
+            : `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Connect Google Calendar on at least one interviewer to generate a Meet link.`,
+        });
+        setConflictDialog({ open: false, conflicts: [] });
+        setPanelDialogOpen(false);
+        setPanelSlots([]);
+        setPanelBookStartOverride('');
+        setPanelBookEndOverride('');
+        finalizeScheduledInterview(cameFromCandidateFlow);
+        await refreshCalendar();
+      } catch (err) {
+        toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      } finally {
+        setScheduling(false);
+      }
+    };
+
+    // Block if any panel interviewer's Google Calendar has an overlapping event.
+    const panelInterviewerIds = panelSlots
+      .map((ps) => ps.slot?.interviewerId ?? ps.slot?.resource?.interviewerId)
+      .filter((id) => id != null);
+    if (await checkSchedulingConflicts(panelInterviewerIds, bookStart, bookEnd)) {
+      return;
     }
+    await performSubmit();
   };
 
   // ── Panel time overlap ────────────────────────────────────────────────────
@@ -1158,6 +1311,26 @@ const AvailabilityViewPage = () => {
     setPanelBookStartOverride('');
     setPanelBookEndOverride('');
   }, [panelSlots.length]);
+
+  // Live conflict preview while choosing the panel interview window
+  useEffect(() => {
+    if (!panelDialogOpen || panelSlots.length === 0 || !panelBookStart || !panelBookEnd) {
+      return undefined;
+    }
+    const bookStart = parseTimeOnDate(panelBookStart, panelSlots[0].slot.start);
+    const bookEnd = parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start);
+    if (!bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return undefined;
+    }
+    const panelInterviewerIds = panelSlots
+      .map((ps) => ps.slot?.interviewerId ?? ps.slot?.resource?.interviewerId)
+      .filter((id) => id != null);
+    const timerId = window.setTimeout(() => {
+      fetchSlotWindowConflicts(panelInterviewerIds, bookStart, bookEnd);
+    }, 250);
+    return () => window.clearTimeout(timerId);
+  }, [panelDialogOpen, panelSlots, panelBookStart, panelBookEnd, fetchSlotWindowConflicts]);
 
   // ── Tech filter helpers ───────────────────────────────────────────────────
   const handleDepartmentChange = (value) => {
@@ -1476,7 +1649,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   ? 'Select department first'
                   : coordinatorUsersLoading
                     ? 'Loading users...'
-                    : undefined
+                    : 'Select Coordinator'
               }
               searchPlaceholder="Search coordinators..."
               emptyMessage={
@@ -1484,6 +1657,14 @@ const calendarSlotPropGetter = useCallback((date) => {
                   ? 'No user found for selected department'
                   : 'No matching users found'
               }
+              emptyOption={{
+                value: 'NONE',
+                label: !requestForm.interviewCoordinatorDepartmentId
+                  ? 'Select department first'
+                  : coordinatorUsersLoading
+                    ? 'Loading users...'
+                    : 'Select Coordinator',
+              }}
               options={coordinatorUsers.map((user) => ({
                 value: user.id.toString(),
                 label: `${user.fullName} (${user.email})`,
@@ -2043,6 +2224,14 @@ const calendarSlotPropGetter = useCallback((date) => {
           onSelectOverlap={openPanelFromMatchingOverlap}
         />
 
+        <ScheduleConflictDialog
+          open={conflictDialog.open}
+          onOpenChange={(open) => {
+            if (!open) setConflictDialog({ open: false, conflicts: [] });
+          }}
+          conflicts={conflictDialog.conflicts}
+        />
+
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -2420,13 +2609,57 @@ const calendarSlotPropGetter = useCallback((date) => {
                     </div>
                   </div>
                   {bookStartTime && bookEndTime && (
-                    <div className="mt-3 p-2 rounded bg-amber-100 dark:bg-amber-900/30 text-xs text-amber-800 space-y-1">
-                      <p><strong>Interview:</strong> {formatTimeRange(parseTimeOnDate(bookStartTime, selectedSlot.start), parseTimeOnDate(bookEndTime, selectedSlot.start))}</p>
-                      {bookStartTime > format(selectedSlot.start, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available</p>
+                    <div className={`mt-3 p-2 rounded text-xs space-y-1 ${
+                      hasSlotWindowConflict || slotWindowConflicts.error
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800'
+                    }`}>
+                      <p>
+                        <strong>Interview:</strong>{' '}
+                        {formatTimeRange(
+                          parseTimeOnDate(bookStartTime, selectedSlot.start),
+                          parseTimeOnDate(bookEndTime, selectedSlot.start),
+                        )}
+                      </p>
+                      {bookStartTime > format(selectedSlot.start, 'HH:mm') && !hasSlotWindowConflict && (
+                        <p className="text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                          {formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available
+                        </p>
                       )}
-                      {bookEndTime < format(selectedSlot.end, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available</p>
+                      {bookEndTime < format(selectedSlot.end, 'HH:mm') && !hasSlotWindowConflict && (
+                        <p className="text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                          {formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available
+                        </p>
+                      )}
+                      {slotWindowConflicts.loading && (
+                        <p className="text-amber-700 dark:text-amber-300">Checking Google Calendar…</p>
+                      )}
+                      {slotWindowConflicts.error && (
+                        <p className="flex items-start gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                          <span>{slotWindowConflicts.error}</span>
+                        </p>
+                      )}
+                      {hasSlotWindowConflict && (
+                        <div className="space-y-1 pt-1 border-t border-red-200/80">
+                          <p className="font-semibold flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            Calendar conflict — choose a different time
+                          </p>
+                          {previewConflictEvents.map((event) => (
+                            <p
+                              key={event.googleEventId || `${event.title}-${event.startDateTime}`}
+                              className="pl-4"
+                            >
+                              <strong>{event.title}</strong>
+                              {': '}
+                              {formatTimeRange(event.startDateTime, event.endDateTime)}
+                              {event.calendarName ? ` · ${event.calendarName}` : ''}
+                            </p>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
@@ -2449,9 +2682,15 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError || scheduling}
+              disabled={!!singlePrivilegeError || scheduling || hasSlotWindowConflict || slotWindowConflicts.loading}
               className="gap-2"
-              title={singlePrivilegeError ? 'Interviewer privilege too low for this candidate' : undefined}
+              title={
+                hasSlotWindowConflict
+                  ? 'Selected time conflicts with Google Calendar'
+                  : singlePrivilegeError
+                    ? 'Interviewer privilege too low for this candidate'
+                    : undefined
+              }
             >
               {scheduling ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
@@ -2570,10 +2809,47 @@ const calendarSlotPropGetter = useCallback((date) => {
                       </div>
                     </div>
                     {panelBookStart && panelBookEnd && (
-                      <p className="mt-2 text-xs text-amber-800">
-                        <strong>Interview:</strong>{' '}
-                        {formatTimeRange(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start))}
-                      </p>
+                      <div className={`mt-2 p-2 rounded text-xs space-y-1 ${
+                        hasSlotWindowConflict || slotWindowConflicts.error
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                          : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800'
+                      }`}>
+                        <p>
+                          <strong>Interview:</strong>{' '}
+                          {formatTimeRange(
+                            parseTimeOnDate(panelBookStart, panelSlots[0].slot.start),
+                            parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start),
+                          )}
+                        </p>
+                        {slotWindowConflicts.loading && (
+                          <p className="text-amber-700 dark:text-amber-300">Checking Google Calendar…</p>
+                        )}
+                        {slotWindowConflicts.error && (
+                          <p className="flex items-start gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>{slotWindowConflicts.error}</span>
+                          </p>
+                        )}
+                        {hasSlotWindowConflict && (
+                          <div className="space-y-1 pt-1 border-t border-red-200/80">
+                            <p className="font-semibold flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              Calendar conflict — choose a different time
+                            </p>
+                            {previewConflictEvents.map((event) => (
+                              <p
+                                key={event.googleEventId || `${event.interviewerName}-${event.title}-${event.startDateTime}`}
+                                className="pl-4"
+                              >
+                                <strong>{event.interviewerName}:</strong> {event.title}
+                                {': '}
+                                {formatTimeRange(event.startDateTime, event.endDateTime)}
+                                {event.calendarName ? ` · ${event.calendarName}` : ''}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
@@ -2595,8 +2871,20 @@ const calendarSlotPropGetter = useCallback((date) => {
             <Button
               onClick={handleSendPanelRequest}
               className="gap-2 bg-sky-600 hover:bg-sky-700"
-              disabled={panelTimeOptions.length === 0 || panelPrivilegeErrors.length > 0 || scheduling}
-              title={panelPrivilegeErrors.length > 0 ? 'One or more interviewers have insufficient privilege' : undefined}
+              disabled={
+                panelTimeOptions.length === 0
+                || panelPrivilegeErrors.length > 0
+                || scheduling
+                || hasSlotWindowConflict
+                || slotWindowConflicts.loading
+              }
+              title={
+                hasSlotWindowConflict
+                  ? 'Selected time conflicts with Google Calendar'
+                  : panelPrivilegeErrors.length > 0
+                    ? 'One or more interviewers have insufficient privilege'
+                    : undefined
+              }
             >
               {scheduling ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>

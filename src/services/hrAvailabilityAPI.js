@@ -27,6 +27,21 @@ export const hrAvailabilityAPI = {
   },
 
   /**
+   * Check the selected interviewer(s)' Google Calendars for events that overlap
+   * the proposed interview window. Returns an array of
+   * { interviewerId, interviewerName, conflicts: [{ title, startDateTime, endDateTime, calendarName, allDay }] }.
+   * An empty array means no conflicts. Advisory only — HR may still schedule.
+   */
+  checkConflicts: async ({ interviewerIds, startDateTime, endDateTime }) => {
+    const response = await api.post('/hr/interviews/conflict-check', {
+      interviewerIds,
+      startDateTime,
+      endDateTime,
+    });
+    return response.data;
+  },
+
+  /**
    * Cancel a single-interviewer interview request.
    * Backend: DELETE /api/hr/interviews/{requestId}
    * This restores the slot to AVAILABLE and notifies the interviewer.
