@@ -318,7 +318,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                       ? 'Select department first'
                       : coordinatorUsersLoading
                         ? 'Loading users...'
-                        : undefined
+                        : 'Select Coordinator'
                   }
                   searchPlaceholder="Search coordinators..."
                   emptyMessage={
@@ -326,6 +326,14 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                       ? 'No user found for selected department'
                       : 'No matching users found'
                   }
+                  emptyOption={{
+                    value: 'NONE',
+                    label: !coordinatorDepartmentId
+                      ? 'Select department first'
+                      : coordinatorUsersLoading
+                        ? 'Loading users...'
+                        : 'Select Coordinator',
+                  }}
                   options={coordinatorUsers.map((user) => ({
                     value: user.id.toString(),
                     label: `${user.fullName} (${user.email})`,
