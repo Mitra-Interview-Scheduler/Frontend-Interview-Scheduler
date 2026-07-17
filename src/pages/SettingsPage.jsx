@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Clock, Check, Globe, Calendar } from 'lucide-react';
+import { Clock, Check, Globe, Calendar, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -43,6 +43,7 @@ const SettingsPage = () => {
   
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
   const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
   const [calendarLoading, setCalendarLoading] = useState(true);
   const [calendarActionLoading, setCalendarActionLoading] = useState(false);
@@ -66,6 +67,11 @@ const SettingsPage = () => {
     setHasChanges(true);
   };
 
+  const handleEmailNotificationsChange = (checked) => {
+    setEmailNotificationsEnabled(checked === true);
+    setHasChanges(true);
+  };
+
   const saveSettings = useCallback(async () => {
     try {
       setIsSaving(true);
@@ -76,7 +82,8 @@ const SettingsPage = () => {
       await userSettingsAPI.updateSettings(
         selectedTimeZone,
         dateFormat,
-        preferredTimeFormat
+        preferredTimeFormat,
+        emailNotificationsEnabled
       );
 
       setHasChanges(false);
@@ -95,7 +102,7 @@ const SettingsPage = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedTimeZone, dateFormat, timeFormat, toast]);
+  }, [selectedTimeZone, dateFormat, timeFormat, emailNotificationsEnabled, toast]);
 
   const timezoneOffset = new Intl.DateTimeFormat('en-US', {
     timeZoneName: 'shortOffset',
@@ -113,7 +120,11 @@ const SettingsPage = () => {
       console.log('Fetched user settings:', userSettingData);
 
       if (userSettingData) {
-        const { timezone, preferredDateFormat, preferredTimeFormat } = userSettingData;
+        const { timezone, preferredDateFormat, preferredTimeFormat, emailNotificationsEnabled: emailEnabled } = userSettingData;
+
+        if (typeof emailEnabled === 'boolean') {
+          setEmailNotificationsEnabled(emailEnabled);
+        }
 
         if (timezone) {
           setSelectedTimeZone(timezone);
@@ -168,10 +179,21 @@ const SettingsPage = () => {
       console.error('Failed to load Google calendars', error);
       setGoogleCalendars([]);
       setSelectedCalendarIds([]);
+      const apiMsg = error.response?.data?.message || error.message || '';
+      const reconnectHint = 'Disconnect and reconnect Google Calendar in Settings, then click Refresh.';
+      toast({
+        title: 'Google Calendar connection issue',
+        description: apiMsg
+          ? (apiMsg.toLowerCase().includes('disconnect') || apiMsg.toLowerCase().includes('reconnect'))
+            ? apiMsg
+            : `${apiMsg} ${reconnectHint}`
+          : reconnectHint,
+        variant: 'destructive',
+      });
     } finally {
       setCalendarsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadCalendarStatus();
@@ -424,6 +446,39 @@ const SettingsPage = () => {
                   Use Auto-detected Time Zone
                 </Button>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Email Notifications Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-sm">Email Notifications</h2>
+                <Badge variant="outline" className="ml-auto">
+                  {emailNotificationsEnabled ? 'On' : 'Off'}
+                </Badge>
+              </div>
+
+              <label className="flex items-start gap-2.5 rounded-md border border-transparent px-2 py-1.5 hover:bg-muted/50 cursor-pointer">
+                <Checkbox
+                  checked={emailNotificationsEnabled}
+                  onCheckedChange={handleEmailNotificationsChange}
+                  className="mt-0.5"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-foreground">
+                    Send me email notifications
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Get an email for interview scheduling, cancellations, reminders, coordinator
+                    assignments, status changes, and feedback submissions, in addition to your
+                    in-app notifications.
+                  </span>
+                </span>
+              </label>
             </div>
           </CardContent>
         </Card>

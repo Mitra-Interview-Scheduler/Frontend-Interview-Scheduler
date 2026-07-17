@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar } from 'react-big-calendar';
 import {
   format,
-  addMinutes, isSameDay, startOfDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay,
+  addMinutes, startOfDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay,
 } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
@@ -95,19 +95,29 @@ const isPastDay = (date) => {
   const today = startOfDay(new Date());
   return startOfDay(date) < today;
 };
+
+const SLOT_LOOKBACK_MINUTES = 15;
+
+/** Earliest allowed slot start: up to 15 minutes before now (e.g. at 2:10, 2:00 is allowed). */
+const minimumAllowedStart = () => addMinutes(new Date(), -SLOT_LOOKBACK_MINUTES);
+
 const getSlotStartError = (start) => {
   if (!start) return null;
   if (isPastDay(start)) return 'Cannot add slots for past dates.';
-  if (isSameDay(start, new Date()) && isBefore(start, minimumAllowedStart())) {
-    const earliest = format(minimumAllowedStart(), 'HH:mm');
-    return `Same-day slots must start at least 30 Minutes from now (earliest: ${earliest}).`;
+  const earliest = minimumAllowedStart();
+  if (isBefore(start, earliest)) {
+    const earliestLabel = format(earliest, 'HH:mm');
+    return `Start time cannot be more than ${SLOT_LOOKBACK_MINUTES} minutes before now (earliest: ${earliestLabel}).`;
   }
   return null;
 };
 
-/** Minimum allowed start time for same-day slots: 30 minutes from now. */
-const minimumAllowedStart = () => {
-  return addMinutes(new Date(), 30);
+const getSlotEndError = (end) => {
+  if (!end) return null;
+  if (!isBefore(new Date(), end)) {
+    return 'End time must be after the current time.';
+  }
+  return null;
 };
 
 const CalendarToolbar = ({
@@ -327,6 +337,20 @@ const AvailabilityPage = () => {
           });
         } catch (error) {
           console.error('Failed to load Google Calendar events', error);
+          const status = error?.response?.status;
+          const apiMsg = error?.response?.data?.message || error.message;
+          const reconnectHint = 'Disconnect and reconnect Google Calendar in Settings to continue showing Google events.';
+
+          const shouldReconnect =
+            status === 400 || status === 401 || status === 403 || status === 502;
+
+          if (shouldReconnect) {
+            toast({
+              title: 'Google Calendar auth issue',
+              description: apiMsg ? `${apiMsg} ${reconnectHint}` : reconnectHint,
+              variant: 'destructive',
+            });
+          }
         }
       }
     } catch (error) {
@@ -480,36 +504,37 @@ const AvailabilityPage = () => {
 
   
 const handleSelectSlot = ({ start, end }) => {
-  const now = new Date();
   if (isPastDay(start)) {
-    toast({ title: 'Past date', variant: 'destructive' });
+    toast({ title: 'Past date', description: 'Cannot add availability for past dates.', variant: 'destructive' });
     return;
   }
 
-  let startDate = new Date(start);
-  let endDate = new Date(end);
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const earliest = minimumAllowedStart();
 
-  // // Month view/Midnight fix
-  // if (startDate.getHours() === 0 && startDate.getMinutes() === 0 && view === 'month') {
-  //   startDate.setHours(0, 0, 0, 0);
-  //   endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-  // }
+  if (isBefore(startDate, earliest)) {
+    toast({
+      title: 'Start time too early',
+      description: `You can start up to ${SLOT_LOOKBACK_MINUTES} minutes before now.`,
+      variant: 'destructive',
+    });
+    return;
+  }
 
-  // Same-day buffer
-  if (isSameDay(startDate, now)) {
-    const earliest = minimumAllowedStart();
-    if (isBefore(startDate, earliest)) {
-      startDate = new Date(earliest);
-      startDate.setMinutes(0, 0, 0);
-      if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
-      endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-    }
+  if (!isBefore(new Date(), endDate)) {
+    toast({
+      title: 'End time in the past',
+      description: 'End time must be after the current time.',
+      variant: 'destructive',
+    });
+    return;
   }
 
   setSelectedDate(startDate);
   setStartTime(format(startDate, 'HH:mm'));
   setEndTime(format(endDate, 'HH:mm'));
-  setAddDialogOpen(true); 
+  setAddDialogOpen(true);
 };
 
 /** Clicking an existing event. */
@@ -662,17 +687,17 @@ const handleSelectSlot = ({ start, end }) => {
   /**
    * Grey-out / block interactions for:
    *   - Any time slot on a past day
-   *   - Same-day time slots that are within the 2-hour buffer window
+   *   - Same-day slots within the minimum lead-time buffer
    */
   const slotPropGetter = (date) => {
-    const now = new Date();
+    const earliest = minimumAllowedStart();
     if (isPastDay(date)) {
       return {
         className: 'past-time-slot',
         style: { backgroundColor: 'rgba(0,0,0,0.03)', cursor: 'not-allowed', pointerEvents: 'none' },
       };
     }
-    if (isSameDay(date, now) && isBefore(date, minimumAllowedStart())) {
+    if (isBefore(date, earliest)) {
       return {
         className: 'past-time-slot',
         style: {
@@ -855,6 +880,7 @@ const handleSelectSlot = ({ start, end }) => {
         defaultEndTime={endTime}
         onSuccess={handleAddSuccess}
         getSlotStartError={getSlotStartError}
+        getSlotEndError={getSlotEndError}
       />
 
       <EditSlotDialog
@@ -873,6 +899,7 @@ const handleSelectSlot = ({ start, end }) => {
           setDeleteDialogOpen(true);
         }}
         getSlotStartError={getSlotStartError}
+        getSlotEndError={getSlotEndError}
       />
 
       <DeleteSlotDialog

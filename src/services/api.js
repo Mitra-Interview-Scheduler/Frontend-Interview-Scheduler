@@ -120,11 +120,12 @@ export const usersAPI = {
 };
 
 export const userSettingsAPI = {
-  updateSettings: async (timezone, preferredDateFormat, preferredTimeFormat) => {
+  updateSettings: async (timezone, preferredDateFormat, preferredTimeFormat, emailNotificationsEnabled) => {
     const response = await api.put('/profile/settings', {
       timezone,
       preferredDateFormat,
       preferredTimeFormat,
+      emailNotificationsEnabled,
     });
     return response.data;
   },

@@ -95,6 +95,7 @@ const AddSlotDialog = ({
   defaultEndTime,
   onSuccess,
   getSlotStartError,
+  getSlotEndError,
 }) => {
   const { formatDateWithWeekday } = useFormattedDateTime();
   const [startTime, setStartTime] = useState('');
@@ -128,8 +129,8 @@ const AddSlotDialog = ({
     }
 
     const start = buildDateTime(selectedDate, startTime);
-    setError(getSlotStartError(start));
-  }, [selectedDate, startTime, getSlotStartError]);
+    setError(getSlotStartError(start) || getSlotEndError?.(buildDateTime(selectedDate, endTime)));
+  }, [selectedDate, startTime, endTime, getSlotStartError, getSlotEndError]);
 
   const recurrenceValidationError = useMemo(() => {
     if (!isRecurring) return null;
@@ -172,9 +173,46 @@ const AddSlotDialog = ({
     const end = new Date(selectedDate);
     end.setHours(eh, em, 0, 0);
 
+    const startErr = getSlotStartError(start);
+    if (startErr) {
+      toast({ title: 'Invalid start time', description: startErr, variant: 'destructive' });
+      return;
+    }
+
+    const endErr = getSlotEndError?.(end);
+    if (endErr) {
+      toast({ title: 'Invalid end time', description: endErr, variant: 'destructive' });
+      return;
+    }
+
     if (end <= start) {
       toast({ title: 'End time must be after start time', variant: 'destructive' });
       return;
+    }
+
+    if (isRecurring) {
+      const occurrences = getWeeklyOccurrences({
+        selectedDate,
+        startTime,
+        endTime,
+        selectedDays: recurrenceDays,
+        recurrenceMode,
+        recurrenceCount,
+        recurrenceUntilDate,
+      });
+
+      for (const occurrence of occurrences) {
+        const occurrenceErr = getSlotStartError(occurrence.start)
+          || getSlotEndError?.(occurrence.end);
+        if (occurrenceErr) {
+          toast({
+            title: 'Invalid recurring slot',
+            description: occurrenceErr,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
     }
 
     setIsSubmitting(true);
