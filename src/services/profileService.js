@@ -26,11 +26,18 @@ export const profileAPI = {
   },
 
   // Add interviewer technology
-  addInterviewerTechnology: async (technologyId, yearsOfExperience) => {
+  addInterviewerTechnology: async (technologyId, yearsOfExperience = 0, isCore = false) => {
     const response = await api.post('/profile/interviewer-technologies', {
       technologyId,
-      yearsOfExperience
+      yearsOfExperience,
+      isCore,
     });
+    return response.data;
+  },
+
+  // Update interviewer technology (e.g. core flag)
+  updateInterviewerTechnology: async (id, { isCore }) => {
+    const response = await api.put(`/profile/interviewer-technologies/${id}`, { isCore });
     return response.data;
   },
 
@@ -40,14 +47,19 @@ export const profileAPI = {
   },
 
   // Create new technology (if it doesn't exist)
-  createTechnology: async (name, category = 'General') => {
-    const response = await api.post('/technologies', { name, category });
+  createTechnology: async (name, categoryId) => {
+    const response = await api.post('/technologies', { name, categoryId });
     return response.data;
   },
 
   // Get all departments
   getDepartments: async () => {
     const response = await api.get('/departments');
+    return response.data;
+  },
+
+  createDepartment: async (name, code) => {
+    const response = await api.post('/departments', { name, code: code || null });
     return response.data;
   },
 

@@ -1,0 +1,7 @@
+[
+  { "value": "us", "label": "United States" },
+  { "value": "au", "label": "Australia" },
+  { "value": "uk", "label": "United Kingdom" },
+  { "value": "in", "label": "India" },
+  { "value": "lk", "label": "Sri Lanka" }
+]

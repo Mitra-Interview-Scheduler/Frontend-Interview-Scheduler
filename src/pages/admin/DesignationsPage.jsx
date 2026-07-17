@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,14 +9,38 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers } from 'lucide-react';
+import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers, Briefcase } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
+import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 
 const DesignationsPage = () => {
+  const { user } = useAuth();
+  const userRoles = Array.isArray(user?.roles) && user.roles.length > 0
+    ? user.roles
+    : (user?.role ? [user.role] : []);
+  const isAdmin = userRoles.includes('ADMIN');
+  const canCreateMasterData = userRoles.some((role) => ['ADMIN', 'HR', 'INTERVIEWER'].includes(role));
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab = tabParam === 'designations'
+    ? 'designations'
+    : tabParam === 'departments'
+      ? 'departments'
+      : 'tiers';
+
+  const setActiveTab = (tab) => {
+    if (tab === 'tiers') {
+      setSearchParams({});
+      return;
+    }
+    setSearchParams({ tab });
+  };
+
   const [designations, setDesignations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [tiers, setTiers] = useState([]);
@@ -24,6 +49,7 @@ const DesignationsPage = () => {
   const [isEditDesignationOpen, setIsEditDesignationOpen] = useState(false);
   const [isAddTierOpen, setIsAddTierOpen] = useState(false);
   const [isEditTierOpen, setIsEditTierOpen] = useState(false);
+  const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
   const [editingDesignation, setEditingDesignation] = useState(null);
   const [editingTier, setEditingTier] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +68,11 @@ const DesignationsPage = () => {
     tierOrder: '',
     departmentId: '',
     description: ''
+  });
+
+  const [departmentForm, setDepartmentForm] = useState({
+    name: '',
+    code: ''
   });
 
   useEffect(() => {
@@ -127,6 +158,43 @@ const DesignationsPage = () => {
       4: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200',
     };
     return colors[order] || 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200';
+  };
+
+  // Department Management
+  const handleOpenAddDepartment = () => {
+    setDepartmentForm({ name: '', code: '' });
+    setTimeout(() => setIsAddDepartmentOpen(true), 0);
+  };
+
+  const handleAddDepartment = async () => {
+    if (!departmentForm.name?.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Department name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      await departmentAPI.createDepartment({
+        name: departmentForm.name.trim(),
+        code: departmentForm.code?.trim() || null,
+      });
+      await refreshData();
+      setIsAddDepartmentOpen(false);
+      toast({ title: 'Success', description: 'Department created successfully' });
+    } catch (err) {
+      console.error('Error creating department:', err);
+      toast({
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to create department',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   // Tier Management
@@ -388,6 +456,29 @@ const DesignationsPage = () => {
     ? tiers.filter(t => t.departmentId === parseInt(designationForm.departmentId))
     : [];
 
+  const departmentFilterCard = (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-4">
+          <Label className="whitespace-nowrap">Filter by Department:</Label>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => (
+                <SelectItem key={d.id} value={d.id.toString()}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   if (loading) {
     return (
       <Layout>
@@ -405,45 +496,73 @@ const DesignationsPage = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Designations & Tiers</h1>
-            <p className="text-muted-foreground mt-1">Manage organizational hierarchy with tiers and designations</p>
+            <p className="text-muted-foreground mt-1">
+              {canCreateMasterData && !isAdmin
+                ? 'Add departments, tiers, and designations for your profile and interviews'
+                : 'Manage organizational hierarchy with departments, tiers, and designations'}
+            </p>
           </div>
         </div>
 
-        {/* Filter */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Label className="whitespace-nowrap">Filter by Department:</Label>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map(d => (
-                    <SelectItem key={d.id} value={d.id.toString()}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        <AdminSectionTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { value: 'departments', label: 'Departments', icon: Building2 },
+            { value: 'tiers', label: 'Tiers', icon: Layers },
+            { value: 'designations', label: 'Designations', icon: Briefcase },
+          ]}
+        />
 
-        <Tabs defaultValue="tiers" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="tiers">Tiers</TabsTrigger>
-            <TabsTrigger value="designations">Designations</TabsTrigger>
-          </TabsList>
+        {activeTab === 'departments' ? (
+          <div className="space-y-4">
+            {canCreateMasterData && (
+              <div className="flex justify-end">
+                <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Department
+                </Button>
+              </div>
+            )}
 
-          {/* Tiers Tab */}
-          <TabsContent value="tiers" className="space-y-4">
+            {departments.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No departments found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {departments.map((department) => (
+                  <Card key={department.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold">{department.name}</h3>
+                          {department.code && (
+                            <p className="text-xs text-muted-foreground mt-1">Code: {department.code}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline">{department.code || '—'}</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'tiers' ? (
+          <div className="space-y-4">
+            {departmentFilterCard}
+
             <div className="flex justify-end">
-              <Button onClick={handleOpenAddTier} disabled={isMutating}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Tier
-              </Button>
+              {canCreateMasterData && (
+                <Button onClick={handleOpenAddTier} disabled={isMutating}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Tier
+                </Button>
+              )}
             </div>
 
             {filteredTiers.length === 0 ? (
@@ -476,22 +595,26 @@ const DesignationsPage = () => {
                             </div>
                           </div>
                           <div className="flex gap-1">
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              onClick={() => handleOpenEditTier(tier)}
-                              disabled={isMutating}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              onClick={() => handleDeleteTier(tier.id)}
-                              disabled={isMutating}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  onClick={() => handleOpenEditTier(tier)}
+                                  disabled={isMutating}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  onClick={() => handleDeleteTier(tier.id)}
+                                  disabled={isMutating}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -499,15 +622,18 @@ const DesignationsPage = () => {
                   ))}
               </div>
             )}
-          </TabsContent>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {departmentFilterCard}
 
-          {/* Designations Tab */}
-          <TabsContent value="designations" className="space-y-4">
             <div className="flex justify-end">
-              <Button onClick={handleOpenAddDesignation} disabled={isMutating}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Designation
-              </Button>
+              {canCreateMasterData && (
+                <Button onClick={handleOpenAddDesignation} disabled={isMutating}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Designation
+                </Button>
+              )}
             </div>
 
             {filteredTiers.length === 0 ? (
@@ -557,41 +683,45 @@ const DesignationsPage = () => {
                                     </div>
                                   </div>
                                   <div className="flex gap-1 shrink-0">
-                                    <Button 
-                                      variant="outline" 
-                                      size="icon" 
-                                      onClick={() => handleOpenEditDesignation(des)}
-                                      disabled={isMutating}
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button 
-                                      variant="outline" 
-                                      size="icon" 
-                                      onClick={() => handleDeleteDesignation(des.id)}
-                                      disabled={isMutating}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                    {idx > 0 && (
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={() => handleMoveDesignation(tier.id, idx, 'up')}
-                                        disabled={isMutating}
-                                      >
-                                        <ArrowUp className="h-4 w-4" />
-                                      </Button>
-                                    )}
-                                    {idx < arr.length - 1 && (
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={() => handleMoveDesignation(tier.id, idx, 'down')}
-                                        disabled={isMutating}
-                                      >
-                                        <ArrowDown className="h-4 w-4" />
-                                      </Button>
+                                    {isAdmin && (
+                                      <>
+                                        <Button 
+                                          variant="outline" 
+                                          size="icon" 
+                                          onClick={() => handleOpenEditDesignation(des)}
+                                          disabled={isMutating}
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="icon" 
+                                          onClick={() => handleDeleteDesignation(des.id)}
+                                          disabled={isMutating}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                        {idx > 0 && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => handleMoveDesignation(tier.id, idx, 'up')}
+                                            disabled={isMutating}
+                                          >
+                                            <ArrowUp className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                        {idx < arr.length - 1 && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => handleMoveDesignation(tier.id, idx, 'down')}
+                                            disabled={isMutating}
+                                          >
+                                            <ArrowDown className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 </CardContent>
@@ -604,8 +734,52 @@ const DesignationsPage = () => {
                   );
                 })
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
+
+        {/* Add Department Dialog */}
+        <Dialog open={isAddDepartmentOpen} onOpenChange={setIsAddDepartmentOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Department</DialogTitle>
+              <DialogDescription>Create a department for tiers and designations</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="department-name">Department Name *</Label>
+                <Input
+                  id="department-name"
+                  value={departmentForm.name}
+                  onChange={(e) => setDepartmentForm({ ...departmentForm, name: e.target.value })}
+                  placeholder="e.g., Engineering"
+                  disabled={isMutating}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department-code">Code (optional)</Label>
+                <Input
+                  id="department-code"
+                  value={departmentForm.code}
+                  onChange={(e) => setDepartmentForm({ ...departmentForm, code: e.target.value })}
+                  placeholder="e.g., ENG"
+                  disabled={isMutating}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to auto-generate a unique code from the department name.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddDepartmentOpen(false)} disabled={isMutating}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddDepartment} disabled={isMutating}>
+                {isMutating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Create Department
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Add Tier Dialog */}
         <Dialog open={isAddTierOpen} onOpenChange={setIsAddTierOpen}>

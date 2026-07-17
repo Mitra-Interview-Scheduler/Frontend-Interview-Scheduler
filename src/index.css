@@ -116,6 +116,44 @@ All colors MUST be HSL.
   }
 }
 
+@layer components {
+  .ui-dropdown-option {
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .ui-dropdown-option:hover,
+  .ui-dropdown-option:focus,
+  .ui-dropdown-option[data-highlighted],
+  .ui-dropdown-option[data-selected="true"],
+  .ui-dropdown-option[data-state="open"] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+
+  .dark .ui-dropdown-option:hover,
+  .dark .ui-dropdown-option:focus,
+  .dark .ui-dropdown-option[data-highlighted],
+  .dark .ui-dropdown-option[data-selected="true"],
+  .dark .ui-dropdown-option[data-state="open"] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+
+  /* Radix portaled menus — ensure hover works even outside component class chain */
+  [data-radix-select-viewport] [role="option"]:hover,
+  [data-radix-select-viewport] [role="option"][data-highlighted],
+  [role="menuitem"]:hover,
+  [role="menuitem"][data-highlighted],
+  [role="menuitemcheckbox"]:hover,
+  [role="menuitemcheckbox"][data-highlighted],
+  [role="menuitemradio"]:hover,
+  [role="menuitemradio"][data-highlighted] {
+    background-color: hsl(var(--primary-light));
+    color: hsl(var(--foreground));
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -128,6 +166,74 @@ All colors MUST be HSL.
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
   }
+
+  @layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+  /* Modern Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background) / 0.5);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+    border-radius: 10px;
+    border: 2px solid hsl(var(--background));
+    transition: all 0.3s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, hsl(var(--primary-hover)), hsl(var(--secondary-hover)));
+    box-shadow: 0 0 6px hsl(var(--primary) / 0.4);
+  }
+
+  /* Firefox Scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary)) hsl(var(--background) / 0.5);
+  }
+
+  .dark {
+    scrollbar-color: hsl(var(--primary)) hsl(var(--background) / 0.3);
+  }
+}
+
+/* Dialog Body Scrollbar Styling - Modern Design */
+[role="dialog"] div[class*="overflow-y-auto"] {
+  scrollbar-color: hsl(210, 85%, 50%) transparent;
+  padding-right: 6px;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar {
+  width: px;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, hsl(210, 85%, 45%), hsl(185, 75%, 50%));
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 0 2px hsl(210, 20%, 95%);
+}
+
+[role="dialog"] div[class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, hsl(210, 85%, 40%), hsl(185, 75%, 45%));
+  box-shadow: 0 0 12px hsl(210, 85%, 45% / 0.5), 0 0 0 2px hsl(210, 20%, 95%);
 }
 
 @layer utilities {
@@ -141,6 +247,110 @@ All colors MUST be HSL.
   
   .shadow-elegant {
     box-shadow: 0 10px 30px -10px hsl(var(--primary) / 0.15);
+  }
+
+  /* Hide Scrollbar Utilities (scrolling still works) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .candidate-tabs-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) hsl(var(--muted) / 0.35);
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-track {
+    margin: 0 0.25rem;
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.45);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .candidate-tabs-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.65);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .horizontal-scroll-friendly {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) hsl(var(--muted) / 0.35);
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-track {
+    margin: 0 0.25rem;
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.45);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .horizontal-scroll-friendly::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.65);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  [data-radix-select-viewport].select-dropdown-scroll {
+    overflow-y: auto !important;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin !important;
+    -ms-overflow-style: auto !important;
+    padding-right: 2px;
+  }
+
+  [data-radix-select-viewport].select-dropdown-scroll::-webkit-scrollbar {
+    display: block !important;
+    width: 10px;
+  }
+
+  [data-radix-select-viewport].select-dropdown-scroll::-webkit-scrollbar-track {
+    margin: 4px 0;
+    background: hsl(var(--muted) / 0.45);
+    border-radius: 9999px;
+  }
+
+  [data-radix-select-viewport].select-dropdown-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.75);
+    border-radius: 9999px;
+    border: 2px solid hsl(var(--card));
+  }
+
+  [data-radix-select-viewport].select-dropdown-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
   }
 
   .animate-fade-in {
@@ -254,6 +464,14 @@ All colors MUST be HSL.
 }
 
 .rbc-selected {
+  background: linear-gradient(135deg, hsl(var(--primary-hover)), hsl(var(--primary))) !important;
+}
+
+.availability-calendar-container .rbc-event.booked-event.rbc-selected {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%) !important;
+}
+
+.availability-calendar-container .rbc-event.available-event.rbc-selected {
   background: linear-gradient(135deg, hsl(var(--primary-hover)), hsl(var(--primary))) !important;
 }
 

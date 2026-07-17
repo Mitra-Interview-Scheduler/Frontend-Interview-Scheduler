@@ -10,7 +10,7 @@ import Layout from '@/components/layout/Layout';
 import { toast } from '@/hooks/use-toast';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { interviewRequestAPI } from '@/services/interviewRequestAPI';
-import { format } from 'date-fns';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 const StatCard = ({ icon: Icon, title, value, description, color, loading }) => (
   <motion.div
@@ -47,6 +47,7 @@ const StatCard = ({ icon: Icon, title, value, description, color, loading }) => 
 
 const InterviewerDashboard = () => {
   const navigate = useNavigate();
+  const { formatDate, formatTime } = useFormattedDateTime();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     availableSlots: 0,
@@ -65,7 +66,7 @@ const InterviewerDashboard = () => {
     try {
       const results = await Promise.allSettled([
         availabilityAPI.getAvailabilityStats(),
-        interviewRequestAPI.getUpcomingInterviews(),
+        interviewRequestAPI.getUpcomingInterviews({ size: 10 }),
       ]);
 
       const [statsRes, upcomingRes] = results;
@@ -95,7 +96,7 @@ const InterviewerDashboard = () => {
         upcomingInterviews: upcomingData.length,
         completedThisMonth: 0,
       });
-      setUpcomingInterviews(upcomingData.slice(0, 5));
+      setUpcomingInterviews(upcomingData.slice(0, 10));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast({
@@ -255,8 +256,8 @@ const InterviewerDashboard = () => {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Clock className="w-4 h-4" />
-                        {format(new Date(interview.preferredStartDateTime), 'MMM dd')} at{' '}
-                        {format(new Date(interview.preferredStartDateTime), 'h:mm a')}
+                        {formatDate(interview.preferredStartDateTime)} at{' '}
+                        {formatTime(new Date(interview.preferredStartDateTime))}
                       </div>
                       {interview.requiredTechnologies && interview.requiredTechnologies.length > 0 && (
                         <div className="flex flex-wrap gap-2">
@@ -274,7 +275,7 @@ const InterviewerDashboard = () => {
                       )}
                     </motion.div>
                   ))}
-                  {stats.upcomingInterviews > 5 && (
+                  {stats.upcomingInterviews > 10 && (
                     <Button
                       variant="ghost"
                       className="w-full"
@@ -291,7 +292,7 @@ const InterviewerDashboard = () => {
           {/* Quick Actions & Info */}
           <div className="space-y-6">
             {/* Quick Actions */}
-            <Card className="shadow-elegant">
+            {/* <Card className="shadow-elegant">
               <CardHeader className="border-b bg-muted/30">
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
@@ -323,7 +324,7 @@ const InterviewerDashboard = () => {
                   </Button>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Info Card */}
             <Card className="shadow-elegant border-primary/20">

@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { 
   DropdownMenu, 
@@ -9,22 +9,24 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Menu, Bell, LogOut, User, Calendar } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Menu, LogOut, User, Calendar } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 const Navbar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
-  const [notifications] = useState(3); // Mock notification count
+  const navigate = useNavigate();
 
   const getInitials = () => {
     if (!user) return 'U';
     return `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const getRoleBadgeColor = () => {
-    switch (user?.role) {
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
       case 'ADMIN': return 'bg-primary text-primary-foreground';
       case 'HR': return 'bg-secondary text-secondary-foreground';
       case 'INTERVIEWER': return 'bg-success text-success-foreground';
@@ -32,15 +34,17 @@ const Navbar = ({ onMenuClick }) => {
     }
   };
 
+  const profileImage = normalizeImageUrl(user?.profilePicture || user?.profilePictureUrl || null);
+
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 shadow-sm">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 shadow-sm">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center gap-4">
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={onMenuClick}
-            className="lg:hidden"
+            title="Toggle Sidebar"
           >
             <Menu className="w-5 h-5" />
           </Button>
@@ -57,16 +61,7 @@ const Navbar = ({ onMenuClick }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="w-5 h-5" />
-            {notifications > 0 && (
-              <Badge 
-                className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center bg-destructive text-white text-xs"
-              >
-                {notifications}
-              </Badge>
-            )}
-          </Button>
+          {/* <NotificationBell /> */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -76,11 +71,27 @@ const Navbar = ({ onMenuClick }) => {
                     <p className="text-sm font-medium text-foreground">
                       {user?.firstName} {user?.lastName}
                     </p>
-                    <Badge className={`text-xs ${getRoleBadgeColor()}`}>
-                      {user?.role}
-                    </Badge>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {user?.roles && user.roles.length > 0 ? (
+                        user.roles.map((role) => (
+                          <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
+                            {role}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge className={`text-xs ${getRoleBadgeColor(user?.role)}`}>
+                          {user?.role}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <Avatar className="w-10 h-10">
+                    <AvatarImage
+                      src={profileImage || undefined}
+                      alt="Profile"
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
+                    />
                     <AvatarFallback className="gradient-primary text-white font-semibold">
                       {getInitials()}
                     </AvatarFallback>
@@ -93,10 +104,19 @@ const Navbar = ({ onMenuClick }) => {
                 <div>
                   <p className="font-medium">{user?.firstName} {user?.lastName}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  {user?.roles && user.roles.length > 0 && (
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      {user.roles.map((role) => (
+                        <Badge key={role} className={`text-xs ${getRoleBadgeColor(role)}`}>
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>

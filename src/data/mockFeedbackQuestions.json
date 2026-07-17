@@ -1,0 +1,321 @@
+{
+  "name": "Standard Interview Feedback",
+  "description": "Comprehensive feedback form for interview evaluations",
+  "scopes": {
+    "departmentIds": [],
+    "designationIds": []
+  },
+  "questions": [
+    {
+      "order": 1,
+      "label": "Technical Skills",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's technical knowledge and problem-solving abilities",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 2,
+      "label": "Communication Skills",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's ability to articulate ideas clearly",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 3,
+      "label": "Problem-Solving Approach",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess how the candidate approaches and solves complex problems",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 4,
+      "label": "Cultural Fit",
+      "category": "Cultural",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's alignment with company values and team dynamics",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 5,
+      "label": "Leadership Potential",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's potential to lead and influence others",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 6,
+      "label": "Teamwork & Collaboration",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's ability to work effectively in a team",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 7,
+      "label": "Learning Agility",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's ability to learn and adapt quickly",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 8,
+      "label": "Attention to Detail",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's precision and attention to detail",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 9,
+      "label": "Initiative & Proactiveness",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's ability to take initiative and be proactive",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 10,
+      "label": "Stress Management",
+      "category": "Soft Skills",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate how the candidate handles pressure and stress",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 11,
+      "label": "Relevant Experience",
+      "category": "Experience",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the relevance of the candidate's prior experience",
+      "options": [
+        { "value": 1, "label": "1 - Not relevant" },
+        { "value": 2, "label": "2 - Somewhat relevant" },
+        { "value": 3, "label": "3 - Relevant" },
+        { "value": 4, "label": "4 - Highly relevant" },
+        { "value": 5, "label": "5 - Ideal fit" }
+      ]
+    },
+    {
+      "order": 12,
+      "label": "Domain Knowledge",
+      "category": "Technical",
+      "type": "rating",
+      "required": true,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Evaluate the candidate's knowledge in the specific domain",
+      "options": [
+        { "value": 1, "label": "1 - None" },
+        { "value": 2, "label": "2 - Basic" },
+        { "value": 3, "label": "3 - Intermediate" },
+        { "value": 4, "label": "4 - Advanced" },
+        { "value": 5, "label": "5 - Expert" }
+      ]
+    },
+    {
+      "order": 13,
+      "label": "Code Quality & Best Practices",
+      "category": "Technical",
+      "type": "rating",
+      "required": false,
+      "commentsEnabled": true,
+      "placeholder": "Rate 1-5",
+      "helpText": "Assess the candidate's understanding of code quality and best practices",
+      "options": [
+        { "value": 1, "label": "1 - Poor" },
+        { "value": 2, "label": "2 - Fair" },
+        { "value": 3, "label": "3 - Good" },
+        { "value": 4, "label": "4 - Very Good" },
+        { "value": 5, "label": "5 - Excellent" }
+      ]
+    },
+    {
+      "order": 14,
+      "label": "Salary Expectations",
+      "category": "Compensation",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "Enter salary expectations or range",
+      "helpText": "Candidate's expected salary",
+      "commentsEnabled": false,
+      "options": []
+    },
+    {
+      "order": 15,
+      "label": "Availability to Join",
+      "category": "Personal",
+      "type": "select",
+      "required": false,
+      "placeholder": "Select availability",
+      "helpText": "When can the candidate join?",
+      "commentsEnabled": false,
+      "options": [
+        { "value": "IMMEDIATE", "label": "Immediate (within 1 week)" },
+        { "value": "TWO_WEEKS", "label": "Within 2 weeks" },
+        { "value": "ONE_MONTH", "label": "Within 1 month" },
+        { "value": "NEGOTIABLE", "label": "Negotiable" }
+      ]
+    },
+    {
+      "order": 16,
+      "label": "Strengths",
+      "category": "Feedback",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "Describe the candidate's main strengths...",
+      "helpText": "What are the candidate's key strengths?",
+      "commentsEnabled": false,
+      "options": []
+    },
+    {
+      "order": 17,
+      "label": "Areas for Improvement",
+      "category": "Feedback",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "Describe areas where the candidate can improve...",
+      "helpText": "What are areas the candidate can develop?",
+      "commentsEnabled": false,
+      "options": []
+    },
+    {
+      "order": 18,
+      "label": "Interview Difficulty",
+      "category": "Feedback",
+      "type": "select",
+      "required": true,
+      "placeholder": "Select difficulty level",
+      "helpText": "How would you rate the interview difficulty?",
+      "commentsEnabled": false,
+      "options": [
+        { "value": "EASY", "label": "Easy - candidate excelled" },
+        { "value": "MODERATE", "label": "Moderate - candidate performed well" },
+        { "value": "CHALLENGING", "label": "Challenging - candidate struggled" }
+      ]
+    },
+    {
+      "order": 19,
+      "label": "Recommendation",
+      "category": "Outcome",
+      "type": "select",
+      "required": true,
+      "placeholder": "Select recommendation",
+      "helpText": "Overall recommendation for this candidate",
+      "commentsEnabled": true,
+      "options": [
+        { "value": "RECOMMENDED", "label": "Recommended for next round" },
+        { "value": "HOLD", "label": "Hold - needs consideration" },
+        { "value": "REJECTED", "label": "Not recommended" }
+      ]
+    },
+    {
+      "order": 20,
+      "label": "Additional Comments",
+      "category": "Feedback",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "Share any additional observations or notes about the candidate...",
+      "helpText": "Provide detailed feedback for the hiring team",
+      "commentsEnabled": false,
+      "options": []
+    }
+  ]
+}

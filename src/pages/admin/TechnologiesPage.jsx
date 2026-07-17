@@ -7,12 +7,23 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Code2, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Code2, Loader2, Tags } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
+import { getTechnologyCategoryLabel, toLookupCode } from '@/lib/technologyHelpers';
+import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
+import CategoryManager from '@/components/admin/CategoryManager';
 
 const TechnologiesPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'categories' ? 'categories' : 'technologies';
+
+  const setActiveTab = (tab) => {
+    setSearchParams(tab === 'categories' ? { tab: 'categories' } : {});
+  };
+
   const [technologies, setTechnologies] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filterCategory, setFilterCategory] = useState('ALL');
@@ -24,8 +35,8 @@ const TechnologiesPage = () => {
   
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
-    newCategory: ''
+    categoryId: '',
+    newCategoryLabel: '',
   });
 
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -88,7 +99,7 @@ const TechnologiesPage = () => {
     }
   };
 
-  const getCategoryColor = (category) => {
+  const getCategoryColor = (categoryLabel) => {
     const colors = {
       'Programming Language': 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200',
       'Framework': 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200',
@@ -99,20 +110,43 @@ const TechnologiesPage = () => {
       'Architecture': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200',
       'Cache': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200',
       'Concept': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200',
+      'General': 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200',
     };
-    return colors[category] || 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200';
+    return colors[categoryLabel] || 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-200';
   };
 
   const groupByCategory = (techs) => {
     return techs.reduce((acc, tech) => {
-      if (!acc[tech.category]) acc[tech.category] = [];
-      acc[tech.category].push(tech);
+      const label = getTechnologyCategoryLabel(tech);
+      if (!acc[label]) acc[label] = [];
+      acc[label].push(tech);
       return acc;
     }, {});
   };
 
+  const resolveCategoryId = async () => {
+    if (isCustomCategory) {
+      if (!formData.newCategoryLabel?.trim()) {
+        throw new Error('Category label is required');
+      }
+      const created = await technologyAPI.createCategory({
+        code: toLookupCode(formData.newCategoryLabel),
+        label: formData.newCategoryLabel.trim(),
+      });
+      return created.id;
+    }
+    if (!formData.categoryId) {
+      throw new Error('Category is required');
+    }
+    return Number(formData.categoryId);
+  };
+
   const resetForm = () => {
-    setFormData({ name: '', category: '', newCategory: '' });
+    setFormData({
+      name: '',
+      categoryId: '',
+      newCategoryLabel: '',
+    });
     setIsCustomCategory(false);
   };
 
@@ -127,25 +161,24 @@ const TechnologiesPage = () => {
   };
 
   const handleAddTechnology = async () => {
-    const finalCategory = isCustomCategory ? formData.newCategory : formData.category;
-
-    if (!formData.name?.trim() || !finalCategory?.trim()) {
+    if (!formData.name?.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please fill in technology name and category",
+        description: "Please fill in technology name",
         variant: "destructive"
       });
       return;
     }
 
-    const payload = {
-      name: formData.name.trim(),
-      category: finalCategory.trim()
-    };
-
     setIsMutating(true);
 
     try {
+      const categoryId = await resolveCategoryId();
+      const payload = {
+        name: formData.name.trim(),
+        categoryId,
+      };
+
       await technologyAPI.createTechnology(payload);
       await refreshTechnologies();
       handleCloseAddDialog();
@@ -171,8 +204,8 @@ const TechnologiesPage = () => {
     setEditingTechnology(tech);
     setFormData({
       name: tech.name || '',
-      category: tech.category || '',
-      newCategory: ''
+      categoryId: tech.category?.id ? String(tech.category.id) : '',
+      newCategoryLabel: '',
     });
     setIsCustomCategory(false);
     setTimeout(() => setIsEditDialogOpen(true), 0);
@@ -185,25 +218,24 @@ const TechnologiesPage = () => {
   };
 
   const handleEditTechnology = async () => {
-    const finalCategory = isCustomCategory ? formData.newCategory : formData.category;
-
-    if (!formData.name?.trim() || !finalCategory?.trim()) {
+    if (!formData.name?.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please fill in technology name and category",
+        description: "Please fill in technology name",
         variant: "destructive"
       });
       return;
     }
 
-    const payload = {
-      name: formData.name.trim(),
-      category: finalCategory.trim()
-    };
-
     setIsMutating(true);
 
     try {
+      const categoryId = await resolveCategoryId();
+      const payload = {
+        name: formData.name.trim(),
+        categoryId,
+      };
+
       await technologyAPI.updateTechnology(editingTechnology.id, payload);
       await refreshTechnologies();
       handleCloseEditDialog();
@@ -251,8 +283,8 @@ const TechnologiesPage = () => {
     }
   };
 
-  const filteredTechnologies = technologies.filter(tech => 
-    filterCategory === 'ALL' || tech.category === filterCategory
+  const filteredTechnologies = technologies.filter(tech =>
+    filterCategory === 'ALL' || tech.category?.code === filterCategory
   );
 
   const grouped = groupByCategory(filteredTechnologies);
@@ -274,15 +306,29 @@ const TechnologiesPage = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Technologies</h1>
-            <p className="text-muted-foreground">Manage technology stack and skills</p>
+            <p className="text-muted-foreground">Manage technology stack, skills, and categories</p>
           </div>
-          <Button onClick={handleOpenAddDialog} disabled={isMutating}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Technology
-          </Button>
+          {activeTab === 'technologies' && (
+            <Button onClick={handleOpenAddDialog} disabled={isMutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Technology
+            </Button>
+          )}
         </div>
 
-        {/* Add Dialog */}
+        <AdminSectionTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { value: 'technologies', label: 'Technologies', icon: Code2 },
+            { value: 'categories', label: 'Categories', icon: Tags },
+          ]}
+        />
+
+        {activeTab === 'categories' ? (
+          <CategoryManager type="technology" onCategoriesChange={setCategories} />
+        ) : (
+          <>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -305,14 +351,14 @@ const TechnologiesPage = () => {
               <div className="space-y-2">
                 <Label htmlFor="add-category">Category *</Label>
                 <Select 
-                  value={isCustomCategory ? 'custom' : formData.category} 
+                  value={isCustomCategory ? 'custom' : formData.categoryId} 
                   onValueChange={(v) => {
                     if (v === 'custom') {
                       setIsCustomCategory(true);
-                      setFormData({...formData, category: ''});
+                      setFormData({ ...formData, categoryId: '' });
                     } else {
                       setIsCustomCategory(false);
-                      setFormData({...formData, category: v, newCategory: ''});
+                      setFormData({ ...formData, categoryId: v, newCategoryLabel: '' });
                     }
                   }}
                   disabled={isMutating}
@@ -321,8 +367,8 @@ const TechnologiesPage = () => {
                     <SelectValue placeholder="Select or create category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={String(cat.id)}>{cat.label}</SelectItem>
                     ))}
                     <SelectItem value="custom">+ Add New Category</SelectItem>
                   </SelectContent>
@@ -330,11 +376,11 @@ const TechnologiesPage = () => {
               </div>
               {isCustomCategory && (
                 <div className="space-y-2">
-                  <Label htmlFor="new-category">New Category Name *</Label>
+                  <Label htmlFor="new-category-label">New Category Label *</Label>
                   <Input 
-                    id="new-category"
-                    value={formData.newCategory}
-                    onChange={(e) => setFormData({...formData, newCategory: e.target.value})}
+                    id="new-category-label"
+                    value={formData.newCategoryLabel}
+                    onChange={(e) => setFormData({ ...formData, newCategoryLabel: e.target.value })}
                     placeholder="e.g., Machine Learning, Mobile Development" 
                     disabled={isMutating}
                   />
@@ -364,7 +410,7 @@ const TechnologiesPage = () => {
 
         {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Technology</DialogTitle>
               <DialogDescription>
@@ -384,14 +430,14 @@ const TechnologiesPage = () => {
               <div className="space-y-2">
                 <Label htmlFor="edit-category">Category *</Label>
                 <Select 
-                  value={isCustomCategory ? 'custom' : formData.category} 
+                  value={isCustomCategory ? 'custom' : formData.categoryId} 
                   onValueChange={(v) => {
                     if (v === 'custom') {
                       setIsCustomCategory(true);
-                      setFormData({...formData, category: ''});
+                      setFormData({ ...formData, categoryId: '' });
                     } else {
                       setIsCustomCategory(false);
-                      setFormData({...formData, category: v, newCategory: ''});
+                      setFormData({ ...formData, categoryId: v, newCategoryLabel: '' });
                     }
                   }}
                   disabled={isMutating}
@@ -400,8 +446,8 @@ const TechnologiesPage = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={String(cat.id)}>{cat.label}</SelectItem>
                     ))}
                     <SelectItem value="custom">+ Add New Category</SelectItem>
                   </SelectContent>
@@ -409,12 +455,12 @@ const TechnologiesPage = () => {
               </div>
               {isCustomCategory && (
                 <div className="space-y-2">
-                  <Label htmlFor="edit-new-category">New Category Name *</Label>
+                  <Label htmlFor="edit-new-category-label">New Category Label *</Label>
                   <Input 
-                    id="edit-new-category"
-                    value={formData.newCategory}
-                    onChange={(e) => setFormData({...formData, newCategory: e.target.value})}
-                    placeholder="Enter new category name" 
+                    id="edit-new-category-label"
+                    value={formData.newCategoryLabel}
+                    onChange={(e) => setFormData({ ...formData, newCategoryLabel: e.target.value })}
+                    placeholder="Enter new category label" 
                     disabled={isMutating}
                   />
                 </div>
@@ -452,8 +498,8 @@ const TechnologiesPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Categories</SelectItem>
-                  {categories.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.code}>{cat.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -490,9 +536,9 @@ const TechnologiesPage = () => {
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <h4 className="font-medium truncate">{tech.name}</h4>
-                                    <Badge className={`${getCategoryColor(tech.category)} text-xs`}>
-                                      {tech.category}
-                                    </Badge>
+                                    <Badge className={`${getCategoryColor(getTechnologyCategoryLabel(tech))} text-xs`}>
+                                        {getTechnologyCategoryLabel(tech)}
+                                      </Badge>
                                   </div>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
@@ -525,6 +571,8 @@ const TechnologiesPage = () => {
             )}
           </CardContent>
         </Card>
+          </>
+        )}
       </div>
     </Layout>
   );

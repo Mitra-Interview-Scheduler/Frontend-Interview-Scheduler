@@ -1,14 +1,9 @@
 // src/services/availabilityAPI.js
 import api from './api';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
+import { InterviewRequestStatus } from '@/lib/statusConstants';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
-const formatLocalDateTime = (date) => {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-         `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-
 export const availabilityAPI = {
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -19,20 +14,52 @@ export const availabilityAPI = {
   },
 
   /** Availability slots in a date range */
-  getAvailabilityByDateRange: async (start, end) => {
+  getAvailabilityByDateRange: async (start, end, page = 0, size = 200) => {
     const response = await api.get('/availability/range', {
       params: {
-        start: start.toISOString(),
-        end:   end.toISOString(),
+        start: formatLocalDateTime(start),
+        end:   formatLocalDateTime(end),
+        page,
+        size,
       },
     });
-    return response.data;
+    return response.data?.items || response.data;
   },
 
   /** Available + booked slot counts */
   getAvailabilityStats: async () => {
     const response = await api.get('/availability/stats');
     return response.data;
+  },
+
+  /** Get full interview details for a booked slot by interviewScheduleId */
+  getInterviewDetails: async (interviewScheduleId) => {
+    try {
+      const response = await api.get(`interviewer/interviews/bookedInterviews/${interviewScheduleId}`);
+      console.log('Fetched interview details:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching interview details for ID ${interviewScheduleId}:`, {
+        status: error.response?.status,
+        message: error.response?.statusText,
+        data: error.response?.data,
+      });
+      throw error; // Re-throw so caller knows the request failed
+    }
+  },
+
+  completeInterview: async (interviewScheduleId) => {
+    const response = await api.patch(`interviewer/interviews/schedules/${interviewScheduleId}/complete`);
+    return response.data;
+  },
+
+  /**
+   * TODO: Backend — POST /api/interviewer/interviews/schedules/{scheduleId}/propose-time
+   * Payload: { availabilitySlotId, proposedStartDateTime, proposedEndDateTime, notes? }
+   */
+  proposeAlternativeTime: async (payload) => {
+    console.info('[STUB] proposeAlternativeTime', payload);
+    return { status: InterviewRequestStatus.PENDING, ...payload };
   },
 
   // ── Write ─────────────────────────────────────────────────────────────────
@@ -42,7 +69,9 @@ export const availabilityAPI = {
     const response = await api.post('/availability', {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
+      currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description || null,
+      recurrenceGroupId: slotData.recurrenceGroupId || null,
     });
     return response.data;
   },
@@ -53,7 +82,9 @@ export const availabilityAPI = {
       slots: slots.map((slot) => ({
         startDateTime: formatLocalDateTime(slot.startDateTime),
         endDateTime:   formatLocalDateTime(slot.endDateTime),
+        currentTime:   formatLocalDateTime(slot.currentTime),
         description:   slot.description || null,
+        recurrenceGroupId: slot.recurrenceGroupId || null,
       })),
     });
     return response.data;
@@ -63,18 +94,23 @@ export const availabilityAPI = {
    * Update an existing AVAILABLE slot's time range / description.
    * The backend rejects BOOKED slots with a 400.
    */
-  updateAvailabilitySlot: async (slotId, slotData) => {
+  updateAvailabilitySlot: async (slotId, slotData, scope = 'SINGLE') => {
     const response = await api.put(`/availability/${slotId}`, {
       startDateTime: formatLocalDateTime(slotData.startDateTime),
       endDateTime:   formatLocalDateTime(slotData.endDateTime),
+      currentTime:   formatLocalDateTime(slotData.currentTime),
       description:   slotData.description ?? null,
+    }, {
+      params: { scope },
     });
     return response.data;
   },
 
   /** Soft-delete (deactivate) an AVAILABLE slot */
-  deleteAvailabilitySlot: async (slotId) => {
-    await api.delete(`/availability/${slotId}`);
+  deleteAvailabilitySlot: async (slotId, scope = 'SINGLE') => {
+    await api.delete(`/availability/${slotId}`, {
+      params: { scope },
+    });
   },
 };
 

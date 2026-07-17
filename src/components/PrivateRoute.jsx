@@ -3,6 +3,16 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import PropTypes from 'prop-types';
 
+const normalizeRole = (role) => {
+  if (typeof role !== 'string') return '';
+  return role.startsWith('ROLE_') ? role.slice(5) : role.toUpperCase();
+};
+
+const getUserRoles = (user) => {
+  const rawRoles = user?.roles || (user?.role ? [user.role] : []);
+  return [...new Set(rawRoles.map(normalizeRole).filter(Boolean))];
+};
+
 export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
 
@@ -18,8 +28,23 @@ export const PrivateRoute = ({ children, allowedRoles = [] }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+  // Check if user has ANY of the allowed roles
+  if (allowedRoles.length > 0) {
+    const userRoles = getUserRoles(user);
+    const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+    const hasAccess = normalizedAllowedRoles.some((role) => userRoles.includes(role));
+    if (!hasAccess) {
+      if (userRoles.includes('ADMIN')) {
+        return <Navigate to="/admin/dashboard" replace />;
+      }
+      if (userRoles.includes('HR')) {
+        return <Navigate to="/hr/dashboard" replace />;
+      }
+      if (userRoles.includes('INTERVIEWER')) {
+        return <Navigate to="/interviewer/dashboard" replace />;
+      }
+      return <Navigate to="/login" replace />;
+    }
   }
 
   return children;

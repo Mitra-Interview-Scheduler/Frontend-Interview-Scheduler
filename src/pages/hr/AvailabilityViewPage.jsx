@@ -1,163 +1,98 @@
-// src/pages/hr/AvailabilityViewPage.jsx
-// Changes in this version:
-//   1. Custom RBC EventComponent — selected panel slots show a ✓ badge
-//   2. Privilege check — blocks scheduling if interviewer is less senior than candidate
-//   3. Slot merge is handled server-side (no frontend change needed)
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'; 
+import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
+import { useCalendarFormats } from '@/hooks/useCalendarFormats';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
+  DialogHeader, DialogTitle,DialogBody,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import {
-  format, parse, startOfWeek, getDay, addMinutes,
-} from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
+import { Calendar } from 'react-big-calendar';
+import { format, startOfDay } from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
+import { domainAPI } from '@/services/domainAPI';
+import DomainMultiSelect from '@/components/DomainMultiSelect';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
+import { departmentUsersAPI } from '@/services/departmentUsersAPI';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
+import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
+import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import './AvailabilityCalendar.css';
+import '@/styles/AvailabilityCalendar.css';
 
-const localizer = dateFnsLocalizer({
-  format, parse, startOfWeek, getDay, locales: { 'en-US': enUS },
-});
 
-// ── Per-interviewer color palette ────────────────────────────────────────────
-const INTERVIEWER_PALETTES = [
-  { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f59e0b,#d97706)', solid: '#f59e0b', border: '#78350f', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#ec4899,#db2777)', solid: '#ec4899', border: '#831843', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#14b8a6,#0d9488)', solid: '#14b8a6', border: '#134e4a', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', solid: '#8b5cf6', border: '#3b0764', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#ef4444,#dc2626)', solid: '#ef4444', border: '#7f1d1d', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#06b6d4,#0891b2)', solid: '#06b6d4', border: '#164e63', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#84cc16,#65a30d)', solid: '#84cc16', border: '#365314', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f97316,#ea580c)', solid: '#f97316', border: '#7c2d12', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#a855f7,#9333ea)', solid: '#a855f7', border: '#4a044e', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#10b981,#059669)', solid: '#10b981', border: '#064e3b', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#3b82f6,#2563eb)', solid: '#3b82f6', border: '#1e3a8a', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#d946ef,#c026d3)', solid: '#d946ef', border: '#581c87', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#64748b,#475569)', solid: '#64748b', border: '#1e293b', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#f43f5e,#e11d48)', solid: '#f43f5e', border: '#881337', text: '#fff' },
-  { bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)', solid: '#0ea5e9', border: '#0c4a6e', text: '#fff' },
-];
-
-const PANEL_PALETTE = {
-  bg: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
-  solid: '#0ea5e9',
-  border: '#0c4a6e',
-  text: '#fff',
+const CALENDAR_MIN_HOUR = env.CALENDAR_MIN_HOUR;
+const CALENDAR_MAX_HOUR = env.CALENDAR_MAX_HOUR;
+const CALENDAR_PAGE_SIZES = {
+  month: 500,
+  week: 200,
+  day: 100,
 };
 
-const BOOKED_OVERLAY = {
-  bg: 'linear-gradient(135deg,#10b981,#059669)',
-  solid: '#10b981',
-  border: '#064e3b',
+
+const normalizeTechName = (name) => (name ?? '').trim().toLowerCase();
+
+const resolveInterviewType = (...values) => {
+  const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
+  return match || InterviewType.TECHNICAL;
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const pad = (n) => String(n).padStart(2, '0');
-const formatLocalDateTime = (date) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-  `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
-
-const generateTimeOptions = (startDate, endDate) => {
-  const options = [];
-  let cur = new Date(startDate);
-  while (cur <= endDate) {
-    options.push({ label: format(cur, 'h:mm a'), value: format(cur, 'HH:mm'), date: new Date(cur) });
-    cur = addMinutes(cur, 30);
-  }
-  return options;
+const EMPTY_REQUEST_FORM = {
+  candidateId: null,
+  candidateName: '',
+  candidateDesignationId: '',
+  requiredTechnologyIds: [],
+  isUrgent: false,
+  notes: '',
+  interviewType: InterviewType.TECHNICAL,
+  interviewCoordinatorId: null,
+  interviewCoordinatorDepartmentId: null,
 };
 
-const parseTimeOnDate = (timeStr, referenceDate) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  const r = new Date(referenceDate);
-  r.setHours(h, m, 0, 0);
-  return r;
-};
-
-// ── Privilege check ───────────────────────────────────────────────────────────
-/**
- * Returns an error string if the interviewer is less senior than the candidate,
- * or null if the check passes (or data is missing).
- *
- * Logic:
- *  - First compare tierOrder: higher tier = more senior
- *  - If same tier, compare levelOrder: higher level = more senior
- *  - interviewer must be >= candidate on both dimensions
- *
- * Requires backend to expose interviewerTierOrder / interviewerLevelOrder on
- * the slot resource, and targetDesignationTierOrder / targetDesignationLevelOrder
- * on the candidate (see BACKEND_DTO_ADDITIONS.java).
- */
-const checkInterviewerPrivilege = (slotResource, candidate) => {
-  if (!slotResource || !candidate) return null;
-
-  const ivTier  = slotResource.interviewerTierOrder;
-  const ivLevel = slotResource.interviewerLevelOrder;
-  const cTier   = candidate.targetDesignationTierOrder;
-  const cLevel  = candidate.targetDesignationLevelOrder;
-
-  // If we don't have numeric data from the backend, skip the check gracefully
-  if (ivTier == null || cTier == null) return null;
-
-  if (ivTier < cTier) {
-    return `The interviewer's tier (Tier ${ivTier}) is below the candidate's required tier (Tier ${cTier}). Please choose a more senior interviewer.`;
-  }
-  if (ivTier === cTier && ivLevel != null && cLevel != null && ivLevel < cLevel) {
-    return `The interviewer is at the same tier but a lower level (Level ${ivLevel}) than the candidate requires (Level ${cLevel}). Please choose a more senior interviewer.`;
-  }
-  return null;
-};
-
-/**
- * For panel interviews: check ALL selected interviewers.
- * Returns a list of { name, reason } for any that fail.
- */
-const checkPanelPrivilege = (panelSlots, candidate) => {
-  if (!candidate) return [];
-  return panelSlots
-    .map((ps) => {
-      const err = checkInterviewerPrivilege(ps.slot.resource, candidate);
-      return err ? { name: ps.slot.resource.interviewer, reason: err } : null;
-    })
-    .filter(Boolean);
-};
-
-// ── Component ────────────────────────────────────────────────────────────────
 const AvailabilityViewPage = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const calendarFormats = useCalendarFormats();
+  const { formatDateTimeRange, formatTimeRange } = useFormattedDateTime();
   const [rawSlots, setRawSlots] = useState([]);
   const [events, setEvents] = useState([]);
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [currentView, setCurrentView] = useState('week');
   const [loading, setLoading] = useState(true);
+  const navTimerRef = useRef(null);
+  const viewTimerRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [technologies, setTechnologies] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -167,6 +102,8 @@ const AvailabilityViewPage = () => {
   // Filters
   const [filterDept, setFilterDept] = useState([]);
   const [filterTech, setFilterTech] = useState([]);
+  const [filterDomain, setFilterDomain] = useState([]);
+  const [selectedTechCategory, setSelectedTechCategory] = useState('');
   const [techSearchTerm, setTechSearchTerm] = useState('');
   const [showTechDropdown, setShowTechDropdown] = useState(false);
   const [minExperience, setMinExperience] = useState('');
@@ -176,6 +113,9 @@ const AvailabilityViewPage = () => {
   const [selectedTierInDept, setSelectedTierInDept] = useState('');
   const [tiersForSelectedDept, setTiersForSelectedDept] = useState([]);
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
+  const [pendingFilter, setPendingFilter] = useState(null);
+  const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
@@ -188,22 +128,80 @@ const AvailabilityViewPage = () => {
   const [bookStartTime, setBookStartTime] = useState('');
   const [bookEndTime, setBookEndTime] = useState('');
   const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
-  const [requestForm, setRequestForm] = useState({
-    candidateId: null, candidateName: '', candidateDesignationId: '',
-    requiredTechnologyIds: [], isUrgent: false, notes: '',
-  });
+  const [requestForm, setRequestForm] = useState(EMPTY_REQUEST_FORM);
 
   // Cancel booked dialog
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [coordinatorUsers, setCoordinatorUsers] = useState([]);
+  const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
   const techDropdownRef = useRef(null);
+  const appliedCandidateFiltersRef = useRef(null);
+  const loadedCandidateDetailsRef = useRef(new Set());
+  const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
     ? candidates.find((c) => c.id === requestForm.candidateId) || null
     : null;
+
+  const candidateCoreTechIds = useMemo(
+    () => getCandidateCoreTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
+
+  const candidateCoreTechNames = useMemo(() => {
+    const names = new Set();
+    (selectedCandidate?.technologies || [])
+      .map(normalizeSkillAssignment)
+      .filter(getSkillIsCore)
+      .forEach((item) => {
+        const name = item.technology?.name;
+        if (name) names.add(normalizeTechName(name));
+      });
+    return names;
+  }, [selectedCandidate]);
+
+  const isCandidateCoreTech = useCallback(
+    (technologyId) => candidateCoreTechIds.includes(technologyId),
+    [candidateCoreTechIds],
+  );
+
+  const isCoreSkillForDisplay = useCallback((skillName, coreTechnologies = []) => {
+    const normalized = normalizeTechName(skillName);
+    if (!normalized) return false;
+    if ((coreTechnologies || []).some((s) => normalizeTechName(s) === normalized)) {
+      return true;
+    }
+    return candidateCoreTechNames.has(normalized);
+  }, [candidateCoreTechNames]);
+
+  const renderInterviewerSkillBadge = useCallback((skillName, { key, className = '', coreTechnologies = [] } = {}) => {
+    const isCore = isCoreSkillForDisplay(skillName, coreTechnologies);
+    return (
+      <Badge
+        key={key ?? skillName}
+        variant="outline"
+        className={`gap-1 ${className} ${
+          isCore ? 'border-amber-300 bg-amber-50 text-amber-900' : ''
+        }`}
+      >
+        {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+        {skillName}
+      </Badge>
+    );
+  }, [isCoreSkillForDisplay]);
+
+  const sortSkillsWithCoreFirst = useCallback((skills = [], coreTechnologies = []) => (
+    [...skills].sort((a, b) => {
+      const aCore = isCoreSkillForDisplay(a, coreTechnologies);
+      const bCore = isCoreSkillForDisplay(b, coreTechnologies);
+      if (aCore === bCore) return 0;
+      return aCore ? -1 : 1;
+    })
+  ), [isCoreSkillForDisplay]);
 
   // Single-interview privilege error
   const singlePrivilegeError = selectedSlot && selectedCandidate
@@ -215,8 +213,67 @@ const AvailabilityViewPage = () => {
     ? checkPanelPrivilege(panelSlots, selectedCandidate)
     : [];
 
-  // ── Build color map ────────────────────────────────────────────────────────
-  const buildColorMap = useCallback((slots) => {
+    const eventStyleGetter = useCallback((event) => 
+    getEventStyle(event, panelSlots), 
+  [panelSlots]);
+
+  const tooltipAccessor = useCallback((event) => 
+    getTooltipText(event, panelSlots, formatTimeRange), 
+  [panelSlots, formatTimeRange]);
+
+  // For the calendar components prop
+  const calendarComponents = useMemo(() => ({
+    event: (props) => (
+      <CalendarEventComponent
+        {...props}
+        panelSlots={panelSlots}
+        formatTimeRange={formatTimeRange}
+      />
+    ),
+  }), [panelSlots, formatTimeRange]);
+
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const { start, end } = computeRangeForView(currentView, calendarDate);
+        const initialAvailabilityFilters = {
+          startDateTime: formatLocalDateTime(start),
+          endDateTime: formatLocalDateTime(end),
+          page: 0,
+          size: getCalendarPageSize(currentView),
+        };
+        const [availData, deptData, techData, domainData, desigData, tierData, candData] = await Promise.all([
+          // Load initial availability for visible range
+          hrAvailabilityAPI.getAllAvailability(initialAvailabilityFilters),
+          departmentAPI.getAllDepartments(),
+          technologyAPI.getAllTechnologies(),
+          domainAPI.getAllDomains(),
+          designationAPI.getAllDesignations(),
+          tierAPI.getAllTiers(),
+          candidateAPI.getAllCandidates(),
+        ]);
+        setDepartments(deptData);
+        setTechnologies(techData);
+        setDomains(domainData || []);
+        setDesignations(desigData);
+        setTiers(tierData);
+        setCandidates(candData);
+        setRawSlots(availData);
+        setEvents(formatSlots(availData, buildColorMap(availData)));
+      } catch (err) {
+        toast(
+          { title: 'Error loading availability', description: err.message, variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+
+
+// ── Build color map ────────────────────────────────────────────────────────
+   const buildColorMap = (slots) => {
     const map = {};
     let idx = 0;
     slots.forEach((slot) => {
@@ -228,85 +285,262 @@ const AvailabilityViewPage = () => {
     });
     setInterviewerColorMap(map);
     return map;
+  };
+
+    useEffect(() => {
+      // initial load
+      loadInitialData();
   }, []);
 
-  // ── Format slots → calendar events ───────────────────────────────────────
-  const formatSlots = useCallback((data, colorMap) => {
-    return data.map((slot) => {
-      const isBooked = slot.status === 'BOOKED';
-      const paletteIdx = colorMap[slot.interviewerId] ?? 0;
-      const palette = isBooked ? BOOKED_OVERLAY : INTERVIEWER_PALETTES[paletteIdx];
-      const skills = slot.technologies || [];
-      const skillLabel = skills.length
-        ? ` · ${skills.slice(0, 2).join(', ')}${skills.length > 2 ? ' +' + (skills.length - 2) : ''}`
-        : '';
 
-      return {
-        id: slot.slotId,
-        interviewerId: slot.interviewerId,
-        paletteIdx,
-        title: isBooked
-          ? `🔒 ${slot.interviewerName}${slot.candidateName ? ' → ' + slot.candidateName : ''}`
-          : `${slot.interviewerName}${skillLabel}`,
-        start: new Date(slot.startDateTime),
-        end: new Date(slot.endDateTime),
-        resource: {
-          ...slot,
-          interviewer: slot.interviewerName,
-          department: slot.department,
-          designation: slot.designation,
-          skills,
-          yearsOfExperience: slot.yearsOfExperience,
-          status: slot.status,
-          candidateName: slot.candidateName,
-          requestId: slot.requestId ?? null,
-          palette,
-          // Tier / level for privilege check (populated by backend)
-          interviewerTierOrder:  slot.interviewerTierOrder  ?? null,
-          interviewerLevelOrder: slot.interviewerLevelOrder ?? null,
-        },
-      };
-    });
-  }, []);
 
-  // ── Initial load ──────────────────────────────────────────────────────────
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const [availData, deptData, techData, desigData, tierData, candData] = await Promise.all([
-          hrAvailabilityAPI.getAllAvailability(),
-          departmentAPI.getAllDepartments(),
-          technologyAPI.getAllTechnologies(),
-          designationAPI.getAllDesignations(),
-          tierAPI.getAllTiers(),
-          candidateAPI.getAllCandidates(),
-        ]);
-        setDepartments(deptData);
-        setTechnologies(techData);
-        setDesignations(desigData);
-        setTiers(tierData);
-        setCandidates(candData);
-        const colorMap = buildColorMap(availData);
-        setRawSlots(availData);
-        setEvents(formatSlots(availData, colorMap));
-      } catch (err) {
-        toast({ title: 'Error loading availability', description: err.message, variant: 'destructive' });
-      } finally {
-        setLoading(false);
+    const incomingFilter = location.state?.filterData;
+    const paramCandidateId = searchParams.get('candidateId');
+    const paramInterviewType = searchParams.get('interviewType');
+
+    if (!incomingFilter && !paramCandidateId && !paramInterviewType) return;
+
+    const resolvedInterviewType = resolveInterviewType(
+      incomingFilter?.interviewType,
+      paramInterviewType,
+    );
+
+    if (incomingFilter) {
+      setPendingFilter(incomingFilter);
+
+      setDateRange({
+        start: new Date(incomingFilter.startDateTime),
+        end: null,
+      });
+
+      if (incomingFilter.departmentId) {
+        setFilterDept([incomingFilter.departmentId]);
+        setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
       }
-    })();
-  }, [buildColorMap, formatSlots]);
+
+      if (incomingFilter.technologyIds?.length) {
+        setFilterTech(incomingFilter.technologyIds);
+      }
+
+      if (incomingFilter.domainIds?.length) {
+        setFilterDomain(incomingFilter.domainIds);
+      }
+    }
+
+    setInterviewType(resolvedInterviewType);
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: incomingFilter?.candidateId
+        ?? (paramCandidateId ? parseInt(paramCandidateId, 10) : prev.candidateId),
+      candidateName: incomingFilter?.candidateName ?? prev.candidateName,
+      interviewType: resolvedInterviewType,
+      interviewCoordinatorId: incomingFilter?.interviewCoordinatorId ?? prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: incomingFilter?.interviewCoordinatorDepartmentId
+        ?? prev.interviewCoordinatorDepartmentId,
+    }));
+  }, [location.state, searchParams]);
+
+  const loadCoordinatorUsers = useCallback(async (departmentId) => {
+    if (!departmentId) {
+      setCoordinatorUsers([]);
+      return;
+    }
+    setCoordinatorUsersLoading(true);
+    try {
+      const data = await departmentUsersAPI.getUsersByDepartment(departmentId);
+      setCoordinatorUsers(data || []);
+    } catch (err) {
+      console.error('Failed to load coordinator users:', err);
+      setCoordinatorUsers([]);
+    } finally {
+      setCoordinatorUsersLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (selectedDeptForDesignation) loadTiersForDept(selectedDeptForDesignation);
-    else { setTiersForSelectedDept([]); setSelectedTierInDept(''); setMinDesignationLevel(''); }
+    if (requestForm.interviewCoordinatorDepartmentId) {
+      loadCoordinatorUsers(requestForm.interviewCoordinatorDepartmentId);
+    } else {
+      setCoordinatorUsers([]);
+    }
+  }, [requestForm.interviewCoordinatorDepartmentId, loadCoordinatorUsers]);
+
+  const handleCoordinatorDepartmentChange = (value) => {
+    const deptId = value === 'NONE' ? null : parseInt(value, 10);
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorDepartmentId: deptId,
+      interviewCoordinatorId: null,
+    }));
+  };
+
+  const handleCoordinatorUserChange = (value) => {
+    setRequestForm((prev) => ({
+      ...prev,
+      interviewCoordinatorId: value === 'NONE' ? null : parseInt(value, 10),
+    }));
+  };
+
+  const resetRequestFormState = useCallback(() => {
+    setRequestForm({ ...EMPTY_REQUEST_FORM });
+    setCandidateSearchTerm('');
+    setBookStartTime('');
+    setBookEndTime('');
+  }, []);
+
+  const clearCandidateSchedulingContext = useCallback(() => {
+    setInterviewType(InterviewType.TECHNICAL);
+    setDateRange({ start: null, end: null });
+    setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
+    setSelectedDeptForDesignation('');
+    setSelectedTierInDept('');
+    setMinDesignationLevel('');
+    setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
+    appliedCandidateFiltersRef.current = null;
+    navigate('/hr/availability', { replace: true, state: null });
+  }, [navigate]);
+
+  const finalizeScheduledInterview = useCallback((cameFromCandidate) => {
+    resetRequestFormState();
+    if (cameFromCandidate) {
+      clearCandidateSchedulingContext();
+    }
+  }, [resetRequestFormState, clearCandidateSchedulingContext]);
+
+  const cameFromCandidateFlow = Boolean(
+    searchParams.get('candidateId') || location.state?.filterData?.candidateId,
+  );
+
+
+  
+  useEffect(() => {
+    if (pendingFilter && tiersForSelectedDept.length > 0) {
+      const { minTierOrder } = pendingFilter;
+     
+      if (minTierOrder != null) {
+        const matchingTier = tiersForSelectedDept.find(t => t.tierOrder === minTierOrder);
+        if (matchingTier) {
+          setSelectedTierInDept(matchingTier.id.toString());
+        } 
+      }
+    }
+  }, [pendingFilter, tiersForSelectedDept]);
+
+
+
+  
+  useEffect(() => {
+    if (selectedDeptForDesignation) {
+      loadTiersForDept(selectedDeptForDesignation);
+    }
+    else {
+        setTiersForSelectedDept([]);
+        setSelectedTierInDept('');
+        setMinDesignationLevel(''); 
+      }
   }, [selectedDeptForDesignation]);
 
+
   useEffect(() => {
-    if (selectedTierInDept) loadDesignationsForTier(parseInt(selectedTierInDept));
-    else { setDesignationsForSelectedTier([]); setMinDesignationLevel(''); }
+    if (selectedTierInDept) {
+      loadDesignationsForTier(parseInt(selectedTierInDept));
+    }else {
+      setDesignationsForSelectedTier([]);
+      setMinDesignationLevel(''); }
   }, [selectedTierInDept]);
+
+
+
+  useEffect(() => {
+    if (dateRange.start) {
+      setCalendarDate(new Date(dateRange.start));
+    }
+  }, [dateRange.start]);
+
+  const computeRangeForView = (view, date) => {
+    const d = date ? new Date(date) : new Date();
+    switch ((view || 'week')) {
+      case 'month': return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'day': return { start: startOfDay(d), end: endOfDay(d) };
+      case 'week':
+      default: return { start: startOfWeek(d, { weekStartsOn: 0 }), end: endOfWeek(d, { weekStartsOn: 0 }) };
+    }
+  };
+
+  const getCalendarPageSize = (view) => CALENDAR_PAGE_SIZES[view] || CALENDAR_PAGE_SIZES.week;
+
+  const buildCalendarAvailabilityFilters = (view, date, overrides = {}) => {
+    const { start, end } = computeRangeForView(view, date || calendarDate);
+    return {
+      startDateTime: formatLocalDateTime(start),
+      endDateTime: formatLocalDateTime(end),
+      departmentIds: filterDept.length > 0 ? filterDept : null,
+      technologyIds: filterTech.length > 0 ? filterTech : null,
+      domainIds: filterDomain.length > 0 ? filterDomain : null,
+      minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
+      page: 0,
+      size: getCalendarPageSize(view),
+      ...overrides,
+    };
+  };
+
+  // Simple toolbar with loading indicator
+  const HRCalendarToolbar = ({ label, onNavigate, onView, view, views, loading }) => {
+    const viewList = Array.isArray(views) ? views : Object.keys(views || {});
+    return (
+      <div className="rbc-toolbar flex items-center justify-between px-2 py-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onNavigate('PREV')} className="btn">Prev</button>
+          <button onClick={() => onNavigate('TODAY')} className="btn">Today</button>
+          <button onClick={() => onNavigate('NEXT')} className="btn">Next</button>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="rbc-toolbar-label text-base font-semibold">{label}</span>
+          {loading && <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin ml-2" />}
+          {viewList.map(v => (
+            <button key={v} onClick={() => onView(v)} className={`btn ${v === view ? 'btn-primary' : ''}`}>{v}</button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const fetchAvailabilityForView = async (view, date) => {
+    try {
+      setLoading(true);
+      const filters = buildCalendarAvailabilityFilters(view, date || calendarDate);
+      const data = await hrAvailabilityAPI.getAllAvailability(filters);
+      const colorMap = buildColorMap(data);
+      setRawSlots(data);
+      setEvents(formatSlots(data, colorMap));
+    } catch (err) {
+      toast({ title: 'Error loading availability', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  
+  // ── Auto-set Level from pending filter ───────────────────────────────────────
+  useEffect(() => {
+    if (pendingFilter && designationsForSelectedTier.length > 0) {
+      const { minLevelOrder } = pendingFilter;      
+      if (minLevelOrder != null) {
+        // Find the designation with matching levelOrder
+        const matchingDesignation = designationsForSelectedTier.find(d => d.levelOrder === minLevelOrder);
+        if (matchingDesignation) {
+          setMinDesignationLevel(matchingDesignation.levelOrder.toString());
+        }
+      }
+      setPendingFilter(null);
+    }
+  }, [pendingFilter, designationsForSelectedTier]);
 
   useEffect(() => {
     const handle = (e) => {
@@ -318,9 +552,86 @@ const AvailabilityViewPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!loading) applyFilters();
-  }, [filterDept, filterTech, minExperience, dateRange,
-      selectedDeptForDesignation, selectedTierInDept, minDesignationLevel]);
+  if (loading || (pendingFilter && !selectedTierInDept)) return;
+
+  applyFilters();
+}, [
+  filterDept, filterTech, filterDomain, minExperience, dateRange,
+  selectedDeptForDesignation, selectedTierInDept, minDesignationLevel,
+  pendingFilter
+]);
+
+  
+  
+  // ── Auto-set candidate filters once when a candidate is first selected ──
+  useEffect(() => {
+    if (!requestForm.candidateId || candidates.length === 0) {
+      if (!requestForm.candidateId) {
+        appliedCandidateFiltersRef.current = null;
+      }
+      return;
+    }
+
+    if (appliedCandidateFiltersRef.current === requestForm.candidateId) {
+      return;
+    }
+
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate && !isSchedulableCandidate(candidate.status)) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateId: null,
+        candidateName: '',
+        candidateDesignationId: '',
+      }));
+      appliedCandidateFiltersRef.current = null;
+      return;
+    }
+    if (candidate && candidate.targetDesignationId) {
+      setRequestForm((prev) => ({
+        ...prev,
+        candidateDesignationId: candidate.targetDesignationId,
+      }));
+    }
+    if (candidate) {
+      const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
+      if (ids.length > 0) {
+        setFilterTech(ids);
+      }
+      const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
+      if (domainIds.length > 0) {
+        setFilterDomain(domainIds);
+      }
+      appliedCandidateFiltersRef.current = requestForm.candidateId;
+    }
+  }, [requestForm.candidateId, candidates]);
+
+  // Load full candidate profile (technologies/domains) when missing from list payload
+  useEffect(() => {
+    if (!requestForm.candidateId) return undefined;
+    if (loadedCandidateDetailsRef.current.has(requestForm.candidateId)) return undefined;
+
+    const candidate = candidates.find((c) => c.id === requestForm.candidateId);
+    if (candidate?.technologies?.length > 0) {
+      loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+      return undefined;
+    }
+
+    let active = true;
+    loadedCandidateDetailsRef.current.add(requestForm.candidateId);
+    candidateAPI.getCandidateById(requestForm.candidateId)
+      .then((details) => {
+        if (!active || !details) return;
+        setCandidates((prev) => {
+          const exists = prev.some((c) => c.id === details.id);
+          if (!exists) return [...prev, details];
+          return prev.map((c) => (c.id === details.id ? { ...c, ...details } : c));
+        });
+      })
+      .catch((err) => console.error('Failed to load candidate technologies:', err));
+
+    return () => { active = false; };
+  }, [requestForm.candidateId, candidates]);
 
   // ── Data helpers ──────────────────────────────────────────────────────────
   const loadTiersForDept = async (deptId) => {
@@ -344,17 +655,30 @@ const AvailabilityViewPage = () => {
         const t = tiersForSelectedDept.find((t) => t.id.toString() === selectedTierInDept);
         tierOrderToSend = t ? t.tierOrder : null;
       }
+
+      let levelOrderToSend = null;
+      if (minDesignationLevel) {
+        const d = designationsForSelectedTier.find((d) => d.levelOrder.toString() === minDesignationLevel);
+        levelOrderToSend = d ? d.levelOrder : null;
+      }
+
+      const visibleRange = computeRangeForView(currentView, calendarDate);
       const filters = {
-        departmentIds: filterDept.length > 0 ? filterDept : null,
-        technologyIds: filterTech.length > 0 ? filterTech : null,
-        minYearsOfExperience: minExperience ? parseInt(minExperience) : null,
-        startDateTime: dateRange.start ? dateRange.start.toISOString() : null,
-        endDateTime: dateRange.end ? dateRange.end.toISOString() : null,
+        ...buildCalendarAvailabilityFilters(currentView, calendarDate),
+        startDateTime: formatLocalDateTime(dateRange.start || visibleRange.start),
+        endDateTime: formatLocalDateTime(dateRange.end || visibleRange.end),
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
-        minDesignationLevelInDepartment: minDesignationLevel ? parseInt(minDesignationLevel) : null,
+        minDesignationLevelInDepartment: levelOrderToSend,
       };
-      const data = await hrAvailabilityAPI.getAllAvailability(filters);
+
+    
+      const data = await hrAvailabilityAPI.getAllAvailability(filters);  
+      const byStatus = data.reduce((acc, slot) => {
+        acc[slot.status] = (acc[slot.status] || 0) + 1;
+        return acc;
+      }, {});
+     
       const colorMap = buildColorMap(data);
       setRawSlots(data);
       setEvents(formatSlots(data, colorMap));
@@ -364,7 +688,9 @@ const AvailabilityViewPage = () => {
   };
 
   const refreshCalendar = async () => {
-    const data = await hrAvailabilityAPI.getAllAvailability();
+    const data = await hrAvailabilityAPI.getAllAvailability(
+      buildCalendarAvailabilityFilters(currentView, calendarDate)
+    );
     const colorMap = buildColorMap(data);
     setRawSlots(data);
     setEvents(formatSlots(data, colorMap));
@@ -399,7 +725,25 @@ const AvailabilityViewPage = () => {
 
   // ── Event click ───────────────────────────────────────────────────────────
   const handleEventClick = (event) => {
-    const isBooked = event.resource?.status === 'BOOKED';
+
+    if (calendarLockStart && event.start < calendarLockStart) {
+    toast({ 
+      title: "Slot unavailable", 
+      description: "You cannot book an interview in the past or before the selected filter start time.",
+      variant: "destructive" 
+    });
+    return;
+  }
+    const isBooked = event.resource?.status === SlotStatus.BOOKED;
+    const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
+
+    if (isBooked && isCompleted) {
+      toast({
+        title: 'Interview completed',
+        description: `${event.resource.candidateName || 'Interview'} with ${event.resource.interviewer} is finished.`,
+      });
+      return;
+    }
 
     if (isBooked) {
       openCancelDialog(event);
@@ -421,138 +765,44 @@ const AvailabilityViewPage = () => {
     setSelectedSlot(event);
     setBookStartTime(format(event.start, 'HH:mm'));
     setBookEndTime(format(event.end, 'HH:mm'));
-    setRequestForm({
-      candidateId: null, candidateName: '', candidateDesignationId: '',
+    setRequestForm(prev => ({
+      candidateId: prev.candidateId,
+      candidateName: prev.candidateName,
+      candidateDesignationId: prev.candidateDesignationId,
+      interviewType: resolveInterviewType(prev.interviewType, interviewType),
+      interviewCoordinatorId: prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
       requiredTechnologyIds: event.resource.skills.map((s) => {
         const t = technologies.find((t) => t.name === s);
         return t?.id || null;
       }).filter(Boolean),
-      isUrgent: false, notes: '',
-    });
+      isUrgent: false,
+      notes: '',
+    }));
     setCandidateSearchTerm('');
     setRequestDialogOpen(true);
+    
   };
 
-  // ── Custom calendar event component ──────────────────────────────────────
-  // Shows a ✓ icon + "Panel" label when a slot is selected in panel mode.
-  const CalendarEventComponent = useCallback(({ event }) => {
-    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
-    const isBooked   = event.resource?.status === 'BOOKED';
-
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3,
-        overflow: 'hidden',
-        height: '100%',
-        width: '100%',
-      }}>
-        {/* Panel-selected indicator */}
-        {isInPanel && (
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 2,
-            background: 'rgba(255,255,255,0.25)',
-            borderRadius: 3,
-            padding: '1px 4px',
-            fontSize: 10,
-            fontWeight: 700,
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}>
-            <CheckCircle2 style={{ width: 9, height: 9 }} />
-            Panel
-          </span>
-        )}
-        {/* Lock icon for booked */}
-        {isBooked && !isInPanel && (
-          <span style={{ fontSize: 10, flexShrink: 0 }}>🔒</span>
-        )}
-        {/* Title text */}
-        <span style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 11,
-          flex: 1,
-          minWidth: 0,
-        }}>
-          {/* Strip leading emoji from title if we already show the icon */}
-          {isBooked
-            ? event.title.replace(/^🔒\s*/, '')
-            : event.resource?.interviewer || event.title}
-        </span>
-      </div>
-    );
-  }, [panelSlots]);
-
-  // ── Event style ───────────────────────────────────────────────────────────
-  const eventStyleGetter = useCallback((event) => {
-    const isBooked   = event.resource?.status === 'BOOKED';
-    const isInPanel  = panelSlots.some((ps) => ps.slot.id === event.id);
-    let palette;
-
-    if (isInPanel) {
-      palette = PANEL_PALETTE;
-    } else {
-      palette = event.resource?.palette || INTERVIEWER_PALETTES[0];
-    }
-
-    return {
-      style: {
-        background: palette.bg,
-        borderRadius: '5px',
-        opacity: isBooked ? 0.82 : 0.94,
-        color: 'white',
-        borderLeft: `3px solid ${palette.border || palette.solid}`,
-        borderTop: 'none',
-        borderRight: 'none',
-        borderBottom: 'none',
-        padding: '3px 6px',
-        fontSize: '11px',
-        fontWeight: '500',
-        boxShadow: isInPanel
-          ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-          : `0 1px 4px ${palette.solid}30`,
-        cursor: 'pointer',
-        overflow: 'hidden',
-        maxWidth: '100%',
-        outline: 'none',
-      },
-    };
-  }, [panelSlots]);
-
-  // ── Tooltip ───────────────────────────────────────────────────────────────
-  const tooltipAccessor = (event) => {
-    const r = event.resource;
-    const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
-    if (r?.status === 'BOOKED')
-      return `🔒 BOOKED — ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick to cancel & restore slot`;
-    if (isInPanel)
-      return `✅ PANEL SELECTED — ${r.interviewer}\n${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}\n\nClick again to remove from panel`;
-    return [
-      `👤 ${r.interviewer}`,
-      r.designation ? `📋 ${r.designation}` : null,
-      r.department  ? `🏢 ${r.department}` : null,
-      r.yearsOfExperience ? `⏱ ${r.yearsOfExperience} yrs` : null,
-      r.skills?.length ? `💻 ${r.skills.join(', ')}` : null,
-      `🕐 ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`,
-    ].filter(Boolean).join('\n');
-  };
 
   // ── Candidate helpers ─────────────────────────────────────────────────────
-  const handleSelectCandidate = (c) =>
-    setRequestForm({ ...requestForm, candidateId: c.id, candidateName: c.name, candidateDesignationId: c.targetDesignationId || '' });
+  const handleSelectCandidate = (c) => {
+    setRequestForm({
+      ...requestForm,
+      candidateId: c.id,
+      candidateName: c.name,
+      candidateDesignationId: c.targetDesignationId || '',
+    });
+    setCandidateSearchTerm('');
+  };
 
   const handleClearCandidate = () =>
     setRequestForm({ ...requestForm, candidateId: null, candidateName: '', candidateDesignationId: '' });
 
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     // Privilege gate
     if (singlePrivilegeError) {
@@ -574,10 +824,14 @@ const AvailabilityViewPage = () => {
         preferredEndDateTime: formatLocalDateTime(bookEnd),
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
       setRequestDialogOpen(false);
       setSelectedSlot(null);
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -586,8 +840,8 @@ const AvailabilityViewPage = () => {
 
   // ── Submit panel interview ────────────────────────────────────────────────
   const handleSendPanelRequest = async () => {
-    if (!requestForm.candidateName.trim()) {
-      toast({ title: 'Enter candidate name', variant: 'destructive' }); return;
+    if (!requestForm.candidateId) {
+      toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
@@ -619,11 +873,16 @@ const AvailabilityViewPage = () => {
         requiredTechnologyIds: requestForm.requiredTechnologyIds,
         isUrgent: requestForm.isUrgent,
         notes: requestForm.notes,
+        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
       });
       toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
       setPanelDialogOpen(false);
       setPanelSlots([]);
-      setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
+      setPanelBookStartOverride('');
+      setPanelBookEndOverride('');
+      finalizeScheduledInterview(cameFromCandidateFlow);
       await refreshCalendar();
     } catch (err) {
       toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
@@ -652,40 +911,222 @@ const AvailabilityViewPage = () => {
   }, [panelSlots.length]);
 
   // ── Tech filter helpers ───────────────────────────────────────────────────
+  const handleDepartmentChange = (value) => {
+    const departmentId = value && value !== 'ALL' && value !== 'ANY' ? value.toString() : '';
+    setFilterDept(departmentId ? [parseInt(departmentId, 10)] : []);
+    setSelectedDeptForDesignation(departmentId);
+    setSelectedTierInDept('');
+    setMinDesignationLevel('');
+    setDesignationsForSelectedTier([]);
+    if (!departmentId) setTiersForSelectedDept([]);
+  };
+
   const handleTechSelect = (id) =>
     setFilterTech(filterTech.includes(id) ? filterTech.filter((x) => x !== id) : [...filterTech, id]);
 
   const clearFilters = () => {
-    setFilterDept([]); setFilterTech([]); setTechSearchTerm(''); setMinExperience('');
-    setDateRange({ start: null, end: null }); setSelectedDeptForDesignation('');
-    setMinDesignationLevel(''); setSelectedTierInDept('');
-    setTiersForSelectedDept([]); setDesignationsForSelectedTier([]);
+    setFilterDept([]);
+    setFilterTech([]);
+    setFilterDomain([]);
+    setSelectedTechCategory('');
+    setTechSearchTerm('');
+    setShowTechDropdown(false);
+    setMinExperience('');
+    setDateRange({ start: null, end: null });
+    setSelectedDeptForDesignation('');
+    setMinDesignationLevel('');
+    setSelectedTierInDept('');
+    setTiersForSelectedDept([]);
+    setDesignationsForSelectedTier([]);
+    setPendingFilter(null);
+    setCalendarDate(new Date());
+    setInterviewType(InterviewType.TECHNICAL);
+    appliedCandidateFiltersRef.current = null;
+    setRequestForm((prev) => ({
+      ...prev,
+      candidateId: null,
+      candidateName: '',
+      candidateDesignationId: '',
+      interviewCoordinatorId: null,
+      interviewCoordinatorDepartmentId: null,
+    }));
+    setCandidateSearchTerm('');
+    if (searchParams.get('candidateId') || searchParams.get('interviewType') || location.state?.filterData) {
+      navigate('/hr/availability', { replace: true, state: null });
+    }
   };
 
-  const filteredTechnologies = techSearchTerm.trim()
-    ? technologies.filter((t) => t.name.toLowerCase().includes(techSearchTerm.toLowerCase()))
-    : technologies;
+  const handleStartDateTimeChange = (value) => {
+    if (!value) {
+      setDateRange((prev) => ({ ...prev, start: null }));
+      return;
+    }
 
-  const filteredGroupedTechs = filteredTechnologies.reduce((acc, tech) => {
-    const cat = tech.category || 'Other';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(tech);
-    return acc;
-  }, {});
+    const nextStart = new Date(value);
+    if (Number.isNaN(nextStart.getTime())) return;
 
-  const filteredCandidates = candidates.filter((c) =>
+    setDateRange((prev) => ({ ...prev, start: nextStart }));
+  };
+
+  const calendarDayPropGetter = useCallback((date) => {
+    if (!calendarLockStart) return {};
+
+    const currentDay = startOfDay(date);
+    const lockDay = startOfDay(calendarLockStart);
+    if (currentDay < lockDay) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6',
+          color: '#9ca3af',
+          opacity: 0.45,
+          filter: 'grayscale(1)',
+        },
+      };
+    }
+
+    return {};
+  }, [calendarLockStart]);
+
+const calendarSlotPropGetter = useCallback((date) => {
+  if (!calendarLockStart) return {};
+
+  // If the slot is on a day BEFORE the lock date, OR
+  // if it's the SAME day but the time is earlier than the lock time
+  if (date < calendarLockStart) {
+    return {
+      style: {
+        backgroundColor: '#f3f4f6',
+        color: '#9ca3af',
+        opacity: 0.5,
+        pointerEvents: 'none', // Prevents clicking the slot
+        cursor: 'not-allowed',
+      },
+    };
+  }
+
+  return {};
+}, [calendarLockStart]);
+  const technologyCategories = useMemo(() => {
+    const byCode = new Map();
+    technologies.forEach((tech) => {
+      const code = getTechnologyCategoryCode(tech) || 'OTHER';
+      const label = getTechnologyCategoryLabel(tech);
+      if (!byCode.has(code)) {
+        byCode.set(code, label);
+      }
+    });
+    return Array.from(byCode.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [technologies]);
+
+  const filteredTechnologies = useMemo(() => {
+    return technologies
+      .filter((tech) => !selectedTechCategory || getTechnologyCategoryCode(tech) === selectedTechCategory)
+      .filter((tech) => !techSearchTerm.trim() || tech.name.toLowerCase().includes(techSearchTerm.toLowerCase()));
+  }, [technologies, selectedTechCategory, techSearchTerm]);
+
+  const schedulableCandidates = useMemo(
+    () => candidates.filter((candidate) => isSchedulableCandidate(candidate.status)),
+    [candidates],
+  );
+
+  const filteredCandidates = schedulableCandidates.filter((c) =>
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const availableCount = events.filter((e) => e.resource?.status === 'AVAILABLE').length;
-  const bookedCount    = events.filter((e) => e.resource?.status === 'BOOKED').length;
+  const availableCount = events.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
+  const bookedCount = events.filter(
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
+  ).length;
+  const completedCount = events.filter(
+    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
+  ).length;
 
-  const interviewerLegend = Object.entries(interviewerColorMap)
-    .map(([id, idx]) => {
-      const ev = events.find((e) => String(e.interviewerId) === String(id));
-      return { id, name: ev?.resource?.interviewer || `#${id}`, palette: INTERVIEWER_PALETTES[idx] };
-    })
-    .slice(0, 20);
+  // ── Interview type (shared between single + panel dialogs) ───────────────
+  const renderInterviewTypeSection = () => (
+    <Card className="border-slate-200">
+      <CardContent className="p-4 space-y-2">
+        <Label className="text-sm font-semibold">Interview Type</Label>
+        <Select
+          value={resolveInterviewType(requestForm.interviewType, interviewType)}
+          onValueChange={(value) => {
+            setInterviewType(value);
+            setRequestForm((prev) => ({ ...prev, interviewType: value }));
+          }}
+        >
+          <SelectTrigger className="bg-white dark:bg-gray-900">
+            <SelectValue placeholder="Select interview type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+            <SelectItem value="HR">HR Interview</SelectItem>
+          </SelectContent>
+        </Select>
+        
+      </CardContent>
+    </Card>
+  );
+
+  const renderCoordinatorSection = () => (
+    <Card className="border-slate-200">
+      <CardContent className="p-4 space-y-4">
+        <p className="text-sm font-semibold">Interview Coordinator <span className="font-normal text-muted-foreground">(optional)</span></p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Coordinator Department</Label>
+            <Select
+              value={requestForm.interviewCoordinatorDepartmentId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorDepartmentChange}
+            >
+              <SelectTrigger className="bg-white dark:bg-gray-900">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Select department</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id.toString()}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Interview Coordinator</Label>
+            <SearchableSelect
+              value={requestForm.interviewCoordinatorId?.toString() || 'NONE'}
+              onValueChange={handleCoordinatorUserChange}
+              disabled={!requestForm.interviewCoordinatorDepartmentId || coordinatorUsersLoading}
+              className="bg-white dark:bg-gray-900"
+              label="Coordinator"
+              placeholder={
+                !requestForm.interviewCoordinatorDepartmentId
+                  ? 'Select department first'
+                  : coordinatorUsersLoading
+                    ? 'Loading users...'
+                    : undefined
+              }
+              searchPlaceholder="Search coordinators..."
+              emptyMessage={
+                coordinatorUsers.length === 0
+                  ? 'No user found for selected department'
+                  : 'No matching users found'
+              }
+              options={coordinatorUsers.map((user) => ({
+                value: user.id.toString(),
+                label: `${user.fullName} (${user.email})`,
+                keywords: `${user.fullName} ${user.email}`,
+              }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Can be anyone from the selected department who will join and coordinate the interview.
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   // ── Candidate section (shared between single + panel dialogs) ─────────────
   const renderCandidateSection = (privilegeError) => (
@@ -759,11 +1200,9 @@ const AvailabilityViewPage = () => {
                 }
               </div>
             )}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Or enter manually</Label>
-              <Input placeholder="Candidate name" value={requestForm.candidateName}
-                onChange={(e) => setRequestForm({ ...requestForm, candidateName: e.target.value })} />
-            </div>
+            {!candidateSearchTerm && (
+              <p className="text-xs text-muted-foreground">Search and select an existing candidate from the list.</p>
+            )}
           </>
         )}
       </div>
@@ -786,12 +1225,6 @@ const AvailabilityViewPage = () => {
         <Textarea placeholder="Special requirements…" value={requestForm.notes}
           onChange={(e) => setRequestForm({ ...requestForm, notes: e.target.value })} rows={3} />
       </div>
-
-      <div className="flex items-center gap-2">
-        <input type="checkbox" id="urgent" checked={requestForm.isUrgent}
-          onChange={(e) => setRequestForm({ ...requestForm, isUrgent: e.target.checked })} className="rounded" />
-        <Label htmlFor="urgent" className="cursor-pointer text-sm">Mark as urgent</Label>
-      </div>
     </div>
   );
 
@@ -807,61 +1240,38 @@ const AvailabilityViewPage = () => {
           className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">Interviewer Availability</h1>
-            <p className="text-muted-foreground text-lg">
+            {/* <p className="text-muted-foreground text-lg">
               View and book interviewer availability · each color = one interviewer
-            </p>
+            </p> */}
           </div>
-          <Button variant="outline" onClick={clearFilters} className="gap-2">
-            <X className="w-4 h-4" /> Clear Filters
-          </Button>
+         
         </motion.div>
-
-        {/* Interviewer color legend */}
-        {interviewerLegend.length > 0 && (
-          <div className="hr-interviewer-legend">
-            {interviewerLegend.map(({ id, name, palette }) => (
-              <div key={id} className="hr-interviewer-legend-chip"
-                style={{ borderColor: palette.solid + '60', background: palette.solid + '12', color: palette.solid }}>
-                <div className="hr-interviewer-legend-dot" style={{ backgroundColor: palette.solid }} />
-                {name}
-              </div>
-            ))}
-            <div className="hr-interviewer-legend-chip"
-              style={{ borderColor: '#10b98160', background: '#10b98112', color: '#10b981' }}>
-              <div className="hr-interviewer-legend-dot" style={{ backgroundColor: '#10b981' }} />
-              🔒 Booked (click to cancel)
-            </div>
-          </div>
-        )}
-
-        {/* Slot counts */}
-        <div className="flex items-center gap-6 px-1 flex-wrap">
-          {[
-            { color: '#6366f1', label: 'Available slots', count: availableCount, textColor: 'text-indigo-600' },
-            { color: '#10b981', label: 'Booked slots',    count: bookedCount,    textColor: 'text-emerald-600' },
-            { color: '#0ea5e9', label: 'Panel selected',  count: panelSlots.length, textColor: 'text-sky-600' },
-          ].map(({ color, label, count, textColor }) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-md shadow-sm" style={{ background: color }} />
-              <span className="text-sm font-medium text-muted-foreground">{label}</span>
-              {count > 0 && <span className={`text-xs font-bold ${textColor} px-1.5 py-0.5 rounded-full`}>{count}</span>}
-            </div>
-          ))}
-        </div>
 
         {/* Filters */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5" /> Filters
             </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFiltersCollapsed((value) => !value)}
+              className="h-9 gap-2"
+              aria-expanded={!isFiltersCollapsed}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
+              {isFiltersCollapsed ? 'Show' : 'Hide'}
+            </Button>
           </CardHeader>
+          {!isFiltersCollapsed && (
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Department</Label>
                 <Select value={filterDept.length > 0 ? filterDept[0].toString() : 'ALL'}
-                  onValueChange={(v) => setFilterDept(v === 'ALL' ? [] : [parseInt(v)])}>
+                  onValueChange={handleDepartmentChange}>
                   <SelectTrigger><SelectValue placeholder="All Departments" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Departments</SelectItem>
@@ -871,53 +1281,112 @@ const AvailabilityViewPage = () => {
               </div>
 
               <div className="space-y-2" ref={techDropdownRef}>
-                <Label className="flex items-center gap-2">
-                  <Code className="w-4 h-4" /> Technologies {filterTech.length > 0 && `(${filterTech.length})`}
-                </Label>
-                <div className="relative">
+                <Label>Categories</Label>
+                  <Select
+                    value={selectedTechCategory || 'NONE'}
+                    onValueChange={(value) => {
+                      setSelectedTechCategory(value === 'NONE' ? '' : value);
+                      setShowTechDropdown(false);
+                      setTechSearchTerm('');
+                      // preserve already-selected technologies so user can pick across categories
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">All Categories</SelectItem>
+                      {technologyCategories.map((category) => (
+                        <SelectItem key={category.code} value={category.code}>{category.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  </div>
+
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    Technologies
+                  </Label>
+                
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search…" value={techSearchTerm}
+                    <Input
+                      placeholder={'Select technologies…'}
+                      disabled={!selectedTechCategory}
+                      value={techSearchTerm}
                       onChange={(e) => setTechSearchTerm(e.target.value)}
                       onFocus={() => setShowTechDropdown(true)}
-                      className="pl-10 pr-10" />
-                    <button onClick={() => setShowTechDropdown(!showTechDropdown)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      className="pl-10 pr-10"
+                    />
+                    <button
+                      onClick={() => setShowTechDropdown(!showTechDropdown)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
                       <ChevronDown className={`w-4 h-4 transition-transform ${showTechDropdown ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
+
                   <AnimatePresence>
-                    {showTechDropdown && (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                        {Object.keys(filteredGroupedTechs).length === 0
-                          ? <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
-                          : <div className="py-2">
-                            {Object.entries(filteredGroupedTechs).sort(([a], [b]) => a.localeCompare(b)).map(([cat, techs]) => (
-                              <div key={cat} className="mb-2">
-                                <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">{cat}</div>
-                                {techs.map((tech) => (
-                                  <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
-                                    className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${filterTech.includes(tech.id) ? 'bg-primary/10' : ''}`}>
-                                    <span className="font-medium">{tech.name}</span>
-                                    {filterTech.includes(tech.id) && <Badge variant="secondary" className="text-xs">Selected</Badge>}
-                                  </button>
-                                ))}
-                              </div>
-                            ))}
+                    {selectedTechCategory && showTechDropdown && (
+                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }} className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                        {filteredTechnologies.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">No technologies found</div>
+                        ) : (
+                          <div className="py-2">
+                            {filteredTechnologies.map((tech) => {
+                              const isSelected = filterTech.includes(tech.id);
+                              const isCore = isCandidateCoreTech(tech.id);
+                              return (
+                              <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${
+                                  isSelected ? (isCore ? 'bg-amber-50' : 'bg-primary/10') : ''
+                                }`}>
+                                <span className="flex items-center gap-2 font-medium">
+                                  {isCore && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
+                                  {tech.name}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">{getTechnologyCategoryLabel(tech)}</span>
+                                  {isSelected && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs ${
+                                        isCore
+                                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                                          : ''
+                                      }`}
+                                    >
+                                      {isCore ? 'Candidate Core' : 'Selected'}
+                                    </Badge>
+                                  )}
+                                </span>
+                              </button>
+                            );
+                            })}
                           </div>
-                        }
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                
+
                 {filterTech.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {filterTech.map((id) => {
                       const tech = technologies.find((t) => t.id === id);
+                      const isCore = isCandidateCoreTech(id);
                       return tech ? (
-                        <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                          {tech.name}
+                        <Badge
+                          key={id}
+                          variant="outline"
+                          className={`gap-1 pr-1 ${
+                            isCore
+                              ? 'border-amber-300 bg-amber-50 text-amber-900'
+                              : 'border-slate-200 bg-secondary text-secondary-foreground'
+                          }`}
+                        >
+                          {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
+                          <span>{tech.name}</span>
+                          
                           <button onClick={() => setFilterTech(filterTech.filter((x) => x !== id))}
                             className="ml-1 hover:text-destructive rounded-full p-0.5">
                             <X className="w-3 h-3" />
@@ -930,25 +1399,36 @@ const AvailabilityViewPage = () => {
               </div>
 
               <div className="space-y-2">
+                <DomainMultiSelect
+                  label="Domains"
+                  domains={domains}
+                  selectedIds={filterDomain}
+                  onChange={setFilterDomain}
+                  placeholder="Filter by domains…"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label>Min. Experience (Years)</Label>
                 <Input type="number" min="0" placeholder="Any" value={minExperience}
                   onChange={(e) => setMinExperience(e.target.value)} />
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label>Department (Tier/Level Filter)</Label>
                 <Select value={selectedDeptForDesignation || 'ANY'}
-                  onValueChange={(v) => setSelectedDeptForDesignation(v === 'ANY' ? '' : v)}>
+                  onValueChange={handleDepartmentChange}>
                   <SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ANY">Any</SelectItem>
                     {departments.map((d) => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
+              </div> */}
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Award className="w-4 h-4" /> Min. Tier</Label>
+                <Label className="flex items-center gap-2">
+                  <Award className="w-4 h-4" /> Min. Tier</Label>
                 <Select value={selectedTierInDept || 'ANY'}
                   onValueChange={(v) => { if (v === 'ANY') { setSelectedTierInDept(''); setMinDesignationLevel(''); } else setSelectedTierInDept(v); }}
                   disabled={!selectedDeptForDesignation}>
@@ -961,7 +1441,7 @@ const AvailabilityViewPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Min. Level in Tier</Label>
+                <Label className="flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Min. Designation </Label>
                 <Select value={minDesignationLevel || 'ANY'}
                   onValueChange={(v) => setMinDesignationLevel(v === 'ANY' ? '' : v)}
                   disabled={!selectedTierInDept}>
@@ -972,11 +1452,29 @@ const AvailabilityViewPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">From (Date & Time)</Label>
+                <Input
+                  type="date"
+                  value={formatInputDate(dateRange.start)}
+                  onChange={(e) => handleStartDateTimeChange(e.target.value)}
+                />
+              </div>
+
+              
             </div>
+
+            
+
+ 
+            
 
             <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-sky-50 dark:from-indigo-950/20 dark:to-sky-950/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <span className="text-sm font-semibold text-muted-foreground">Slots Shown</span>
+                <span className="text-sm font-semibold text-muted-foreground">Slots Shown </span>
                 <div className="flex gap-6">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-indigo-500" />
@@ -987,86 +1485,110 @@ const AvailabilityViewPage = () => {
                     <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-700" />
+                    <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
                     <span className="text-sm"><span className="font-bold text-slate-600">{events.length}</span><span className="text-muted-foreground ml-1">total</span></span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={clearFilters} className="gap-2">
+                     <X className="w-4 h-4" /> Clear Filters
+                  </Button>
+                </div>
                 </div>
               </div>
             </div>
           </CardContent>
-        </Card>
-
-        {/* Panel mode banner */}
-        <Card className={panelMode ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/20' : ''}>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4">
-                <Switch checked={panelMode} onCheckedChange={(v) => { setPanelMode(v); setPanelSlots([]); }} />
-                <div>
-                  <p className="font-semibold text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-sky-600" /> Panel Interview Mode
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {panelMode
-                      ? 'Click AVAILABLE slots to add interviewers. Selected slots show a ✓ badge. Overlap window calculated automatically.'
-                      : 'Enable to schedule one candidate with multiple interviewers at the same time.'}
-                  </p>
-                </div>
-              </div>
-
-              {panelMode && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  {panelSlots.length > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {panelSlots.map((ps) => (
-                        <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {ps.slot.resource.interviewer}
-                          <button onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
-                            className="ml-1 hover:text-red-600"><X className="w-3 h-3" /></button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {panelSlots.length > 0 ? (
-                    <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white gap-2"
-                      disabled={panelTimeOptions.length === 0}
-                      onClick={() => {
-                        setPanelBookStartOverride(''); setPanelBookEndOverride('');
-                        setRequestForm({ candidateId: null, candidateName: '', candidateDesignationId: '', requiredTechnologyIds: [], isUrgent: false, notes: '' });
-                        setCandidateSearchTerm('');
-                        setPanelDialogOpen(true);
-                      }}>
-                      <Send className="w-4 h-4" />
-                      Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
-                    </Button>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
-                  )}
-                  {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
-                    <p className="text-xs text-red-600 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> No overlapping time
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
+          )}
         </Card>
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5" /> Availability Calendar
-              {panelMode && <Badge className="ml-2 bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
-            </CardTitle>
-            <CardDescription>
-              {panelMode
-                ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
-                : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" /> Availability Calendar
+                {panelMode && <Badge className="bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>}
+              </CardTitle>
+              <CardDescription>
+                {panelMode
+                  ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
+                  : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+              </CardDescription>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={panelMode ? 'default' : 'outline'}
+              className="gap-2 lg:self-start"
+              onClick={() => {
+                setPanelMode((value) => !value);
+                setPanelSlots([]);
+              }}
+            >
+              <Users className="w-4 h-4" />
+              {panelMode ? 'Exit Panel Mode' : 'Panel Interview Mode'}
+            </Button>
           </CardHeader>
+          {panelMode && (
+            <CardContent className="pt-0 pb-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-sky-300 bg-sky-50 p-3 dark:bg-sky-950/20">
+                {panelSlots.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {panelSlots.map((ps) => (
+                      <Badge key={ps.slot.id} className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {ps.slot.resource.interviewer}
+                        <button
+                          onClick={() => setPanelSlots(panelSlots.filter((s) => s.slot.id !== ps.slot.id))}
+                          className="ml-1 hover:text-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {panelSlots.length > 0 ? (
+                  <Button
+                    size="sm"
+                    className="bg-sky-600 hover:bg-sky-700 text-white gap-2 self-start"
+                    disabled={panelTimeOptions.length === 0}
+                    onClick={() => {
+                      setPanelBookStartOverride('');
+                      setPanelBookEndOverride('');
+                      setRequestForm(prev => ({
+                        candidateId: prev.candidateId,
+                        candidateName: prev.candidateName,
+                        candidateDesignationId: prev.candidateDesignationId,
+                        interviewType: prev.interviewType,
+                        interviewCoordinatorId: prev.interviewCoordinatorId,
+                        interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
+                        requiredTechnologyIds: [],
+                        isUrgent: false,
+                        notes: '',
+                      }));
+                      setCandidateSearchTerm('');
+                      setPanelDialogOpen(true);
+                    }}
+                  >
+                    <Send className="w-4 h-4" />
+                    Schedule Panel ({panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''})
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Click calendar slots to add interviewers…</p>
+                )}
+                {panelSlots.length > 1 && panelTimeOptions.length === 0 && (
+                  <p className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> No overlapping time
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          )}
           <CardContent>
             <AnimatePresence mode="wait">
               {loading ? (
@@ -1083,42 +1605,65 @@ const AvailabilityViewPage = () => {
               ) : (
                 <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="availability-calendar-container hr-calendar"
-                  style={{ height: '720px' }}>
+                  style={{ width: '100%', height : '65vh' }}>
+
                   <Calendar
                     localizer={localizer}
+                    components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
                     events={events}
+                    date={calendarDate}
+                    onNavigate={(nextDate) => {
+                      const nextDay = startOfDay(nextDate);
+                      if (calendarLockStart && nextDay < calendarLockStart) {
+                        setCalendarDate(calendarLockStart);
+                        return;
+                      }
+                      setCalendarDate(nextDay);
+                      // Debounce navigation fetches
+                      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+                      navTimerRef.current = setTimeout(() => fetchAvailabilityForView(currentView, nextDay), 200);
+                    }}
                     startAccessor="start"
                     endAccessor="end"
+                    scrollToTime={calendarLockStart ? 
+                    calendarLockStart : new Date(1970, 0, 1, CALENDAR_MIN_HOUR, 0)}
                     onSelectEvent={handleEventClick}
                     eventPropGetter={eventStyleGetter}
-                    // ── Custom event component with panel ✓ icon ──────────────
-                    components={{ event: CalendarEventComponent }}
+                    dayPropGetter={calendarDayPropGetter}
+                    slotPropGetter={calendarSlotPropGetter}
+                    
                     style={{ height: '100%' }}
                     views={['month', 'week', 'day']}
                     defaultView="week"
+                    onView={(view) => {
+                      setCurrentView(view);
+                      // Debounce view change fetches
+                      if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+                      viewTimerRef.current = setTimeout(() => fetchAvailabilityForView(view, calendarDate), 200);
+                    }}
                     step={60}
                     timeslots={1}
-                    min={new Date(1970, 0, 1, 7, 0)}
-                    max={new Date(1970, 0, 1, 19, 0)}
+                    min={new Date(1970, 0, 1, 0, 0, 0)}
+                    max={new Date(1970, 0, 1, 23, 59, 59)}
                     tooltipAccessor={tooltipAccessor}
                     popup
                     showMultiDayTimes
                     formats={{
-                      timeGutterFormat: 'HH:mm',
-                      eventTimeRangeFormat: ({ start, end }) =>
-                        `${format(start, 'HH:mm')}–${format(end, 'HH:mm')}`,
+                      timeGutterFormat: calendarFormats.timeGutterFormat,
+                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
                     }}
                   />
                 </motion.div>
               )}
             </AnimatePresence>
+
           </CardContent>
         </Card>
       </div>
 
       {/* ══ CANCEL BOOKED DIALOG ═══════════════════════════════════════════ */}
       <Dialog open={cancelDialogOpen} onOpenChange={(o) => { if (!cancelling) setCancelDialogOpen(o); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="px-3 py-0 max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Cancel Interview
@@ -1135,13 +1680,28 @@ const AvailabilityViewPage = () => {
               {cancelTarget.resource.candidateName && (
                 <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
               )}
+              {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
+                <p className="text-sm">
+                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.interviewCoordinatorName && (
+                <p className="text-sm">
+                  Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                </p>
+              )}
+              {cancelTarget.resource.coordinatedHrName && (
+                <p className="text-sm">
+                  Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
-                {format(cancelTarget.start, 'PPP')} · {format(cancelTarget.start, 'h:mm a')} – {format(cancelTarget.end, 'h:mm a')}
+                {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
               </p>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter >
             <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
               Keep Interview
             </Button>
@@ -1158,24 +1718,24 @@ const AvailabilityViewPage = () => {
 
       {/* ══ SINGLE INTERVIEW DIALOG ════════════════════════════════════════ */}
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Send className="w-6 h-6 text-primary" /> Schedule Interview
             </DialogTitle>
-            <DialogDescription>
+            {/* <DialogDescription>
               Schedule an interview with {selectedSlot?.resource.interviewer}
-            </DialogDescription>
+            </DialogDescription> */}
           </DialogHeader>
-
+          <DialogBody>
           {selectedSlot && (
-            <div className="space-y-6 py-4">
+            <div className="space-y-2">
               {/* Interviewer info */}
               <Card className="bg-accent/50">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: INTERVIEWER_PALETTES[selectedSlot.paletteIdx]?.solid || '#6366f1' }} />
+                    {/* <div className="w-3 h-3 rounded-full" */}
+                      {/* // style={{ backgroundColor: INTERVIEWER_PALETTES[selectedSlot.paletteIdx]?.solid || '#6366f1' }} /> */}
                     <User className="w-5 h-5 text-primary" />
                     <div>
                       <p className="font-semibold">{selectedSlot.resource.interviewer}</p>
@@ -1193,13 +1753,21 @@ const AvailabilityViewPage = () => {
                   <div className="flex items-center gap-3">
                     <Clock className="w-5 h-5 text-primary" />
                     <p className="text-sm">
-                      {format(selectedSlot.start, 'PPP')} · {format(selectedSlot.start, 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')}
+                      {formatDateTimeRange(selectedSlot.start, selectedSlot.end)}
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
                     <Code className="w-5 h-5 text-primary mt-1" />
                     <div className="flex flex-wrap gap-2">
-                      {selectedSlot.resource.skills.map((s, i) => <Badge key={i} variant="outline">{s}</Badge>)}
+                      {sortSkillsWithCoreFirst(
+                        selectedSlot.resource.skills,
+                        selectedSlot.resource.coreTechnologies,
+                      ).map((s, i) => (
+                        renderInterviewerSkillBadge(s, {
+                          key: i,
+                          coreTechnologies: selectedSlot.resource.coreTechnologies,
+                        })
+                      ))}
                     </div>
                   </div>
                 </CardContent>
@@ -1241,22 +1809,27 @@ const AvailabilityViewPage = () => {
                   </div>
                   {bookStartTime && bookEndTime && (
                     <div className="mt-3 p-2 rounded bg-amber-100 dark:bg-amber-900/30 text-xs text-amber-800 space-y-1">
-                      <p><strong>Interview:</strong> {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} – {format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')}</p>
+                      <p><strong>Interview:</strong> {formatTimeRange(parseTimeOnDate(bookStartTime, selectedSlot.start), parseTimeOnDate(bookEndTime, selectedSlot.start))}</p>
                       {bookStartTime > format(selectedSlot.start, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(selectedSlot.start, 'h:mm a')} – {format(parseTimeOnDate(bookStartTime, selectedSlot.start), 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available</p>
                       )}
                       {bookEndTime < format(selectedSlot.end, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{format(parseTimeOnDate(bookEndTime, selectedSlot.start), 'h:mm a')} – {format(selectedSlot.end, 'h:mm a')} remains available</p>
+                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available</p>
                       )}
                     </div>
                   )}
                 </CardContent>
               </Card>
 
+              {renderInterviewTypeSection()}
+
+              {renderCoordinatorSection()}
+
               {/* Candidate + privilege check */}
               {renderCandidateSection(singlePrivilegeError)}
             </div>
           )}
+          </DialogBody>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
@@ -1283,8 +1856,8 @@ const AvailabilityViewPage = () => {
               One candidate — {panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''} simultaneously
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-6 py-4">
+        <DialogBody>
+          <div className="space-y-2">
             {/* Panel interviewers */}
             <Card className="border-sky-200 bg-sky-50 dark:bg-sky-950/20">
               <CardContent className="p-4">
@@ -1308,7 +1881,7 @@ const AvailabilityViewPage = () => {
                               {privErr && <ShieldAlert className="w-3.5 h-3.5 text-red-500" />}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {ps.slot.resource.department} · Slot: {format(ps.slot.start, 'h:mm a')} – {format(ps.slot.end, 'h:mm a')}
+                              {ps.slot.resource.department} · Slot: {formatTimeRange(ps.slot.start, ps.slot.end)}
                               {ps.slot.resource.interviewerTierOrder != null && (
                                 <span className="ml-1 text-indigo-600">(Tier {ps.slot.resource.interviewerTierOrder})</span>
                               )}
@@ -1317,7 +1890,16 @@ const AvailabilityViewPage = () => {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-1 max-w-[120px] justify-end">
-                          {ps.slot.resource.skills.slice(0, 2).map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
+                          {sortSkillsWithCoreFirst(
+                            ps.slot.resource.skills,
+                            ps.slot.resource.coreTechnologies,
+                          )
+                            .slice(0, 2)
+                            .map((s, i) => renderInterviewerSkillBadge(s, {
+                              key: i,
+                              className: 'text-xs',
+                              coreTechnologies: ps.slot.resource.coreTechnologies,
+                            }))}
                         </div>
                       </div>
                     );
@@ -1366,7 +1948,7 @@ const AvailabilityViewPage = () => {
                     {panelBookStart && panelBookEnd && (
                       <p className="mt-2 text-xs text-amber-800">
                         <strong>Interview:</strong>{' '}
-                        {format(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), 'h:mm a')} – {format(parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start), 'h:mm a')}
+                        {formatTimeRange(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start))}
                       </p>
                     )}
                   </>
@@ -1374,10 +1956,14 @@ const AvailabilityViewPage = () => {
               </CardContent>
             </Card>
 
+            {renderInterviewTypeSection()}
+
+            {renderCoordinatorSection()}
+
             {/* Candidate + privilege check (panel errors) */}
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}
           </div>
-
+        </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
             <Button

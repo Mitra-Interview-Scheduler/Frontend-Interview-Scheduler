@@ -1,5 +1,6 @@
 // src/services/interviewRequestAPI.js
 import api from './api';
+import { withQuery } from './queryParams';
 
 export const interviewRequestAPI = {
   // Create interview request (auto-accepted)
@@ -15,8 +16,10 @@ export const interviewRequestAPI = {
   },
 
   // Get upcoming interviews for interviewer
-  getUpcomingInterviews: async () => {
-    const response = await api.get('/interview-requests/upcoming');
+  getUpcomingInterviews: async (params = null) => {
+    const response = await api.get(withQuery('/interview-requests/upcoming', {
+      size: params?.size,
+    }));
     return response.data;
   },
 

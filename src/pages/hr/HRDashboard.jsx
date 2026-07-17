@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
+  DialogHeader, DialogTitle,DialogBody
 } from '@/components/ui/dialog';
 import {
   Calendar, Users, ClipboardList, TrendingUp, Clock, CheckCircle2,
@@ -15,10 +15,28 @@ import {
   Trash2, X, User, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
+import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
-import { candidateAPI } from '@/services/candidateAPI';
+import  candidateAPI from '@/services/candidateAPI';
+
+import { departmentAPI } from '@/services/departmentAPI';
+import { tierAPI } from '@/services/tierAPI';
 import { toast } from '@/hooks/use-toast';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import HRFilters from './HRFilters';
+import { useCandidateSteps } from '@/hooks/useCandidateSteps';
+import { formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import {
+  getCandidateStep,
+  getCandidateStatusBadgeClass,
+  getCandidateStatusLabel,
+} from '@/lib/candidateSteps';
+import {
+  ACTIVE_PANEL_REQUEST_STATUSES,
+  InterviewRequestStatus,
+  InterviewScheduleStatus,
+  TERMINAL_REQUEST_STATUSES,
+} from '@/lib/statusConstants';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +45,7 @@ const safeArray = (v) => (Array.isArray(v) ? v : []);
 // Panels that are cancelled must be excluded — this was the root cause of
 // the item persisting after cancel (backend cancelled it but frontend
 // re-added it from the refresh because there was no status guard).
-const ACTIVE_PANEL_STATUSES = new Set(['SCHEDULED', 'ACCEPTED', 'CONFIRMED', undefined, null]);
+const ACTIVE_PANEL_STATUSES = ACTIVE_PANEL_REQUEST_STATUSES;
 
 const buildScheduleItems = (requests, panels) => {
   const items = [];
@@ -35,15 +53,16 @@ const buildScheduleItems = (requests, panels) => {
   safeArray(panels)
   .filter((p) => {
     const s = (p.status ?? '').toUpperCase();
-    if (s === 'CANCELLED' || s === 'COMPLETED' || s === 'REJECTED') return false;
+    if (TERMINAL_REQUEST_STATUSES.has(s)) return false;
 
     // ← ADD THIS: if every child request is cancelled, the panel is effectively cancelled
     const reqs = safeArray(p.panelRequests);
-    if (reqs.length > 0 && reqs.every((r) => r.status === 'CANCELLED')) return false;
+    if (reqs.length > 0 && reqs.every((r) => r.status === InterviewRequestStatus.CANCELLED)) return false;
 
     return true;
   })
     .forEach((panel) => {
+      const firstReq = safeArray(panel.panelRequests)[0];
       items.push({
         id: `panel-${panel.id}`,
         type: 'panel',
@@ -52,9 +71,12 @@ const buildScheduleItems = (requests, panels) => {
         candidateId: panel.candidate?.id ?? null,
         startDateTime: panel.startDateTime,
         endDateTime: panel.endDateTime,
-        status: 'ACCEPTED',
+        status: InterviewRequestStatus.ACCEPTED,
         isUrgent: panel.isUrgent,
         notes: panel.notes,
+        interviewType: firstReq?.interviewType ?? null,
+        interviewCoordinatorName: panel.interviewCoordinatorName ?? firstReq?.interviewCoordinatorName ?? null,
+        coordinatedHrName: firstReq?.coordinatedHrName ?? null,
         interviewers: safeArray(panel.panelRequests).map((r) => ({
           name: r.assignedInterviewerName || r.assignedInterviewer?.fullName || '—',
           requestId: r.id,
@@ -65,7 +87,7 @@ const buildScheduleItems = (requests, panels) => {
     });
 
   safeArray(requests)
-    .filter((r) => !r.panelId && r.status !== 'CANCELLED' && r.status !== 'REJECTED')
+    .filter((r) => !r.panelId && r.status !== InterviewRequestStatus.CANCELLED && r.status !== InterviewRequestStatus.REJECTED)
     .forEach((req) => {
       items.push({
         id: `req-${req.id}`,
@@ -78,6 +100,9 @@ const buildScheduleItems = (requests, panels) => {
         status: req.status,
         isUrgent: req.isUrgent,
         notes: req.notes,
+        interviewType: req.interviewType ?? null,
+        interviewCoordinatorName: req.interviewCoordinatorName ?? null,
+        coordinatedHrName: req.coordinatedHrName ?? null,
         interviewers: [{ name: req.assignedInterviewerName || '—', requestId: req.id }],
         technologies: safeArray(req.requiredTechnologies),
       });
@@ -90,11 +115,18 @@ const buildScheduleItems = (requests, panels) => {
 
 const HRDashboard = () => {
   const navigate = useNavigate();
+  const { formatDateTime, formatTime } = useFormattedDateTime();
+  const { candidateSteps } = useCandidateSteps();
 
   const [candidates, setCandidates]           = useState([]);
   const [requests, setRequests]               = useState([]);
   const [panels, setPanels]                   = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [departments, setDepartments]         = useState([]);
+  const [tiersForDept, setTiersForDept]       = useState([]);
+  const [selectedDept, setSelectedDept]       = useState('');
+  const [selectedTier, setSelectedTier]       = useState('');
+  const [tierFilterMode, setTierFilterMode]   = useState('min');
   const [loading, setLoading]                 = useState(true);
   const [error, setError]                     = useState(null);
   const [lastRefreshed, setLastRefreshed]     = useState(null);
@@ -103,37 +135,124 @@ const HRDashboard = () => {
   const [cancelling, setCancelling]           = useState(false);
   const [expandedItems, setExpandedItems]     = useState(new Set());
   // Locally dismissed items — persisted so they survive refresh
-  const [dismissed, setDismissed]             = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('hr_dismissed_items') || '[]')); }
-    catch { return new Set(); }
-  });
+  // const [dismissed, setDismissed]             = useState(() => {
+  //   try { return new Set(JSON.parse(localStorage.getItem('hr_dismissed_items') || '[]')); }
+  //   catch { return new Set(); }
+  // });
 
-  const dismissItem = (itemId) => {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(itemId);
-      localStorage.setItem('hr_dismissed_items', JSON.stringify([...next]));
-      return next;
-    });
-  };
+  // const dismissItem = (itemId) => {
+  //   setDismissed((prev) => {
+  //     const next = new Set(prev);
+  //     next.add(itemId);
+  //     localStorage.setItem('hr_dismissed_items', JSON.stringify([...next]));
+  //     return next;
+  //   });
+  // };
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const loadDashboardData = useCallback(async () => {
+  const loadTiersForDept = async (deptId) => {
+    try {
+      const data = await tierAPI.getTiersByDepartment(parseInt(deptId));
+      setTiersForDept(data.sort((a, b) => a.tierOrder - b.tierOrder));
+    } catch (e) { console.error(e); }
+  };
+
+  const loadDashboardData = useCallback(async (filters = null) => {
     setLoading(true);
     setError(null);
     try {
+      // Pass filters to all server endpoints that support them. If the server doesn't filter,
+      // the client will still receive full lists (we keep no heavy client-side filtering here).
       const results = await Promise.allSettled([
-        candidateAPI.getAllCandidates(),
-        hrAvailabilityAPI.getHRRequests(),
-        hrAvailabilityAPI.getMyPanels(),
-        hrAvailabilityAPI.getAllAvailability(),
+        candidateAPI.getAllCandidates({ departmentId: filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null }),
+        hrAvailabilityAPI.getHRRequests(filters, { size: 100 }),
+        hrAvailabilityAPI.getMyPanels(filters, { size: 100 }),
+        hrAvailabilityAPI.getAllAvailability(filters),
       ]);
       const [cRes, rRes, pRes, sRes] = results;
-      setCandidates(safeArray(cRes.status === 'fulfilled' ? cRes.value : []));
-      setRequests(safeArray(rRes.status === 'fulfilled' ? rRes.value : []));
-      setPanels(safeArray(pRes.status === 'fulfilled' ? pRes.value : []));
-      setAvailabilitySlots(safeArray(sRes.status === 'fulfilled' ? sRes.value : []));
+      const srvCandidates = safeArray(cRes.status === 'fulfilled' ? cRes.value : []);
+      const srvRequests   = safeArray(rRes.status === 'fulfilled' ? rRes.value : []);
+      const srvPanels     = safeArray(pRes.status === 'fulfilled' ? pRes.value : []);
+      const srvSlots      = safeArray(sRes.status === 'fulfilled' ? sRes.value : []);
+
+      // Client-side fallback: if backend doesn't apply department/tier filters
+      // ensure the dashboard still respects selectedDept/selectedTier.
+      let finalCandidates = srvCandidates;
+      let finalRequests = srvRequests;
+      let finalPanels = srvPanels;
+
+      try {
+        const deptId = filters?.departmentIds?.length > 0 ? filters.departmentIds[0] : null;
+        const minTierId = filters?.minTierId ?? null;
+        const exactTierId = filters?.exactTierId ?? null;
+
+        const candidateMap = new Map(srvCandidates.map((c) => [c.id, c]));
+
+        if (deptId) {
+          finalCandidates = finalCandidates.filter((c) => c.departmentId === deptId || (c.department?.id === deptId));
+          finalRequests = finalRequests.filter((r) => {
+            const cand = candidateMap.get(r.candidateId);
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+          finalPanels = finalPanels.filter((p) => {
+            const candId = p.candidate?.id ?? p.candidateId ?? null;
+            const cand = candId ? candidateMap.get(candId) : null;
+            return cand ? (cand.departmentId === deptId || cand.department?.id === deptId) : true;
+          });
+        }
+
+        // Tier filtering uses tierOrder for comparisons. Find tierOrder from tiersForDept
+        let targetTierOrder = null;
+        if (minTierId || exactTierId) {
+          const tid = minTierId || exactTierId;
+          const tierObj = tiersForDept.find((t) => t.id === tid) || null;
+          targetTierOrder = tierObj ? tierObj.tierOrder : null;
+        }
+
+        if (targetTierOrder != null) {
+          if (minTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier >= targetTierOrder);
+            });
+          } else if (exactTierId) {
+            finalCandidates = finalCandidates.filter((c) => {
+              const candTier = c.targetDesignationTierOrder ?? c.tierOrder ?? c.currentDesignation?.tier?.tierOrder;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalRequests = finalRequests.filter((r) => {
+              const cand = candidateMap.get(r.candidateId);
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+            finalPanels = finalPanels.filter((p) => {
+              const candId = p.candidate?.id ?? p.candidateId ?? null;
+              const cand = candId ? candidateMap.get(candId) : null;
+              const candTier = cand ? (cand.targetDesignationTierOrder ?? cand.tierOrder ?? cand.currentDesignation?.tier?.tierOrder) : null;
+              return candTier == null ? true : (candTier === targetTierOrder);
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Client-side filter fallback failed', e);
+      }
+
+      setCandidates(finalCandidates);
+      setRequests(finalRequests);
+      setPanels(finalPanels);
+      setAvailabilitySlots(srvSlots);
       setLastRefreshed(new Date());
     } catch (err) {
       console.error(err);
@@ -143,7 +262,41 @@ const HRDashboard = () => {
     }
   }, []);
 
-  useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
+  useEffect(() => {
+    // load departments for filter UI
+    (async () => {
+      try {
+        const depts = await departmentAPI.getAllDepartments();
+        setDepartments(depts || []);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDept) loadTiersForDept(selectedDept);
+    else setTiersForDept([]);
+  }, [selectedDept]);
+
+  // reload availability when filters change
+  useEffect(() => {
+    // If user selected a specific tier, treat it as an exact-tier filter
+    // scoped to the selected department (user expectation: "Selected Department and Selected Tier only").
+    const filters = {
+      departmentIds: selectedDept ? [parseInt(selectedDept)] : null,
+      minTierId: null,
+      exactTierId: null,
+    };
+
+    if (selectedTier) {
+      filters.exactTierId = parseInt(selectedTier);
+    } else {
+      // no specific tier chosen — honor tierFilterMode when applicable
+      filters.minTierId = tierFilterMode === 'min' && selectedTier ? parseInt(selectedTier) : null;
+      filters.exactTierId = tierFilterMode === 'exact' && selectedTier ? parseInt(selectedTier) : null;
+    }
+
+    loadDashboardData(filters);
+  }, [selectedDept, selectedTier, tierFilterMode]);
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
@@ -204,7 +357,7 @@ const HRDashboard = () => {
     return acc;
   }, {});
 
-  const acceptedRequests   = requests.filter((r) => r.status === 'ACCEPTED');
+  const acceptedRequests   = requests.filter((r) => r.status === InterviewRequestStatus.ACCEPTED);
   const todayInterviews    = acceptedRequests.filter((r) => { try { return isToday(parseISO(r.preferredStartDateTime)); } catch { return false; } });
   const tomorrowInterviews = acceptedRequests.filter((r) => { try { return isTomorrow(parseISO(r.preferredStartDateTime)); } catch { return false; } });
   const thisWeekInterviews = acceptedRequests.filter((r) => { try { return isThisWeek(parseISO(r.preferredStartDateTime), { weekStartsOn: 1 }); } catch { return false; } });
@@ -213,13 +366,13 @@ const HRDashboard = () => {
 
   const scheduleItems    = buildScheduleItems(requests, panels);
   const upcomingSchedule = scheduleItems.filter((item) => {
-    if (dismissed.has(item.id)) return false;
+    // if (dismissed.has(item.id)) return false;
     // Use endDateTime so past interviews don't show; fall back to start + 1h
     const end = item.endDateTime
       ? new Date(item.endDateTime)
       : new Date(new Date(item.startDateTime).getTime() + 60 * 60 * 1000);
-    return end > new Date() && item.status === 'ACCEPTED';
-  });
+    return end > new Date() && item.status === InterviewRequestStatus.ACCEPTED;
+  }).slice(0, 10);
   const recentRequests   = [...requests]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);
@@ -229,9 +382,9 @@ const HRDashboard = () => {
   const formatInterviewTime = (dateStr) => {
     try {
       const d = parseISO(dateStr);
-      if (isToday(d))    return `Today, ${format(d, 'h:mm a')}`;
-      if (isTomorrow(d)) return `Tomorrow, ${format(d, 'h:mm a')}`;
-      return format(d, 'MMM d, h:mm a');
+      if (isToday(d)) return `Today, ${formatTime(d)}`;
+      if (isTomorrow(d)) return `Tomorrow, ${formatTime(d)}`;
+      return formatDateTime(d);
     } catch { return dateStr || '—'; }
   };
 
@@ -250,18 +403,9 @@ const HRDashboard = () => {
   };
 
   const getCandidateStatusBadge = (status) => {
-    const map = {
-      APPLIED:     'bg-blue-100 text-blue-800',
-      SCREENING:   'bg-purple-100 text-purple-800',
-      SCHEDULED:   'bg-green-100 text-green-800',
-      INTERVIEWED: 'bg-teal-100 text-teal-800',
-      OFFERED:     'bg-amber-100 text-amber-800',
-      HIRED:       'bg-emerald-100 text-emerald-800',
-      REJECTED:    'bg-red-100 text-red-800',
-    };
     return (
-      <Badge className={`${map[status] || 'bg-gray-100 text-gray-700'} text-xs font-medium`}>
-        {status}
+      <Badge className={`${getCandidateStatusBadgeClass(candidateSteps, status)} text-xs font-medium`}>
+        {getCandidateStatusLabel(candidateSteps, status)}
       </Badge>
     );
   };
@@ -280,13 +424,13 @@ const HRDashboard = () => {
     {
       title: 'Total Candidates',
       value: totalCandidates,
-      subtext: `${candidatesByStatus.APPLIED || 0} applied · ${candidatesByStatus.SCREENING || 0} screening`,
+      subtext: `${candidatesByStatus.NEW || 0} ${getCandidateStatusLabel(candidateSteps, 'NEW').toLowerCase()} · ${candidatesByStatus.SCREENING || 0} ${getCandidateStatusLabel(candidateSteps, 'SCREENING').toLowerCase()}`,
       icon: Users, color: 'text-blue-600', bg: 'bg-blue-50',
       onClick: () => navigate('/hr/candidates'),
     },
     {
       title: 'Scheduled Interviews',
-      value: candidatesByStatus.SCHEDULED || 0,
+      value: candidatesByStatus.INTERVIEW_SCHEDULES || candidatesByStatus.SCHEDULED || 0,
       subtext: `${todayInterviews.length} today · ${tomorrowInterviews.length} tomorrow`,
       icon: Calendar, color: 'text-green-600', bg: 'bg-green-50',
       onClick: () => navigate('/hr/availability'),
@@ -341,9 +485,17 @@ const HRDashboard = () => {
             <p className="text-muted-foreground text-lg">
               Manage candidates, schedule interviews, and track your pipeline
             </p>
+            <HRFilters
+              departments={departments}
+              tiersForDept={tiersForDept}
+              selectedDept={selectedDept}
+              setSelectedDept={setSelectedDept}
+              selectedTier={selectedTier}
+              setSelectedTier={setSelectedTier}
+            />
             {lastRefreshed && (
               <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {format(lastRefreshed, 'h:mm:ss a')}
+                Last updated: {formatTime(lastRefreshed)}
               </p>
             )}
           </div>
@@ -388,7 +540,7 @@ const HRDashboard = () => {
         </motion.div>
 
         {/* Quick Actions */}
-        <motion.div variants={itemVariants}>
+        {/* <motion.div variants={itemVariants}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Quick Actions</CardTitle>
@@ -409,7 +561,7 @@ const HRDashboard = () => {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </motion.div> */}
 
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -473,7 +625,7 @@ const HRDashboard = () => {
                                     <p className="font-semibold text-sm truncate">{item.candidateName}</p>
                                     <p className="text-xs text-primary font-medium mt-0.5">
                                       {formatInterviewTime(item.startDateTime)}
-                                      {item.endDateTime && ` – ${format(parseISO(item.endDateTime), 'h:mm a')}`}
+                                      {item.endDateTime && ` - ${formatTime(parseISO(item.endDateTime))}`}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0">
@@ -540,13 +692,13 @@ const HRDashboard = () => {
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                                <button
+                                {/* <button
                                   onClick={() => dismissItem(item.id)}
                                   title="Hide from this list"
                                   className="p-1.5 rounded-lg text-muted-foreground hover:text-gray-600 hover:bg-gray-100 transition-all"
                                 >
                                   <X className="w-3.5 h-3.5" />
-                                </button>
+                                </button> */}
                               </div>
                             </div>
                           </motion.div>
@@ -590,9 +742,7 @@ const HRDashboard = () => {
                       .map((candidate) => (
                         <div
                           key={candidate.id}
-                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
-                          onClick={() => navigate(`/hr/candidates/${candidate.id}`)}
-                        >
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors ">
                           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                             <span className="text-primary font-semibold text-sm">
                               {(candidate.name || '?').charAt(0).toUpperCase()}
@@ -627,19 +777,12 @@ const HRDashboard = () => {
                   <p className="text-sm text-muted-foreground text-center py-8">No candidate data</p>
                 ) : (
                   <div className="space-y-3">
-                    {[
-                      { label: 'Applied',     key: 'APPLIED',     color: 'bg-blue-500' },
-                      { label: 'Screening',   key: 'SCREENING',   color: 'bg-purple-500' },
-                      { label: 'Scheduled',   key: 'SCHEDULED',   color: 'bg-green-500' },
-                      { label: 'Interviewed', key: 'INTERVIEWED', color: 'bg-teal-500' },
-                      { label: 'Offered',     key: 'OFFERED',     color: 'bg-amber-500' },
-                      { label: 'Hired',       key: 'HIRED',       color: 'bg-emerald-600' },
-                      { label: 'Rejected',    key: 'REJECTED',    color: 'bg-red-400' },
-                    ]
+                    {candidateSteps
                       .filter((s) => (candidatesByStatus[s.key] || 0) > 0)
                       .map((stage) => {
                         const count = candidatesByStatus[stage.key] || 0;
                         const pct   = Math.round((count / totalCandidates) * 100);
+                        const configuredStage = getCandidateStep(candidateSteps, stage.key);
                         return (
                           <div key={stage.key} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
@@ -649,7 +792,10 @@ const HRDashboard = () => {
                               </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${stage.color} transition-all duration-700`} style={{ width: `${pct}%` }} />
+                              <div
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${pct}%`, backgroundColor: configuredStage?.bgColor || '#6b7280' }}
+                              />
                             </div>
                           </div>
                         );
@@ -692,7 +838,7 @@ const HRDashboard = () => {
                       </thead>
                       <tbody>
                         {recentRequests.map((req) => (
-                          <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
+                          <tr key={req.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors ">
                             <td className="py-2.5 px-3 font-medium">{req.candidateName}</td>
                             <td className="py-2.5 px-3 text-muted-foreground">{req.assignedInterviewerName || '—'}</td>
                             <td className="py-2.5 px-3 text-muted-foreground">
@@ -718,7 +864,7 @@ const HRDashboard = () => {
 
       {/* Cancel dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={closeCancelDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" /> Cancel Interview
@@ -727,7 +873,7 @@ const HRDashboard = () => {
               This will cancel the interview and immediately restore the slot(s) to available.
             </DialogDescription>
           </DialogHeader>
-
+          <DialogBody>
           {cancelTarget && (
             <div className={`rounded-xl border-2 p-4 ${
               cancelTarget.type === 'panel' ? 'border-emerald-200 bg-emerald-50' : 'border-red-100 bg-red-50'
@@ -738,13 +884,28 @@ const HRDashboard = () => {
               <p className="text-sm font-medium">{cancelTarget.candidateName}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {formatInterviewTime(cancelTarget.startDateTime)}
-                {cancelTarget.endDateTime && ` – ${format(parseISO(cancelTarget.endDateTime), 'h:mm a')}`}
+                {cancelTarget.endDateTime && ` - ${formatTime(parseISO(cancelTarget.endDateTime))}`}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {cancelTarget.type === 'panel'
                   ? `${cancelTarget.interviewers.length} interviewers: ${cancelTarget.interviewers.map((i) => i.name).join(', ')}`
                   : `with ${cancelTarget.interviewers[0]?.name}`}
               </p>
+              {formatInterviewTypeLabel(cancelTarget.interviewType) && (
+                <p className="text-sm mt-2">
+                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.interviewType)}</strong>
+                </p>
+              )}
+              {cancelTarget.interviewCoordinatorName && (
+                <p className="text-sm">
+                  Interview Coordinator: <strong>{cancelTarget.interviewCoordinatorName}</strong>
+                </p>
+              )}
+              {cancelTarget.coordinatedHrName && (
+                <p className="text-sm">
+                  Candidate Coordinator: <strong>{cancelTarget.coordinatedHrName}</strong>
+                </p>
+              )}
               {cancelTarget.type === 'panel' && (
                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-xs text-amber-800 flex items-start gap-1">
@@ -755,7 +916,7 @@ const HRDashboard = () => {
               )}
             </div>
           )}
-
+          </DialogBody>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={closeCancelDialog} disabled={cancelling}>
               Keep Interview

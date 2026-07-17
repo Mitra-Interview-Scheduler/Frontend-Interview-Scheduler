@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -7,44 +7,89 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar, Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [googleBtnWidth, setGoogleBtnWidth] = useState(0);
+  const googleBtnRef = useRef(null);
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setLoading(true);
+  useEffect(() => {
+    const el = googleBtnRef.current;
+    if (!el) return;
 
-  try {
-    const user = await login(email, password);
-    
-    // Navigate based on role
-    if (user.role === 'ADMIN') {
+    const updateWidth = () => {
+      const width = Math.floor(el.getBoundingClientRect().width);
+      if (width > 0) {
+        // Google Identity Services caps button width at 400px.
+        setGoogleBtnWidth(Math.min(400, Math.max(40, width)));
+      }
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const navigateByRole = (user) => {
+    const role = user?.role || user?.roles?.[0];
+    if (role === 'ADMIN') {
       navigate('/admin/dashboard');
-    } else if (user.role === 'HR') {
+    } else if (role === 'HR') {
       navigate('/hr/dashboard');
-    } else if (user.role === 'INTERVIEWER') {
+    } else if (role === 'INTERVIEWER') {
       navigate('/interviewer/dashboard');
+    } else {
+      setError('Your account has no assigned role. Contact an administrator.');
     }
-  } catch (err) {
-    setError(err.message || 'Invalid credentials. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  const demoAccounts = [
-    { email: 'admin@mitra.com', role: 'Admin', color: 'primary' },
-    { email: 'hr@mitra.com', role: 'HR', color: 'secondary' },
-    { email: 'interviewer@mitra.com', role: 'Interviewer', color: 'success' },
-  ];
+    const validationErrors = { email: '', password: '' };
+    if (!email.trim()) validationErrors.email = 'Email is required';
+    if (!password.trim()) validationErrors.password = 'Password is required';
+
+    if (validationErrors.email || validationErrors.password) {
+      setFieldErrors(validationErrors);
+      return;
+    }
+
+    setFieldErrors({ email: '', password: '' });
+    setLoading(true);
+
+    try {
+      const user = await login(email, password);
+      navigateByRole(user);
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
+    setLoading(true);
+
+    try {
+      const user = await loginWithGoogle(credentialResponse);
+      navigateByRole(user);
+    } catch (err) {
+      setError(err.message || 'Google login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-subtle p-4">
@@ -55,11 +100,11 @@ const Login = () => {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <motion.div 
+          <motion.div
             className="flex items-center justify-center mb-4"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring" }}
+            transition={{ delay: 0.2, type: 'spring' }}
           >
             <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-lg">
               <Calendar className="w-8 h-8 text-white" />
@@ -75,8 +120,8 @@ const Login = () => {
 
         <Card className="shadow-elegant">
           <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
+            <CardDescription className="text-center">
               Enter your credentials to access your dashboard
             </CardDescription>
           </CardHeader>
@@ -91,11 +136,17 @@ const Login = () => {
                     type="email"
                     placeholder="you@mitra.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) {
+                        setFieldErrors((prev) => ({ ...prev, email: '' }));
+                      }
+                    }}
+                    className={`pl-10 ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    aria-invalid={!!fieldErrors.email}
                   />
                 </div>
+                {fieldErrors.email && <p className="text-destructive text-sm">{fieldErrors.email}</p>}
               </div>
 
               <div className="space-y-2">
@@ -107,11 +158,17 @@ const Login = () => {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    required
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) {
+                        setFieldErrors((prev) => ({ ...prev, password: '' }));
+                      }
+                    }}
+                    className={`pl-10 ${fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    aria-invalid={!!fieldErrors.password}
                   />
                 </div>
+                {fieldErrors.password && <p className="text-destructive text-sm">{fieldErrors.password}</p>}
               </div>
 
               {error && (
@@ -129,7 +186,25 @@ const Login = () => {
               </Button>
             </form>
 
-           
+            <div className="my-4 flex items-center">
+              <div className="h-px flex-1 bg-border" />
+              <span className="px-3 text-xs text-muted-foreground">OR</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <div ref={googleBtnRef} className="w-full">
+              {googleBtnWidth > 0 && (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google login failed. Please try again.')}
+                  width={googleBtnWidth}
+                  size="large"
+                  theme="outline"
+                  text="signin_with"
+                  shape="rectangular"
+                />
+              )}
+            </div>
           </CardContent>
         </Card>
       </motion.div>
