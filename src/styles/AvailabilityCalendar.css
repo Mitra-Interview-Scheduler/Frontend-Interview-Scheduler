@@ -754,6 +754,28 @@
   margin-left: 15px;
 }
 
+.postpone-event-icon {
+  color: #fffbeb;
+}
+
+.booked-event-postpone-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.28);
+  color: #fffbeb;
+  margin-left: 15px;
+}
+
+.availability-calendar-container .rbc-event.postpone-request-event {
+  z-index: 6;
+}
+
 .calendar-event-inner {
   display: flex;
   align-items: center;

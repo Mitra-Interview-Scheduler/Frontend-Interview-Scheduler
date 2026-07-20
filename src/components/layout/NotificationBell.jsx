@@ -27,6 +27,19 @@ const TYPE_LABELS = {
   CANDIDATE_COORDINATOR_ASSIGNED: 'Candidate',
   FEEDBACK_SUBMITTED: 'Feedback',
   STATUS_CHANGED: 'Status',
+  INTERVIEW_POSTPONE_REQUESTED: 'Time Proposed',
+  INTERVIEW_POSTPONE_REJECTED: 'Time Declined',
+  INTERVIEW_POSTPONE_APPROVED: 'Time Accepted',
+};
+
+const formatNotificationType = (type) => {
+  if (!type) return 'Update';
+  if (TYPE_LABELS[type]) return TYPE_LABELS[type];
+  return type
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
 };
 
 const isCancelledNotification = (type) =>
@@ -83,7 +96,7 @@ const NotificationItem = ({
                 variant={cancelled ? 'destructive' : notification.read ? 'secondary' : 'default'}
                 className="text-[10px] shrink-0"
               >
-                {TYPE_LABELS[notification.type] || notification.type}
+                {formatNotificationType(notification.type)}
               </Badge>
             </div>
             <div

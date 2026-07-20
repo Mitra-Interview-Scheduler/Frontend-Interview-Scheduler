@@ -1,7 +1,6 @@
 // src/services/availabilityAPI.js
 import api from './api';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
-import { InterviewRequestStatus } from '@/lib/statusConstants';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
 export const availabilityAPI = {
@@ -65,12 +64,39 @@ export const availabilityAPI = {
   },
 
   /**
-   * TODO: Backend — POST /api/interviewer/interviews/schedules/{scheduleId}/propose-time
-   * Payload: { availabilitySlotId, proposedStartDateTime, proposedEndDateTime, notes? }
+   * Interviewer proposes an alternative time for a scheduled interview.
+   * Creates a postpone request and notifies HR / candidate coordinator.
    */
-  proposeAlternativeTime: async (payload) => {
-    console.info('[STUB] proposeAlternativeTime', payload);
-    return { status: InterviewRequestStatus.PENDING, ...payload };
+  proposeAlternativeTime: async ({
+    interviewScheduleId,
+    proposedStartDateTime,
+    proposedEndDateTime,
+    reason,
+  }) => {
+    const response = await api.post(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/postpone-requests`,
+      {
+        reason: reason?.trim()
+          || 'Interviewer proposed an alternative time for this scheduled interview.',
+        preferredStartDateTime: formatLocalDateTime(proposedStartDateTime),
+        preferredEndDateTime: formatLocalDateTime(proposedEndDateTime),
+      },
+    );
+    return response.data;
+  },
+
+  getPendingPostponeRequest: async (interviewScheduleId) => {
+    const response = await api.get(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/postpone-requests/pending`,
+    );
+    return response.data;
+  },
+
+  withdrawPostponeRequest: async (postponeRequestId) => {
+    const response = await api.delete(
+      `/interviewer/interviews/postpone-requests/${postponeRequestId}`,
+    );
+    return response.data;
   },
 
   // ── Write ─────────────────────────────────────────────────────────────────

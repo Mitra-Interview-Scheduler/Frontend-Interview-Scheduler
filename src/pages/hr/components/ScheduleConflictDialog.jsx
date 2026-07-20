@@ -26,18 +26,27 @@ function formatRange(start, end) {
 }
 
 /**
- * Error dialog shown when HR tries to book an interview that overlaps an event
- * on the interviewer's selected Google Calendars. Booking is blocked.
+ * Confirmation dialog when HR schedules an interview that overlaps an event
+ * on the interviewer's Google Calendar(s). HR may proceed after reviewing conflicts.
  */
 export function ScheduleConflictDialog({
   open,
   onOpenChange,
   conflicts = [],
+  onConfirm,
+  confirming = false,
+  panelMode = false,
 }) {
   const totalEvents = conflicts.reduce(
     (sum, ic) => sum + (Array.isArray(ic.conflicts) ? ic.conflicts.length : 0),
     0,
   );
+
+  const handleConfirm = async () => {
+    if (onConfirm) {
+      await onConfirm();
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,13 +58,13 @@ export function ScheduleConflictDialog({
             </div>
             <div>
               <DialogTitle className="text-lg font-semibold text-slate-900">
-                Cannot schedule — calendar conflict
+                Calendar conflict detected
               </DialogTitle>
               <DialogDescription className="mt-1 text-sm text-slate-600">
                 {totalEvents === 1
-                  ? 'An interviewer already has an event at this time on their Google Calendar.'
-                  : `The selected time overlaps ${totalEvents} existing Google Calendar event(s).`}{' '}
-                Choose a different time or remove the conflicting event from the calendar.
+                  ? 'The selected time overlaps with an existing event on the interviewer\'s Google Calendar.'
+                  : `The selected time overlaps with ${totalEvents} existing Google Calendar event(s).`}{' '}
+                You may choose a different time, or proceed if this interview should take priority.
               </DialogDescription>
             </div>
           </div>
@@ -87,9 +96,24 @@ export function ScheduleConflictDialog({
           </div>
         </DialogBody>
 
-        <DialogFooter>
-          <Button onClick={() => onOpenChange?.(false)}>
-            OK
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange?.(false)}
+            disabled={confirming}
+          >
+            Choose a different time
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={confirming}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            {confirming
+              ? 'Scheduling…'
+              : panelMode
+                ? 'Proceed with panel scheduling'
+                : 'Proceed with scheduling'}
           </Button>
         </DialogFooter>
       </DialogContent>

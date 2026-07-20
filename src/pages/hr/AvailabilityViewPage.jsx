@@ -28,7 +28,7 @@ import {
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert, Star, Globe,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star, Globe, CalendarClock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -135,8 +135,9 @@ const AvailabilityViewPage = () => {
   const [panelSlots, setPanelSlots] = useState([]);
   const [panelDialogOpen, setPanelDialogOpen] = useState(false);
 
-  // Google Calendar conflict blocking dialog (shown on submit)
-  const [conflictDialog, setConflictDialog] = useState({ open: false, conflicts: [] });
+  // Google Calendar conflict confirmation (shown when HR proceeds despite overlap)
+  const [conflictDialog, setConflictDialog] = useState({ open: false, conflicts: [], panelMode: false });
+  const conflictConfirmRef = useRef(null);
   // Live conflict preview for the chosen interview window
   const [slotWindowConflicts, setSlotWindowConflicts] = useState({
     loading: false,
@@ -156,6 +157,7 @@ const AvailabilityViewPage = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [postponeActionLoading, setPostponeActionLoading] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
@@ -883,6 +885,54 @@ const AvailabilityViewPage = () => {
     }
   };
 
+  const handleApprovePostpone = async () => {
+    const postponeRequestId = cancelTarget?.resource?.pendingPostponeRequestId;
+    if (!postponeRequestId) return;
+    setPostponeActionLoading(true);
+    try {
+      await hrAvailabilityAPI.approvePostponeRequest(postponeRequestId);
+      toast({
+        title: 'Proposed time accepted',
+        description: 'The previous interview was cancelled and the new time was scheduled.',
+      });
+      setCancelDialogOpen(false);
+      setCancelTarget(null);
+      await refreshCalendar();
+    } catch (err) {
+      toast({
+        title: 'Could not accept proposed time',
+        description: err.response?.data?.message || err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setPostponeActionLoading(false);
+    }
+  };
+
+  const handleRejectPostpone = async () => {
+    const postponeRequestId = cancelTarget?.resource?.pendingPostponeRequestId;
+    if (!postponeRequestId) return;
+    setPostponeActionLoading(true);
+    try {
+      await hrAvailabilityAPI.rejectPostponeRequest(postponeRequestId);
+      toast({
+        title: 'Proposed time declined',
+        description: 'The interviewer was notified. The original interview remains scheduled.',
+      });
+      setCancelDialogOpen(false);
+      setCancelTarget(null);
+      await refreshCalendar();
+    } catch (err) {
+      toast({
+        title: 'Could not decline proposed time',
+        description: err.response?.data?.message || err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setPostponeActionLoading(false);
+    }
+  };
+
   // ── Event click ───────────────────────────────────────────────────────────
   const handleEventClick = (event) => {
 
@@ -1046,18 +1096,7 @@ const AvailabilityViewPage = () => {
       candidateDesignationId: '',
     });
 
-  // ── Google Calendar conflict check (blocks booking) ─────────────────────
-  const formatConflictSummary = (conflicts) => {
-    if (!Array.isArray(conflicts) || conflicts.length === 0) return '';
-    return conflicts.map((ic) => {
-      const first = ic.conflicts?.[0];
-      if (!first) return ic.interviewerName;
-      const title = first.title || 'Untitled event';
-      const calendar = first.calendarName ? ` (${first.calendarName})` : '';
-      return `${ic.interviewerName}: "${title}"${calendar}`;
-    }).join('; ');
-  };
-
+  // ── Google Calendar conflict check (advisory + confirm on submit) ───────
   const flattenConflictEvents = (conflicts) => {
     if (!Array.isArray(conflicts)) return [];
     return conflicts.flatMap((ic) =>
@@ -1107,35 +1146,31 @@ const AvailabilityViewPage = () => {
     }
   }, []);
 
-  const checkSchedulingConflicts = async (interviewerIds, bookStart, bookEnd) => {
+  const fetchSubmitConflicts = async (interviewerIds, bookStart, bookEnd) => {
     const ids = (interviewerIds || []).filter((id) => id != null);
-    if (ids.length === 0) return false;
-    try {
-      const conflicts = await hrAvailabilityAPI.checkConflicts({
-        interviewerIds: ids,
-        startDateTime: formatLocalDateTime(bookStart),
-        endDateTime: formatLocalDateTime(bookEnd),
-      });
-      if (Array.isArray(conflicts) && conflicts.length > 0) {
-        setConflictDialog({ open: true, conflicts });
-        setSlotWindowConflicts({ loading: false, conflicts, error: null });
-        toast({
-          title: 'Cannot schedule interview',
-          description: formatConflictSummary(conflicts),
-          variant: 'destructive',
-        });
-        return true;
-      }
-      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
-    } catch (e) {
-      toast({
-        title: 'Could not verify Google Calendar',
-        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
-        variant: 'destructive',
-      });
-      return true;
-    }
-    return false;
+    if (ids.length === 0) return [];
+    const conflicts = await hrAvailabilityAPI.checkConflicts({
+      interviewerIds: ids,
+      startDateTime: formatLocalDateTime(bookStart),
+      endDateTime: formatLocalDateTime(bookEnd),
+    });
+    return Array.isArray(conflicts) ? conflicts : [];
+  };
+
+  const openConflictConfirmDialog = (conflicts, onConfirm, isPanel = false) => {
+    conflictConfirmRef.current = onConfirm;
+    setConflictDialog({ open: true, conflicts, panelMode: isPanel });
+  };
+
+  const handleConflictConfirm = async () => {
+    const confirm = conflictConfirmRef.current;
+    if (!confirm) return;
+    await confirm();
+  };
+
+  const closeConflictDialog = () => {
+    conflictConfirmRef.current = null;
+    setConflictDialog({ open: false, conflicts: [], panelMode: false });
   };
 
   // Live conflict preview while choosing the interview window (single)
@@ -1180,7 +1215,7 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
-    const performSubmit = async () => {
+    const performSubmit = async (acknowledgeCalendarConflict = false) => {
       setScheduling(true);
       try {
         await hrAvailabilityAPI.createInterviewRequest({
@@ -1197,9 +1232,10 @@ const AvailabilityViewPage = () => {
           interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
           interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
           interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+          acknowledgeCalendarConflict,
         });
         toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
-        setConflictDialog({ open: false, conflicts: [] });
+        closeConflictDialog();
         setRequestDialogOpen(false);
         setSelectedSlot(null);
         finalizeScheduledInterview(cameFromCandidateFlow);
@@ -1211,12 +1247,27 @@ const AvailabilityViewPage = () => {
       }
     };
 
-    // Block if the interviewer's Google Calendar has an overlapping event.
     const interviewerId = selectedSlot?.interviewerId ?? selectedSlot?.resource?.interviewerId;
-    if (await checkSchedulingConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd)) {
+    let conflicts = hasSlotWindowConflict ? slotWindowConflicts.conflicts : [];
+    try {
+      if (conflicts.length === 0) {
+        conflicts = await fetchSubmitConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd);
+      }
+    } catch (e) {
+      toast({
+        title: 'Could not verify Google Calendar',
+        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
+        variant: 'destructive',
+      });
       return;
     }
-    await performSubmit();
+
+    if (conflicts.length > 0) {
+      openConflictConfirmDialog(conflicts, () => performSubmit(true));
+      return;
+    }
+
+    await performSubmit(false);
   };
 
   // ── Submit panel interview ────────────────────────────────────────────────
@@ -1243,7 +1294,7 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
-    const performSubmit = async () => {
+    const performSubmit = async (acknowledgeCalendarConflict = false) => {
       setScheduling(true);
       try {
         const panel = await hrAvailabilityAPI.createPanelInterview({
@@ -1260,6 +1311,7 @@ const AvailabilityViewPage = () => {
           interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
           interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
           interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+          acknowledgeCalendarConflict,
         });
         toast({
           title: '✓ Panel interview scheduled',
@@ -1267,7 +1319,7 @@ const AvailabilityViewPage = () => {
             ? `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Google Meet link created.`
             : `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Connect Google Calendar on at least one interviewer to generate a Meet link.`,
         });
-        setConflictDialog({ open: false, conflicts: [] });
+        closeConflictDialog();
         setPanelDialogOpen(false);
         setPanelSlots([]);
         setPanelBookStartOverride('');
@@ -1281,14 +1333,30 @@ const AvailabilityViewPage = () => {
       }
     };
 
-    // Block if any panel interviewer's Google Calendar has an overlapping event.
     const panelInterviewerIds = panelSlots
       .map((ps) => ps.slot?.interviewerId ?? ps.slot?.resource?.interviewerId)
       .filter((id) => id != null);
-    if (await checkSchedulingConflicts(panelInterviewerIds, bookStart, bookEnd)) {
+
+    let conflicts = hasSlotWindowConflict ? slotWindowConflicts.conflicts : [];
+    try {
+      if (conflicts.length === 0) {
+        conflicts = await fetchSubmitConflicts(panelInterviewerIds, bookStart, bookEnd);
+      }
+    } catch (e) {
+      toast({
+        title: 'Could not verify Google Calendar',
+        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
+        variant: 'destructive',
+      });
       return;
     }
-    await performSubmit();
+
+    if (conflicts.length > 0) {
+      openConflictConfirmDialog(conflicts, () => performSubmit(true), true);
+      return;
+    }
+
+    await performSubmit(false);
   };
 
   // ── Panel time overlap ────────────────────────────────────────────────────
@@ -1459,8 +1527,15 @@ const calendarSlotPropGetter = useCallback((date) => {
 
   const countableEvents = events.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
   const availableCount = countableEvents.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
+  const postponeCount = countableEvents.filter(
+    (e) => e.resource?.status === SlotStatus.BOOKED
+      && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED
+      && e.resource?.hasPendingPostponeRequest,
+  ).length;
   const bookedCount = countableEvents.filter(
-    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
+    (e) => e.resource?.status === SlotStatus.BOOKED
+      && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED
+      && !e.resource?.hasPendingPostponeRequest,
   ).length;
   const completedCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
@@ -2062,6 +2137,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
                   </div>
+                  {postponeCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500" />
+                      <span className="text-sm"><span className="font-bold text-amber-600">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-emerald-700" />
                     <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
@@ -2227,9 +2308,12 @@ const calendarSlotPropGetter = useCallback((date) => {
         <ScheduleConflictDialog
           open={conflictDialog.open}
           onOpenChange={(open) => {
-            if (!open) setConflictDialog({ open: false, conflicts: [] });
+            if (!open && !scheduling) closeConflictDialog();
           }}
           conflicts={conflictDialog.conflicts}
+          onConfirm={handleConflictConfirm}
+          confirming={scheduling}
+          panelMode={conflictDialog.panelMode}
         />
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
@@ -2389,15 +2473,28 @@ const calendarSlotPropGetter = useCallback((date) => {
         </Card>
       </div>
 
-      {/* ══ CANCEL BOOKED DIALOG ═══════════════════════════════════════════ */}
-      <Dialog open={cancelDialogOpen} onOpenChange={(o) => { if (!cancelling) setCancelDialogOpen(o); }}>
-        <DialogContent className="px-3 py-0 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-700">
-              <Trash2 className="w-5 h-5" /> Cancel Interview
+      {/* ══ CANCEL / REVIEW TIME CHANGE DIALOG ═══════════════════════════════ */}
+      <Dialog open={cancelDialogOpen} onOpenChange={(o) => {
+        if (!cancelling && !postponeActionLoading) setCancelDialogOpen(o);
+      }}>
+        <DialogContent className="max-w-lg gap-0 p-0 m-4 overflow-hidden">
+          <DialogHeader className="border-b border-gray-100 px-5 py-4">
+            <DialogTitle className={`flex items-center gap-2 ${
+              cancelTarget?.resource?.hasPendingPostponeRequest ? 'text-amber-800' : 'text-red-700'
+            }`}>
+              {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+                <><CalendarClock className="w-5 h-5 shrink-0" /> Review Time Change</>
+              ) : (
+                <><Trash2 className="w-5 h-5 shrink-0" /> Cancel Interview</>
+              )}
             </DialogTitle>
             <DialogDescription>
-              {cancelTarget?.resource?.panelId ? (
+              {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+                <>
+                  Accepting will <strong>cancel the current interview</strong> and schedule the
+                  interviewer&apos;s proposed time. Declining keeps the original booking.
+                </>
+              ) : cancelTarget?.resource?.panelId ? (
                 <>
                   This is a <strong>panel interview</strong>. Cancelling will restore slots for{' '}
                   <strong>all panel interviewers</strong> and notify them.
@@ -2411,78 +2508,165 @@ const calendarSlotPropGetter = useCallback((date) => {
           </DialogHeader>
 
           {cancelTarget && (
-            <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 space-y-2">
-              <p className="font-semibold text-sm">
-                {cancelTarget.resource.panelId ? '👥 Panel Interview' : '🔒 Booked Interview'}
-              </p>
-              <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
-              {cancelTarget.resource.panelId && (
-                <p className="text-sm text-red-700">
-                  Also cancelling:{' '}
-                  <strong>
-                    {events
-                      .filter(
-                        (e) =>
-                          e.resource?.panelId === cancelTarget.resource.panelId
-                          && e.resource?.status === SlotStatus.BOOKED
-                          && e.id !== cancelTarget.id,
-                      )
-                      .map((e) => e.resource.interviewer)
-                      .filter(Boolean)
-                      .join(', ') || 'other panel interviewers'}
-                  </strong>
+            <DialogBody className="px-5 py-4 space-y-3">
+              {cancelTarget.resource?.hasPendingPostponeRequest && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                  <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 shrink-0" />
+                    Time change requested
+                  </p>
+                  <p className="text-xs text-amber-800">
+                    Current:{' '}
+                    <strong>{formatDateTimeRange(cancelTarget.start, cancelTarget.end)}</strong>
+                  </p>
+                  {cancelTarget.resource.pendingPostponePreferredStart
+                    && cancelTarget.resource.pendingPostponePreferredEnd && (
+                    <p className="text-xs text-amber-800">
+                      Proposed:{' '}
+                      <strong>
+                        {formatDateTimeRange(
+                          new Date(cancelTarget.resource.pendingPostponePreferredStart),
+                          new Date(cancelTarget.resource.pendingPostponePreferredEnd),
+                        )}
+                      </strong>
+                    </p>
+                  )}
+                  {cancelTarget.resource.pendingPostponeReason && (
+                    <p className="text-xs text-amber-800 break-words">
+                      Reason: <strong>{cancelTarget.resource.pendingPostponeReason}</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className={`rounded-xl border p-4 space-y-2 ${
+                cancelTarget.resource?.hasPendingPostponeRequest
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-red-100 bg-red-50'
+              }`}>
+                <p className="font-semibold text-sm">
+                  {cancelTarget.resource.panelId ? 'Panel Interview' : 'Booked Interview'}
                 </p>
-              )}
-              {cancelTarget.resource.candidateName && (
-                <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
-              )}
-              {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
-                <p className="text-sm">
-                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
+                {cancelTarget.resource.panelId && (
+                  <p className="text-sm text-red-700">
+                    Also cancelling:{' '}
+                    <strong>
+                      {events
+                        .filter(
+                          (e) =>
+                            e.resource?.panelId === cancelTarget.resource.panelId
+                            && e.resource?.status === SlotStatus.BOOKED
+                            && e.id !== cancelTarget.id,
+                        )
+                        .map((e) => e.resource.interviewer)
+                        .filter(Boolean)
+                        .join(', ') || 'other panel interviewers'}
+                    </strong>
+                  </p>
+                )}
+                {cancelTarget.resource.candidateName && (
+                  <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
+                )}
+                {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
+                  <p className="text-sm">
+                    Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.interviewCoordinatorName && (
+                  <p className="text-sm">
+                    Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.coordinatedHrName && (
+                  <p className="text-sm">
+                    Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.meetingLink && (
+                  <p className="text-sm break-all">
+                    Google Meet:{' '}
+                    <a
+                      href={cancelTarget.resource.meetingLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-600 underline"
+                    >
+                      {cancelTarget.resource.meetingLink}
+                    </a>
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
                 </p>
-              )}
-              {cancelTarget.resource.interviewCoordinatorName && (
-                <p className="text-sm">
-                  Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
-                </p>
-              )}
-              {cancelTarget.resource.coordinatedHrName && (
-                <p className="text-sm">
-                  Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
-                </p>
-              )}
-              {cancelTarget.resource.meetingLink && (
-                <p className="text-sm break-all">
-                  Google Meet:{' '}
-                  <a
-                    href={cancelTarget.resource.meetingLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-indigo-600 underline"
-                  >
-                    {cancelTarget.resource.meetingLink}
-                  </a>
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
-              </p>
-            </div>
+              </div>
+            </DialogBody>
           )}
 
-          <DialogFooter >
-            <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
-              Keep Interview
-            </Button>
-            <Button variant="destructive" onClick={handleCancelBooked} disabled={cancelling} className="gap-2">
-              {cancelling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Cancelling…</>
-              ) : cancelTarget?.resource?.panelId ? (
-                <><Trash2 className="w-4 h-4" /> Cancel Panel & Restore Slots</>
-              ) : (
-                <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>
-              )}
-            </Button>
+          <DialogFooter className="flex-col gap-2 border-t border-gray-100 bg-slate-50/80 px-5 py-4 sm:flex-col sm:justify-stretch">
+            {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+              <>
+                <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleRejectPostpone}
+                    disabled={cancelling || postponeActionLoading}
+                    className="w-full border-amber-300 text-amber-900 hover:bg-amber-50"
+                  >
+                    {postponeActionLoading ? 'Working…' : 'Decline Proposal'}
+                  </Button>
+                  <Button
+                    onClick={handleApprovePostpone}
+                    disabled={cancelling || postponeActionLoading}
+                    className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
+                  >
+                    {postponeActionLoading ? (
+                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Accepting…</>
+                    ) : (
+                      <><CheckCircle2 className="w-4 h-4 shrink-0" /> Accept Proposed Time</>
+                    )}
+                  </Button>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelBooked}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full gap-2"
+                >
+                  {cancelling ? (
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                  ) : cancelTarget?.resource?.panelId ? (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Interview</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCancelDialogOpen(false)}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full"
+                >
+                  Keep Interview
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelBooked}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full gap-2"
+                >
+                  {cancelling ? (
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                  ) : cancelTarget?.resource?.panelId ? (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel & Restore Slots</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel & Restore Slot</>
+                  )}
+                </Button>
+              </div>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2644,9 +2828,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                       )}
                       {hasSlotWindowConflict && (
                         <div className="space-y-1 pt-1 border-t border-red-200/80">
-                          <p className="font-semibold flex items-center gap-1">
+                          <p className="font-semibold flex items-center gap-1 text-red-800">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            Calendar conflict — choose a different time
+                            Calendar conflict detected — review before scheduling
                           </p>
                           {previewConflictEvents.map((event) => (
                             <p
@@ -2682,11 +2866,11 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError || scheduling || hasSlotWindowConflict || slotWindowConflicts.loading}
-              className="gap-2"
+              disabled={!!singlePrivilegeError || scheduling || slotWindowConflicts.loading}
+              className={`gap-2${hasSlotWindowConflict ? ' bg-red-600 hover:bg-red-700 text-white' : ''}`}
               title={
                 hasSlotWindowConflict
-                  ? 'Selected time conflicts with Google Calendar'
+                  ? 'Calendar conflict detected — click to review and proceed'
                   : singlePrivilegeError
                     ? 'Interviewer privilege too low for this candidate'
                     : undefined
@@ -2832,9 +3016,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                         )}
                         {hasSlotWindowConflict && (
                           <div className="space-y-1 pt-1 border-t border-red-200/80">
-                            <p className="font-semibold flex items-center gap-1">
+                            <p className="font-semibold flex items-center gap-1 text-red-800">
                               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                              Calendar conflict — choose a different time
+                              Calendar conflict detected — review before scheduling
                             </p>
                             {previewConflictEvents.map((event) => (
                               <p
@@ -2870,17 +3054,20 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendPanelRequest}
-              className="gap-2 bg-sky-600 hover:bg-sky-700"
+              className={`gap-2${
+                hasSlotWindowConflict
+                  ? ' bg-red-600 hover:bg-red-700 text-white'
+                  : ' bg-sky-600 hover:bg-sky-700'
+              }`}
               disabled={
                 panelTimeOptions.length === 0
                 || panelPrivilegeErrors.length > 0
                 || scheduling
-                || hasSlotWindowConflict
                 || slotWindowConflicts.loading
               }
               title={
                 hasSlotWindowConflict
-                  ? 'Selected time conflicts with Google Calendar'
+                  ? 'Calendar conflict detected — click to review and proceed'
                   : panelPrivilegeErrors.length > 0
                     ? 'One or more interviewers have insufficient privilege'
                     : undefined
