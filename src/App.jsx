@@ -15,6 +15,7 @@ import UsersPage from "./pages/admin/UsersPage";
 import DesignationsPage from "./pages/admin/DesignationsPage";
 import TechnologiesPage from "./pages/admin/TechnologiesPage";
 import DomainsPage from "./pages/admin/DomainsPage";
+import InterviewTypesPage from "./pages/admin/InterviewTypesPage";
 import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
@@ -91,6 +92,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['ADMIN']}>
                   <DomainsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/interview-types"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <InterviewTypesPage />
                 </PrivateRoute>
               }
             />

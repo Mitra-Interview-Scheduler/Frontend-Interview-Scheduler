@@ -48,6 +48,7 @@ import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, p
 import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
 import MatchingPanelDetailDialog from './components/MatchingPanelDetailDialog';
 import ScheduleConflictDialog from './components/ScheduleConflictDialog';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -66,7 +67,9 @@ const CALENDAR_PAGE_SIZES = {
 const normalizeTechName = (name) => (name ?? '').trim().toLowerCase();
 
 const resolveInterviewType = (...values) => {
-  const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
+  // Accept any non-blank interview type code (system TECHNICAL/HR or Admin-defined
+  // custom types like MANAGER/ASSESSMENT); fall back to TECHNICAL when none set.
+  const match = values.find((value) => typeof value === 'string' && value.trim() !== '');
   return match || InterviewType.TECHNICAL;
 };
 
@@ -121,6 +124,7 @@ const AvailabilityViewPage = () => {
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
+  const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
   const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
   const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
@@ -368,6 +372,9 @@ const AvailabilityViewPage = () => {
       if (incomingFilter.departmentId) {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
+      } else if (incomingFilter.departmentIds?.length) {
+        setFilterDept(incomingFilter.departmentIds);
+        setSelectedDeptForDesignation(String(incomingFilter.departmentIds[0]));
       }
 
       if (incomingFilter.technologyIds?.length) {
@@ -376,6 +383,10 @@ const AvailabilityViewPage = () => {
 
       if (incomingFilter.domainIds?.length) {
         setFilterDomain(incomingFilter.domainIds);
+      }
+
+      if (incomingFilter.minYearsOfExperience != null) {
+        setMinExperience(String(incomingFilter.minYearsOfExperience));
       }
     }
 
@@ -1678,8 +1689,16 @@ const calendarSlotPropGetter = useCallback((date) => {
             <SelectValue placeholder="Select interview type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
-            <SelectItem value="HR">HR Interview</SelectItem>
+            {availableInterviewTypes.length > 0 ? (
+              availableInterviewTypes.map((t) => (
+                <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
+              ))
+            ) : (
+              <>
+                <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+                <SelectItem value="HR">HR Interview</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
         

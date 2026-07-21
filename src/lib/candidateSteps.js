@@ -6,8 +6,9 @@ import {
   InterviewType,
   MasterStatus,
   PipelineStepStatus,
-  REPEATABLE_ROUND_KEYS,
-  INTERVIEW_TYPE_BY_ROUND_KEY,
+  isInterviewRoundStatusKey,
+  interviewTypeCodeFromRoundKey,
+  isHrInterviewType,
   resolveRoundKeyForInterview,
   normalizeInterviewType,
   ACTIVITY_STATUS_META,
@@ -22,6 +23,9 @@ const baseLabelForStatusKey = (statusKey, fallbackLabel) => {
   if (statusKey === MasterStatus.HR_ROUND) return 'HR';
   if (statusKey === MasterStatus.ON_HOLD) return 'On Hold';
   if (statusKey === MasterStatus.OFFER_PENDING) return 'Awaiting Offer';
+  if (isInterviewRoundStatusKey(statusKey)) {
+    return formatInterviewTypeLabel(interviewTypeCodeFromRoundKey(statusKey));
+  }
   return fallbackLabel;
 };
 
@@ -209,7 +213,7 @@ export const applyCancelledInterviewOverrides = (
 
     const roundStepIndexes = {};
     overrides.forEach((step, index) => {
-      if (REPEATABLE_ROUND_KEYS.has(step.key)) {
+      if (isInterviewRoundStatusKey(step.key)) {
         if (!roundStepIndexes[step.key]) {
           roundStepIndexes[step.key] = [];
         }
@@ -277,7 +281,7 @@ export const sortPipelineStepsByInterviewChronology = (steps, interviewRequests 
   const sorted = [...steps].sort((a, b) => a.step - b.step || Number(a.id ?? 0) - Number(b.id ?? 0));
   const roundSteps = sorted
     .map((step, index) => ({ step, index }))
-    .filter(({ step }) => REPEATABLE_ROUND_KEYS.has(step.key));
+    .filter(({ step }) => isInterviewRoundStatusKey(step.key));
 
   if (roundSteps.length <= 1) {
     return assignDisplayStepNumbers(sorted);
@@ -327,7 +331,7 @@ export const sortPipelineStepsByInterviewChronology = (steps, interviewRequests 
   const macroBetweenRounds = sorted.filter(
     (step, index) => index > firstRoundIndex
       && index < lastRoundIndex
-      && !REPEATABLE_ROUND_KEYS.has(step.key),
+      && !isInterviewRoundStatusKey(step.key),
   );
   const nonRoundAfter = sorted.slice(lastRoundIndex + 1);
 
@@ -344,7 +348,9 @@ const assignDisplayStepNumbers = (steps) => steps.map((step, index) => ({
   step: index + 1,
 }));
 
-const ROUND_STAGE_KEYS = REPEATABLE_ROUND_KEYS;
+const ROUND_STAGE_KEYS = {
+  has: (key) => isInterviewRoundStatusKey(key),
+};
 
 const INTERVIEW_GROUP_ORDER = {
   ROUND_STAGE: 0,
@@ -508,7 +514,7 @@ const createInterviewPreludeEntry = (request) => {
     sequenceOrder: 1000 + Number(request.id ?? 0),
     timestamp: request.scheduledStartDateTime || request.preferredStartDateTime || request.createdAt || null,
     endTimestamp: request.scheduledEndDateTime || request.preferredEndDateTime || null,
-    bgColor: interviewType === InterviewType.HR ? '#ec4899' : '#3b82f6',
+    bgColor: isHrInterviewType(interviewType) ? '#ec4899' : '#3b82f6',
     actionLabel: meta.action,
     statusBadgeClass: meta.badgeClass,
     interviewType,
@@ -544,7 +550,7 @@ const mapPanelToActivityEntries = (panel) => {
     sequenceOrder: 2000 + Number(panel.id ?? 0),
     timestamp,
     endTimestamp,
-    bgColor: interviewType === InterviewType.HR ? '#ec4899' : '#0ea5e9',
+    bgColor: isHrInterviewType(interviewType) ? '#ec4899' : '#0ea5e9',
     actionLabel: meta.action,
     statusBadgeClass: meta.badgeClass,
     interviewType,
@@ -681,20 +687,17 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
     (a, b) => Number(a.sequenceOrder ?? 0) - Number(b.sequenceOrder ?? 0),
   );
 
-  const preludeQueues = {
-    [InterviewType.TECHNICAL]: sortInterviewPreludes(
-      interviewEntries.filter(
-        (entry) => entry.kind === 'INTERVIEW_PRELUDE'
-          && normalizeInterviewType(entry.interviewType) === InterviewType.TECHNICAL,
-      ),
-    ),
-    [InterviewType.HR]: sortInterviewPreludes(
-      interviewEntries.filter(
-        (entry) => entry.kind === 'INTERVIEW_PRELUDE'
-          && normalizeInterviewType(entry.interviewType) === InterviewType.HR,
-      ),
-    ),
-  };
+  const preludeQueues = {};
+  interviewEntries
+    .filter((entry) => entry.kind === 'INTERVIEW_PRELUDE')
+    .forEach((entry) => {
+      const type = normalizeInterviewType(entry.interviewType);
+      if (!preludeQueues[type]) preludeQueues[type] = [];
+      preludeQueues[type].push(entry);
+    });
+  Object.keys(preludeQueues).forEach((type) => {
+    preludeQueues[type] = sortInterviewPreludes(preludeQueues[type]);
+  });
 
   const consumedPreludeIds = new Set();
   const timeline = [];
@@ -712,7 +715,7 @@ const buildInterleavedActivityTimeline = (pipelineEntries, interviewEntries) => 
     let timelineEntry = entry;
 
     if (ROUND_STAGE_KEYS.has(entry.stepKey)) {
-      const interviewType = INTERVIEW_TYPE_BY_ROUND_KEY[entry.stepKey];
+      const interviewType = interviewTypeCodeFromRoundKey(entry.stepKey);
       const prelude = takeNextPrelude(interviewType);
       timelineEntry = enrichPipelineWithPrelude(entry, prelude);
     }

@@ -10,16 +10,20 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users, Code, Star } from 'lucide-react';
+import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Code, Star } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import DepartmentAPI from '@/services/departmentAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import { InterviewType } from '@/lib/statusConstants';
-import { getCandidateTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { InterviewType, isHrInterviewType } from '@/lib/statusConstants';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
+import { getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { TechnologyProficiencyBadge } from '@/components/technologyProficiencyUi';
+import { interviewTypeAPI } from '@/services/interviewTypeAPI';
+import { toast } from '@/hooks/use-toast';
 
 function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const navigate = useNavigate();
+  const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
   const getTodayDate = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -110,36 +114,42 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
 
   if (!candidate) return null;
 
-  const handleGoToAvailability = () => {
-    if (!availabilityDate || !interviewType) return;
+  const handleGoToAvailability = async () => {
+    if (!availabilityDate || !interviewType || !candidate?.id) return;
 
-    const technologyIds = getCandidateTechnologyIds(candidateTechnologies);
+    try {
+      const resolved = await interviewTypeAPI.resolveFilters(interviewType, candidate.id);
+      const filteredData = {
+        startDateTime: availabilityDate,
+        departmentId: resolved.departmentIds?.[0] ?? null,
+        departmentIds: resolved.departmentIds ?? null,
+        minTierOrder: resolved.minTierId ?? null,
+        minLevelOrder: resolved.minDesignationLevelInDepartment ?? null,
+        minYearsOfExperience: resolved.minYearsOfExperience ?? null,
+        technologyIds: resolved.technologyIds?.length ? resolved.technologyIds : null,
+        domainIds: resolved.domainIds?.length ? resolved.domainIds : null,
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        interviewType,
+        interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
+        interviewCoordinatorDepartmentId: coordinatorDepartmentId
+          ? parseInt(coordinatorDepartmentId, 10)
+          : null,
+      };
 
-    const domainIds = (candidate.domains || [])
-      .map((d) => d.id)
-      .filter(Boolean);
-
-    const filteredData = {
-      startDateTime: availabilityDate,
-      departmentId: interviewType === InterviewType.HR ? hrDepartmentId : candidate.departmentId,
-      minTierOrder: candidate.tierOrder,
-      minLevelOrder: interviewType === InterviewType.HR ? null : candidate.levelOrder,
-      technologyIds: technologyIds.length > 0 ? technologyIds : null,
-      domainIds: interviewType === InterviewType.TECHNICAL && domainIds.length > 0 ? domainIds : null,
-      candidateId: candidate.id,
-      candidateName: candidate.name,
-      interviewType,
-      interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
-      interviewCoordinatorDepartmentId: coordinatorDepartmentId
-        ? parseInt(coordinatorDepartmentId, 10)
-        : null,
-    };
-
-    onOpenChange(false);
-    navigate(
-      `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
-      { state: { filterData: filteredData } },
-    );
+      onOpenChange(false);
+      navigate(
+        `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
+        { state: { filterData: filteredData } },
+      );
+    } catch (error) {
+      console.error('Failed to resolve interviewer filters:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to resolve interviewer filters for this interview type',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -263,18 +273,18 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="HR">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-emerald-500" />
-                        HR Interview
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="TECHNICAL">
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-blue-500" />
-                        Technical Interview
-                      </div>
-                    </SelectItem>
+                    {availableInterviewTypes.length > 0 ? (
+                      availableInterviewTypes.map((t) => (
+                        <SelectItem key={t.code} value={t.code}>
+                          {t.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="HR">HR Interview</SelectItem>
+                        <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -350,7 +360,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
             <div className="flex items-start gap-3 text-sm text-blue-700 bg-blue-50/80 p-4 rounded-xl border border-blue-100">
               <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
               <p className="leading-relaxed">
-                {interviewType === InterviewType.HR ? (
+                {isHrInterviewType(interviewType) ? (
                   <>Matching interviewers will be from the <strong className="font-semibold">Human Resources</strong> department.</>
                 ) : (
                   <>Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.</>

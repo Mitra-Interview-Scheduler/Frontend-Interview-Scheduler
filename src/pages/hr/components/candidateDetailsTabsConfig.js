@@ -13,6 +13,8 @@ import {
   InterviewRequestStatus,
   InterviewScheduleStatus,
   MasterStatus,
+  isInterviewRoundStatusKey,
+  isInterviewStageStatusKey,
   normalizeInterviewType,
 } from '@/lib/statusConstants';
 
@@ -20,6 +22,18 @@ const ALL_STATUSES = ALL_MASTER_STATUS_KEYS;
 
 const POST_SCREENING_STATUSES = ALL_STATUSES.filter((status) => status !== MasterStatus.NEW);
 const CLOSING_STATUSES = CLOSING_STATUS_LIST;
+
+/** Custom Admin interview rounds inherit the same tab visibility as Technical / HR rounds. */
+const tabAllowsStatus = (allowedStages, status) => {
+  if (!status) return false;
+  if (allowedStages.includes(status)) return true;
+  if (isInterviewRoundStatusKey(status) || isInterviewStageStatusKey(status)) {
+    return allowedStages.includes(MasterStatus.TECHNICAL_ROUND)
+      || allowedStages.includes(MasterStatus.HR_ROUND)
+      || allowedStages.includes(MasterStatus.INTERVIEW_SCHEDULES);
+  }
+  return false;
+};
 
 export const TABS_CONFIG = [
   {
@@ -96,7 +110,7 @@ const getPanelTabLabel = (panelRequests, orderNumber) => {
 export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels = []) => {
   if (!candidateStatus) return [];
 
-  const staticTabs = TABS_CONFIG.filter((tab) => tab.allowedStages.includes(candidateStatus));
+  const staticTabs = TABS_CONFIG.filter((tab) => tabAllowsStatus(tab.allowedStages, candidateStatus));
   const activityTab = staticTabs.find((tab) => tab.value === 'activity');
   const interviewSummaryTab = staticTabs.find((tab) => tab.value === 'interview-summary');
   const leadingTabs = staticTabs.filter(
@@ -104,9 +118,14 @@ export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels 
   );
 
   const tabEntries = buildInterviewTabEntries(interviews, panels);
-  // Include post-screening stages so cancelled interviews remain visible after cancel resets status.
+  // Include post-screening stages (and custom interview rounds) so interview tabs stay visible.
   const showInterviews = tabEntries.length > 0
-    && POST_SCREENING_STATUSES.includes(candidateStatus);
+    && candidateStatus !== MasterStatus.NEW
+    && (
+      POST_SCREENING_STATUSES.includes(candidateStatus)
+      || isInterviewRoundStatusKey(candidateStatus)
+      || isInterviewStageStatusKey(candidateStatus)
+    );
 
   const interviewOrderMap = buildInterviewOrderMap(tabEntries);
 

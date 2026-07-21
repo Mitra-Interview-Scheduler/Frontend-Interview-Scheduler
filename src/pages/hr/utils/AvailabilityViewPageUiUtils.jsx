@@ -1,6 +1,6 @@
 import React from 'react';
 import { CalendarClock, CheckCircle2, Lock } from 'lucide-react';
-import { InterviewScheduleStatus, InterviewType, SlotStatus } from '@/lib/statusConstants';
+import { InterviewScheduleStatus, InterviewType, SlotStatus, isHrInterviewType } from '@/lib/statusConstants';
 
 export const INTERVIEWER_PALETTES = [
   { bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', solid: '#6366f1', border: '#312e81', text: '#fff' },
@@ -64,8 +64,13 @@ export const POSTPONE_REQUEST_PALETTE = {
   text: '#fff',
 };
 
-export const getBookedTypePalette = (interviewType) =>
-  BOOKED_TYPE_PALETTES[interviewType] || BOOKED_TYPE_PALETTES.DEFAULT;
+export const getBookedTypePalette = (interviewType) => {
+  if (isHrInterviewType(interviewType)) {
+    return BOOKED_TYPE_PALETTES[InterviewType.HR];
+  }
+  // Technical and Admin-created types share the technical booked look.
+  return BOOKED_TYPE_PALETTES[InterviewType.TECHNICAL] || BOOKED_TYPE_PALETTES.DEFAULT;
+};
 
 // Explicit, stable mapping of departments to palettes
 export const DEPARTMENT_PALETTES = {

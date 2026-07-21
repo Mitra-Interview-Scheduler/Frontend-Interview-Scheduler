@@ -1,7 +1,7 @@
 import {
   MasterStatus,
   PipelineStepStatus,
-  INTERVIEW_STAGE_KEYS,
+  isInterviewStageStatusKey,
   isFinalClosingStage,
 } from '@/lib/statusConstants';
 
@@ -67,11 +67,17 @@ const NEXT_STEPS_BY_STATUS = {
   },
 };
 
+const INTERVIEW_ROUND_DEFAULT = {
+  prompt: 'Interview round in progress. Schedule another interview or make an offer.',
+  actions: [SCHEDULE_INTERVIEW, MAKE_OFFER],
+};
+
 export const getNextStepsConfig = (status, steps = []) => {
   const normalizedSteps = Array.isArray(steps) ? steps : [];
   const currentPipelineStep = normalizedSteps.find((step) => step.stepStatus === PipelineStepStatus.CURRENT);
   const statusKey = String(currentPipelineStep?.key || status || '').trim().toUpperCase();
-  const config = NEXT_STEPS_BY_STATUS[statusKey] ?? NEXT_STEPS_BY_STATUS.DEFAULT;
+  const config = NEXT_STEPS_BY_STATUS[statusKey]
+    ?? (isInterviewStageStatusKey(statusKey) ? INTERVIEW_ROUND_DEFAULT : NEXT_STEPS_BY_STATUS.DEFAULT);
 
   const currentStep = normalizedSteps.find((step) => step.key === statusKey)
     || currentPipelineStep;
@@ -87,7 +93,7 @@ export const getNextStepsConfig = (status, steps = []) => {
     };
   }
 
-  if (INTERVIEW_STAGE_KEYS.has(statusKey)) {
+  if (isInterviewStageStatusKey(statusKey)) {
     const actions = config.actions.length > 0
       ? config.actions
       : [SCHEDULE_INTERVIEW, MAKE_OFFER];

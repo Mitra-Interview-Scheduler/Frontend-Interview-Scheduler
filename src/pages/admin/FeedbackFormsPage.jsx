@@ -19,6 +19,7 @@ import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
 import ObligatoryQuestionsManager from '@/components/admin/ObligatoryQuestionsManager';
 import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
 
 const FeedbackFormsPage = () => {
   const navigate = useNavigate();
@@ -57,6 +58,11 @@ const FeedbackFormsPage = () => {
     designationId: '',
     interviewType: '',
   });
+
+  const { interviewTypes: dynamicInterviewTypes } = useInterviewTypes(true);
+  const interviewTypeOptions = dynamicInterviewTypes.length > 0
+    ? dynamicInterviewTypes.map((t) => ({ value: t.code, label: t.label }))
+    : FEEDBACK_INTERVIEW_TYPE_OPTIONS;
 
   const availableDesignations = useMemo(() => {
     if (!filters.departmentId) return [];
@@ -309,7 +315,7 @@ const FeedbackFormsPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All interview types</SelectItem>
-                  {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                  {interviewTypeOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
