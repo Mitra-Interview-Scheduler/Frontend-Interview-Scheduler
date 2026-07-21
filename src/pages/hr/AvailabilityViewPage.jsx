@@ -1536,7 +1536,31 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const countableEvents = events.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
+  const hasActiveInterviewerFilters = useMemo(() => (
+    filterDept.length > 0
+    || filterTech.length > 0
+    || filterDomain.length > 0
+    || Boolean(minExperience)
+    || Boolean(selectedDeptForDesignation)
+    || Boolean(selectedTierInDept)
+    || Boolean(minDesignationLevel)
+  ), [
+    filterDept,
+    filterTech,
+    filterDomain,
+    minExperience,
+    selectedDeptForDesignation,
+    selectedTierInDept,
+    minDesignationLevel,
+  ]);
+
+  // When interviewer filters are active, hide booked slots so HR only sees free matches.
+  const calendarEvents = useMemo(() => {
+    if (!hasActiveInterviewerFilters) return events;
+    return events.filter((e) => e.resource?.status !== SlotStatus.BOOKED);
+  }, [events, hasActiveInterviewerFilters]);
+
+  const countableEvents = calendarEvents.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
   const availableCount = countableEvents.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
   const postponeCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED
@@ -2346,7 +2370,9 @@ const calendarSlotPropGetter = useCallback((date) => {
               <CardDescription>
                 {panelMode
                   ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
-                  : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+                  : hasActiveInterviewerFilters
+                    ? 'Filters active — showing available slots only. Clear filters to see booked interviews.'
+                    : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
               </CardDescription>
             </div>
 
@@ -2441,7 +2467,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <Calendar
                     localizer={localizer}
                     components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
-                    events={events}
+                    events={calendarEvents}
                     date={calendarDate}
                     onNavigate={(nextDate) => {
                       const nextDay = startOfDay(nextDate);
