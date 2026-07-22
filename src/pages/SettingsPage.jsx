@@ -514,8 +514,9 @@ const SettingsPage = () => {
                     <div>
                       <p className="text-sm font-medium">Calendars to show</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Events from selected calendars appear read-only on My Availability (up to 25).
-                        Leave all unchecked to hide Google events.
+                        Events from selected calendars appear read-only on My Availability and are
+                        used for scheduling conflict checks (up to 25). Leave all unchecked to hide
+                        Google events and skip those calendars in conflict checks.
                       </p>
                     </div>
                     <Button
