@@ -13,22 +13,23 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock, Video, ExternalLink } from 'lucide-react';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import  candidateAPI from '@/services/candidateAPI';
+import { feedbackAPI } from '@/services/feedbackAPI';
 
 import { availabilityAPI } from '@/services/availabilityAPI';
-import { feedbackAPI } from '@/services/feedbackAPI';
-import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 import ProposeTimeDialog from './ProposeTimeDialog';
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { formatDate, formatTimeRange, formatFriendlyDateTimeRange } = useFormattedDateTime();
   const [loading, setLoading] = useState(true);
   const [candidate, setCandidate] = useState(null);
@@ -65,6 +66,17 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
   const isCompleted = interviewDetails?.interviewStatus === InterviewScheduleStatus.COMPLETED
     || hasSubmittedFeedback;
+  const isPanelInterview = !!interviewDetails?.panelId;
+  const panelMembers = interviewDetails?.panelMembers || [];
+  const interviewCoordinatorName = interviewDetails?.interviewCoordinatorName || null;
+  const candidateCoordinatorName = candidate?.coordinatedHrName
+    || interviewDetails?.coordinatedHrName
+    || null;
+  const showPeopleSection = panelMembers.length > 0
+    || interviewCoordinatorName
+    || candidateCoordinatorName;
+  const canWithdrawPostpone = !!pendingPostpone
+    && (!pendingPostpone.requestedById || pendingPostpone.requestedById === user?.id);
 
   const loadInterviewData = async () => {
     try {
@@ -170,10 +182,20 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   <div className="flex items-start gap-2">
                     <CalendarClock className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
                     <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-semibold text-amber-900">Time change proposal pending</p>
+                      <p className="text-sm font-semibold text-amber-900">
+                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime
+                          ? 'Time change proposal pending'
+                          : 'Postpone request pending'}
+                      </p>
                       <p className="text-xs text-amber-800">
-                        Waiting for HR to accept or decline. You can withdraw this proposal anytime.
-                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime && (
+                        Waiting for HR to review.
+                        {pendingPostpone.requestedByName
+                          && pendingPostpone.requestedById !== user?.id && (
+                          <>
+                            {' '}Requested by <strong>{pendingPostpone.requestedByName}</strong>.
+                          </>
+                        )}
+                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime ? (
                           <>
                             {' '}Proposed:{' '}
                             <strong>
@@ -183,6 +205,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                               )}
                             </strong>
                           </>
+                        ) : (
+                          <> No alternative time was proposed.</>
                         )}
                       </p>
                       {pendingPostpone.reason && (
@@ -190,15 +214,17 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       )}
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDeclineConfirmOpen(true)}
-                    disabled={withdrawingPostpone}
-                    className="border-amber-300 text-amber-900 hover:bg-amber-100"
-                  >
-                    Decline proposal
-                  </Button>
+                  {canWithdrawPostpone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeclineConfirmOpen(true)}
+                      disabled={withdrawingPostpone}
+                      className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                    >
+                      {pendingPostpone.preferredStartDateTime ? 'Decline proposal' : 'Withdraw request'}
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -206,11 +232,12 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               {candidate || interviewDetails?.candidateName ? (
                 <div className="space-y-4 p-4">
                   <div className="flex items-start gap-4 pb-4 border-b">
-                    <Avatar className="h-16 w-16 border-2 border-primary">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
-                        {getInitial(displayCandidateName)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <CandidateAvatar
+                      candidate={candidate}
+                      name={displayCandidateName}
+                      className="h-16 w-16 border-2 border-primary"
+                      fallbackClassName="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold"
+                    />
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-bold text-gray-900">{displayCandidateName}</h3>
                       {candidate?.email ? (
@@ -226,6 +253,53 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       )}
                     </div>
                   </div>
+
+                  {showPeopleSection && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-slate-600" />
+                        <h3 className="text-sm font-semibold text-slate-800">People</h3>
+                      </div>
+
+                      {isPanelInterview && panelMembers.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Panel members
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {panelMembers.map((member) => (
+                              <Badge
+                                key={member.interviewerId || member.interviewerName}
+                                variant="outline"
+                                className="bg-sky-50 border-sky-200 text-sky-900 font-medium"
+                              >
+                                {member.interviewerName}
+                                {member.designationName ? ` · ${member.designationName}` : ''}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {interviewCoordinatorName && (
+                        <div className="text-sm text-slate-700">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
+                            Interview Coordinator
+                          </span>
+                          <span className="font-medium text-slate-900">{interviewCoordinatorName}</span>
+                        </div>
+                      )}
+
+                      {candidateCoordinatorName && (
+                        <div className="text-sm text-slate-700">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
+                            Candidate Coordinator
+                          </span>
+                          <span className="font-medium text-slate-900">{candidateCoordinatorName}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {interviewDetails && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-4">
@@ -368,7 +442,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               className="gap-2"
             >
               <CalendarClock className="w-4 h-4" />
-              Propose a time
+              {isPanelInterview ? 'Propose / Postpone' : 'Propose a time'}
             </Button>
           )}
           <Button onClick={handleStartInterview} disabled={loading || !interviewScheduleId} className="gap-2">
@@ -382,8 +456,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
         open={isProposeDialogOpen}
         onOpenChange={setIsProposeDialogOpen}
         onSuccess={() => {
-          setIsProposeDialogOpen(false);
-          loadInterviewData();
+          onOpenChange(false);
         }}
         interviewScheduleId={interviewScheduleId}
         currentInterview={interviewDetails}
