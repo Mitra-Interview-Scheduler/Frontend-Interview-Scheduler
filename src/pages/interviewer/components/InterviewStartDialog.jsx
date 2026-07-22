@@ -12,10 +12,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Phone, User, UserCheck, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import  candidateAPI from '@/services/candidateAPI';
 import { feedbackAPI } from '@/services/feedbackAPI';
@@ -26,6 +24,13 @@ import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import ProposeTimeDialog from './ProposeTimeDialog';
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const navigate = useNavigate();
@@ -150,7 +155,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`max-w-2xl gap-0 p-0 m-4 overflow-hidden ${
+        className={`max-w-5xl gap-0 p-0 m-4 overflow-hidden ${
           isProposeDialogOpen || declineConfirmOpen
             ? 'pointer-events-none select-none opacity-60 blur-[6px]'
             : ''
@@ -228,7 +233,6 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                 </div>
               )}
 
-              {/* Candidate Profile Section */}
               {candidate || interviewDetails?.candidateName ? (
                 <div className="space-y-4 p-4">
                   <div className="flex items-start gap-4 pb-4 border-b">
@@ -255,47 +259,81 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   </div>
 
                   {showPeopleSection && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                    <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 to-slate-50 p-4 space-y-4">
                       <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-slate-600" />
-                        <h3 className="text-sm font-semibold text-slate-800">People</h3>
+                        <div className="bg-sky-100 p-2 rounded-lg">
+                          <Users className="w-4 h-4 text-sky-700" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-sky-900">
+                            {isPanelInterview ? 'Panel interview' : 'People'}
+                          </h3>
+                          {isPanelInterview && panelMembers.length > 0 && (
+                            <p className="text-xs text-sky-700/80">
+                              {panelMembers.length} interviewer{panelMembers.length === 1 ? '' : 's'}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       {isPanelInterview && panelMembers.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700/70 mb-3">
                             Panel members
                           </p>
-                          <div className="flex flex-wrap gap-2">
+                          <ul className="space-y-2">
                             {panelMembers.map((member) => (
-                              <Badge
+                              <li
                                 key={member.interviewerId || member.interviewerName}
-                                variant="outline"
-                                className="bg-sky-50 border-sky-200 text-sky-900 font-medium"
+                                className="flex items-center gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5"
                               >
-                                {member.interviewerName}
-                                {member.designationName ? ` · ${member.designationName}` : ''}
-                              </Badge>
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(145deg,#0369a1,#0c4a6e)] text-[11px] font-semibold text-white">
+                                  {getInitials(member.interviewerName)}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-900 truncate">
+                                    {member.interviewerName}
+                                  </p>
+                                  {member.designationName && (
+                                    <p className="text-xs text-slate-500 truncate">
+                                      {member.designationName}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
                             ))}
-                          </div>
+                          </ul>
                         </div>
                       )}
 
-                      {interviewCoordinatorName && (
-                        <div className="text-sm text-slate-700">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
-                            Interview Coordinator
-                          </span>
-                          <span className="font-medium text-slate-900">{interviewCoordinatorName}</span>
-                        </div>
-                      )}
-
-                      {candidateCoordinatorName && (
-                        <div className="text-sm text-slate-700">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
-                            Candidate Coordinator
-                          </span>
-                          <span className="font-medium text-slate-900">{candidateCoordinatorName}</span>
+                      {(interviewCoordinatorName || candidateCoordinatorName) && (
+                        <div className={`grid gap-3 ${interviewCoordinatorName && candidateCoordinatorName ? 'sm:grid-cols-2' : ''}`}>
+                          {interviewCoordinatorName && (
+                            <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5">
+                              <div className="bg-sky-100 p-2 rounded-lg shrink-0">
+                                <UserCheck className="w-4 h-4 text-sky-700" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-sky-700">Interview Coordinator</p>
+                                <p className="text-sm font-semibold text-slate-900 truncate">
+                                  {interviewCoordinatorName}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {candidateCoordinatorName && (
+                            <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5">
+                              <div className="bg-sky-100 p-2 rounded-lg shrink-0">
+                                <User className="w-4 h-4 text-sky-700" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-sky-700">Candidate Coordinator</p>
+                                <p className="text-sm font-semibold text-slate-900 truncate">
+                                  {candidateCoordinatorName}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
