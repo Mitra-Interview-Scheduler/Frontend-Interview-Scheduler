@@ -22,7 +22,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
   Plus, Edit, Trash2, ListChecks, Loader2, Lock, FileText, GitBranch, CalendarClock,
 } from 'lucide-react';
@@ -174,7 +173,7 @@ const InterviewTypesPage = () => {
       const payload = {
         label: form.label.trim(),
         description: form.description?.trim() || null,
-        active: form.active,
+        active: true,
         displayOrder: Number(form.displayOrder) || 0,
         cancelRestoreStatusKey: form.cancelRestoreStatusKey || null,
         filterRules: form.filterRules,
@@ -384,37 +383,22 @@ const InterviewTypesPage = () => {
                   className="resize-none"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Display order
-                  </Label>
-                  <Input
-                    type="number"
-                    value={form.displayOrder}
-                    onChange={(e) => setForm({ ...form, displayOrder: e.target.value })}
-                    disabled={isMutating}
-                    className="h-10"
-                  />
-                  {!editing && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Pre-filled after existing types.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Availability
-                  </Label>
-                  <div className="flex h-10 items-center justify-between rounded-md border px-3">
-                    <span className="text-sm text-muted-foreground">Available for scheduling</span>
-                    <Switch
-                      checked={form.active}
-                      onCheckedChange={(v) => setForm({ ...form, active: v === true })}
-                      disabled={isMutating}
-                    />
-                  </div>
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Display order
+                </Label>
+                <Input
+                  type="number"
+                  value={form.displayOrder}
+                  onChange={(e) => setForm({ ...form, displayOrder: e.target.value })}
+                  disabled={isMutating}
+                  className="h-10 max-w-xs"
+                />
+                {!editing && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Pre-filled after existing types.
+                  </p>
+                )}
               </div>
             </section>
 
