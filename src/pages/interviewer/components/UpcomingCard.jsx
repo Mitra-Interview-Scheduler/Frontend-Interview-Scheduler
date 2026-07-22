@@ -30,6 +30,18 @@ const STATUS_COLORS = {
     solid: '#10b981',
     label: 'Booked',
   },
+  panel_booked: {
+    bg: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+    border: '#0c4a6e',
+    solid: '#0ea5e9',
+    label: 'Panel',
+  },
+  postpone_request: {
+    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border: '#b45309',
+    solid: '#f59e0b',
+    label: 'Postpone',
+  },
   blocked: {
     bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
     border: '#92400e',
@@ -60,7 +72,13 @@ const UpcomingCard = ({
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 
   const availableUpcomingEvents = upcomingEvents.filter((e) => e.status === 'available');
-  const bookedUpcomingEvents = upcomingEvents.filter((e) => e.status === 'booked');
+  const bookedUpcomingEvents = upcomingEvents.filter(
+    (e) => e.status === 'booked'
+      || e.status === 'panel_booked'
+      || e.status === 'postpone_request'
+      || e.hasPendingPostponeRequest
+      || e.isProposedTime,
+  );
 
   const availableTotalPages = Math.max(1, Math.ceil(availableUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
   const bookedTotalPages = Math.max(1, Math.ceil(bookedUpcomingEvents.length / UPCOMING_SLOTS_PER_PAGE));
@@ -237,19 +255,33 @@ const UpcomingCard = ({
                 </div>
               ) : (
                 bookedPageItems.map((event, index) => {
-                  const colors = STATUS_COLORS[event.status];
+                  const isPostpone = event.status === 'postpone_request'
+                    || event.hasPendingPostponeRequest
+                    || event.isProposedTime;
+                  const isPanel = !isPostpone && (
+                    event.status === 'panel_booked' || Boolean(event.panelId)
+                  );
+                  const colors = STATUS_COLORS[
+                    isPostpone ? 'postpone_request' : (isPanel ? 'panel_booked' : event.status)
+                  ] || STATUS_COLORS.booked;
                   return (
                     <motion.div
                       key={event.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.04 }}
-                      className="flex flex-col p-2.5 rounded-xl border-2 border-emerald-100 bg-emerald-50/30 transition-all"
+                      className={`flex flex-col p-2.5 rounded-xl border-2 transition-all ${
+                        isPostpone
+                          ? 'border-amber-200 bg-amber-50/40'
+                          : (isPanel
+                            ? 'border-sky-200 bg-sky-50/40'
+                            : 'border-emerald-100 bg-emerald-50/30')
+                      }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-bold text-slate-700">{formatDate(event.start)}</span>
                         <Badge className="text-[9px] h-4 px-1 capitalize" style={{ backgroundColor: colors.solid }}>
-                          Booked
+                          {isPostpone ? 'Postpone' : (isPanel ? 'Panel' : 'Booked')}
                         </Badge>
                       </div>
 
@@ -259,10 +291,25 @@ const UpcomingCard = ({
                       </div>
 
                       {event.candidateName && (
-                        <div className="mt-1.5 flex items-center gap-1 bg-emerald-100 p-1.5 rounded border border-emerald-200">
-                          <User className="w-3 h-3 text-emerald-700" />
-                          <p className="text-[10px] font-semibold text-emerald-700 truncate">{event.candidateName}</p>
+                        <div className={`mt-1.5 flex items-center gap-1 p-1.5 rounded border ${
+                          isPostpone
+                            ? 'bg-amber-100 border-amber-200'
+                            : (isPanel
+                              ? 'bg-sky-100 border-sky-200'
+                              : 'bg-emerald-100 border-emerald-200')
+                        }`}>
+                          <User className={`w-3 h-3 ${
+                            isPostpone ? 'text-amber-800' : (isPanel ? 'text-sky-800' : 'text-emerald-700')
+                          }`} />
+                          <p className={`text-[10px] font-semibold truncate ${
+                            isPostpone ? 'text-amber-800' : (isPanel ? 'text-sky-800' : 'text-emerald-700')
+                          }`}>{event.candidateName}</p>
                         </div>
+                      )}
+                      {isPostpone && event.pendingPostponeRequestedByName && (
+                        <p className="mt-1 text-[10px] text-amber-800">
+                          Requested by <strong>{event.pendingPostponeRequestedByName}</strong>
+                        </p>
                       )}
                     </motion.div>
                   );

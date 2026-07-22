@@ -64,6 +64,14 @@ export const POSTPONE_REQUEST_PALETTE = {
   text: '#fff',
 };
 
+/** Proposed alternative interview time (pending HR approval) */
+export const PROPOSED_TIME_PALETTE = {
+  bg: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+  solid: '#8b5cf6',
+  border: '#5b21b6',
+  text: '#fff',
+};
+
 export const getBookedTypePalette = (interviewType) => {
   if (isHrInterviewType(interviewType)) {
     return BOOKED_TYPE_PALETTES[InterviewType.HR];
@@ -129,7 +137,14 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
           <span className="booked-event-completed-badge">Completed</span>
         )}
         {hasPostponeRequest && (
-          <span className="booked-event-postpone-badge">Time change requested</span>
+          <span className="booked-event-postpone-badge">
+            {resource.pendingPostponePreferredStart && resource.pendingPostponePreferredEnd
+              ? 'Time change requested'
+              : 'Postpone requested'}
+            {resource.panelId && resource.pendingPostponeRequestedByName
+              ? ` by ${resource.pendingPostponeRequestedByName}`
+              : ''}
+          </span>
         )}
         {showInterviewer && (
           <span className="booked-event-interviewer">{interviewerName}</span>
@@ -253,14 +268,14 @@ export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end)
       `Interviewer: ${r?.interviewer || event.title}`,
       `Time: ${timeRange}`,
       '',
-      'Outside selected From date — not bookable',
+      'Outside selected From date, not bookable',
     ].join('\n');
   }
 
   if (r?.status === SlotStatus.BOOKED) {
     const meetLine = r.meetingLink ? `\nGoogle Meet: ${r.meetingLink}` : '';
     if (r.interviewStatus === InterviewScheduleStatus.COMPLETED) {
-      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nInterview finished — feedback locked`;
+      return `COMPLETED: ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nInterview finished. Feedback locked`;
     }
     if (r.hasPendingPostponeRequest) {
       const reasonLine = r.pendingPostponeReason
@@ -272,13 +287,13 @@ export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end)
           new Date(r.pendingPostponePreferredEnd),
         )}`
         : '';
-      return `TIME CHANGE REQUESTED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\nCurrent: ${timeRange}${proposedLine}${reasonLine}${meetLine}\n\nInterviewer proposed a new time — click to review`;
+      return `TIME CHANGE REQUESTED: ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\nCurrent: ${timeRange}${proposedLine}${reasonLine}${meetLine}\n\nInterviewer proposed a new time. Click to review`;
     }
-    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nClick to cancel & restore slot`;
+    return `BOOKED: ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nClick to cancel and restore slot`;
   }
 
   if (isInPanel) {
-    return `PANEL SELECTED - ${r.interviewer}\n${timeRange}\n\nClick again to remove from panel`;
+    return `PANEL SELECTED: ${r.interviewer}\n${timeRange}\n\nClick again to remove from panel`;
   }
 
   return [

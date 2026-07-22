@@ -11,9 +11,7 @@ import {
   Card, CardContent,
 } from '@/components/ui/card';
 import { Button }   from '@/components/ui/button';
-import {
-  ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw, CalendarClock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
@@ -30,6 +28,9 @@ import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
 import { calendarLocalizer, computeSlotDurationHours } from '@/lib/calendarUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
+import { PANEL_PALETTE, POSTPONE_REQUEST_PALETTE } from './../hr/utils/AvailabilityViewPageUiUtils';
+
+const POSTPONE_PROPOSAL_LABEL = 'Postpone proposal';
 
 
 // ── Status colours ────────────────────────────────────────────────────────────
@@ -45,6 +46,14 @@ const STATUS_COLORS = {
     border: '#065f46',
     solid: '#10b981',
     label: 'Booked',
+  },
+  panel_booked: {
+    ...PANEL_PALETTE,
+    label: 'Panel Interview',
+  },
+  postpone_request: {
+    ...POSTPONE_REQUEST_PALETTE,
+    label: POSTPONE_PROPOSAL_LABEL,
   },
   completed: {
     bg: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
@@ -72,8 +81,23 @@ const CALENDAR_PAGE_SIZES = {
   day: 100,
 };
 
+const CALENDAR_LEGEND_ITEMS = [
+  { key: 'available', label: 'Available', swatch: STATUS_COLORS.available.solid },
+  { key: 'booked', label: 'Booked', swatch: STATUS_COLORS.booked.solid },
+  { key: 'panel_booked', label: 'Panel', swatch: PANEL_PALETTE.solid },
+  { key: 'postpone_request', label: 'Postpone proposal', swatch: POSTPONE_REQUEST_PALETTE.solid },
+  { key: 'completed', label: 'Completed', swatch: STATUS_COLORS.completed.solid },
+];
+
 const BookedCalendarEvent = ({ event }) => {
-  const isBookedLike = event.status === 'booked' || event.status === 'completed';
+  const isPostponeProposal = event.status === 'postpone_request'
+    || event.hasPendingPostponeRequest
+    || event.isProposedTime;
+
+  const isBookedLike = event.status === 'booked'
+    || event.status === 'panel_booked'
+    || event.status === 'completed'
+    || isPostponeProposal;
   if (!isBookedLike) {
     return <span className="truncate">{event.title}</span>;
   }
@@ -81,9 +105,22 @@ const BookedCalendarEvent = ({ event }) => {
   return (
     <div className="booked-event-content">
       <div className="booked-event-header">
+        {isPostponeProposal && (
+          <CalendarClock className="booked-event-lock postpone-event-icon" aria-hidden="true" />
+        )}
         <span className="booked-event-candidate truncate">{event.title}</span>
       </div>
-    
+      {event.panelId && !isPostponeProposal && (
+        <span className="calendar-event-panel-badge">Panel</span>
+      )}
+      {isPostponeProposal && (
+        <span className="booked-event-postpone-badge">
+          {POSTPONE_PROPOSAL_LABEL}
+          {event.pendingPostponeRequestedByName
+            ? ` by ${event.pendingPostponeRequestedByName}`
+            : ''}
+        </span>
+      )}
     </div>
   );
 };
@@ -227,13 +264,19 @@ const AvailabilityPage = () => {
   // Interview start dialog state
   const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
-  const mapSlotsToEvents = (data) => data.map((slot) => {
+  const mapSlotsToEvents = (data) => (data || []).flatMap((slot) => {
     const isCompleted = slot.interviewStatus === InterviewScheduleStatus.COMPLETED;
+    const hasPendingPostponeRequest = Boolean(slot.hasPendingPostponeRequest) && !isCompleted;
+    const isPanel = Boolean(slot.panelId);
     const statusKey = slot.status === SlotStatus.BOOKED
-      ? (isCompleted ? 'completed' : 'booked')
+      ? (isCompleted
+        ? 'completed'
+        : (hasPendingPostponeRequest
+          ? 'postpone_request'
+          : (isPanel ? 'panel_booked' : 'booked')))
       : slot.status.toLowerCase();
 
-    return {
+    const baseEvent = {
       id: slot.id,
       title: slot.status === SlotStatus.BOOKED
         ? (isCompleted
@@ -255,7 +298,44 @@ const AvailabilityPage = () => {
         && slot.interviewStatus === InterviewScheduleStatus.SCHEDULED
         ? (slot.meetingLink || null)
         : null,
+      panelId: slot.panelId ?? null,
+      hasPendingPostponeRequest,
+      pendingPostponeRequestId: slot.pendingPostponeRequestId ?? null,
+      pendingPostponeReason: slot.pendingPostponeReason ?? null,
+      pendingPostponePreferredStart: slot.pendingPostponePreferredStart ?? null,
+      pendingPostponePreferredEnd: slot.pendingPostponePreferredEnd ?? null,
+      pendingPostponeRequestedByName: slot.pendingPostponeRequestedByName ?? null,
     };
+
+    const events = [baseEvent];
+
+    if (
+      hasPendingPostponeRequest
+      && slot.pendingPostponePreferredStart
+      && slot.pendingPostponePreferredEnd
+      && slot.status === SlotStatus.BOOKED
+    ) {
+      events.push({
+        id: `proposed-${slot.id}`,
+        title: slot.candidateName
+          ? `⏳ ${slot.candidateName}`
+          : `⏳ ${POSTPONE_PROPOSAL_LABEL}`,
+        start: new Date(slot.pendingPostponePreferredStart),
+        end: new Date(slot.pendingPostponePreferredEnd),
+        status: 'postpone_request',
+        isProposedTime: true,
+        hasPendingPostponeRequest: true,
+        candidateName: slot.candidateName,
+        interviewScheduleId: slot.interviewScheduleId,
+        interviewStatus: slot.interviewStatus,
+        panelId: slot.panelId ?? null,
+        linkedSlotId: slot.id,
+        pendingPostponeRequestId: slot.pendingPostponeRequestId ?? null,
+        pendingPostponeRequestedByName: slot.pendingPostponeRequestedByName ?? null,
+      });
+    }
+
+    return events;
   });
 
   const mapGoogleEventsToCalendar = (items) => (items || []).map((event) => ({
@@ -547,7 +627,12 @@ const handleSelectSlot = ({ start, end }) => {
       return;
     }
 
-    if (event.status === 'booked' || event.status === 'completed') {
+    if (event.status === 'booked'
+      || event.status === 'panel_booked'
+      || event.status === 'completed'
+      || event.status === 'postpone_request'
+      || event.hasPendingPostponeRequest
+      || event.isProposedTime) {
       if (!event.interviewScheduleId) return;
       setSelectedInterviewScheduleId(event.interviewScheduleId);
       setIsInterviewStartDialogOpen(true);
@@ -653,33 +738,54 @@ const handleSelectSlot = ({ start, end }) => {
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
-    const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
+    const isPostponeRequest = event.status === 'postpone_request'
+      || event.hasPendingPostponeRequest
+      || event.isProposedTime;
+    const colors = isPostponeRequest
+      ? STATUS_COLORS.postpone_request
+      : (STATUS_COLORS[event.status] || STATUS_COLORS.available);
     const isGoogleExternal = event.status === 'google_external';
-    const isBookedLike = event.status === 'booked' || event.status === 'completed';
+    const isPanelBooked = !isPostponeRequest && (
+      event.status === 'panel_booked' || Boolean(event.panelId)
+    );
+    const isBookedLike = event.status === 'booked'
+      || event.status === 'panel_booked'
+      || event.status === 'completed'
+      || isPostponeRequest;
     return {
       className: isGoogleExternal
         ? 'google-external-event'
         : (event.status === 'completed'
           ? 'booked-event completed-event'
-          : (event.status === 'booked' ? 'booked-event' : 'available-event')),
+          : (isPostponeRequest
+            ? 'booked-event postpone-request-event'
+            : (isPanelBooked
+              ? 'booked-event panel-booked-event'
+              : (event.status === 'booked' ? 'booked-event' : 'available-event')))),
       style: {
         background:   colors.bg,
         borderRadius: '5px',
         opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
         color:        isGoogleExternal ? '#ffffff' : 'white',
-        borderLeft:   `3px solid ${colors.border}`,
+        borderLeft:   `${isPanelBooked || isPostponeRequest ? 4 : 3}px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
         padding:      '4px 8px',
         fontSize:     '12px',
         fontWeight:   isGoogleExternal ? '600' : '500',
         boxShadow:    isGoogleExternal
           ? '0 2px 6px rgba(0, 0, 0, 0.2)'
-          : `0 2px 6px ${colors.solid}40`,
+          : (isPostponeRequest
+            ? `0 2px 10px ${POSTPONE_REQUEST_PALETTE.solid}55, 0 0 0 1px ${POSTPONE_REQUEST_PALETTE.border}66`
+            : (isPanelBooked
+              ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 1px #7dd3fc66`
+              : `0 2px 6px ${colors.solid}40`)),
         cursor:       isGoogleExternal ? 'not-allowed' : 'pointer',
         overflow:     'hidden',
         backgroundImage: isGoogleExternal
           ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 6px, transparent 6px, transparent 12px)'
-          : undefined,
+          : (isPostponeRequest
+            ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 5px, transparent 5px, transparent 10px)'
+            : undefined),
       },
     };
   };
@@ -748,6 +854,18 @@ const handleSelectSlot = ({ start, end }) => {
             className="flex-1">
             <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
+                <div className="interviewer-calendar-legend" aria-label="Calendar color legend">
+                  {CALENDAR_LEGEND_ITEMS.map((item) => (
+                    <span key={item.key} className="interviewer-calendar-legend-chip">
+                      <span
+                        className="interviewer-calendar-legend-swatch"
+                        style={{ background: item.swatch }}
+                        aria-hidden="true"
+                      />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
                 <AnimatePresence mode="wait">
                   {loading && !isCalendarSyncing ? (
                     <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -815,6 +933,20 @@ const handleSelectSlot = ({ start, end }) => {
                             const syncLine = event.status === 'available'
                               ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
                               : '';
+                            if (event.status === 'postpone_request' || event.hasPendingPostponeRequest || event.isProposedTime) {
+                              const byLine = event.pendingPostponeRequestedByName
+                                ? `\nRequested by: ${event.pendingPostponeRequestedByName}`
+                                : '';
+                              const proposedLine = event.isProposedTime
+                                ? '\nProposed alternative time (pending HR approval)'
+                                : (event.pendingPostponePreferredStart && event.pendingPostponePreferredEnd
+                                  ? '\nIncludes a proposed alternative time'
+                                  : '\nNo alternative time proposed yet');
+                              return `⏳ ${POSTPONE_PROPOSAL_LABEL}${event.candidateName ? ': ' + event.candidateName : ''}${byLine}${proposedLine}\n${timeRange}${meetLine}`;
+                            }
+                            if (event.status === 'panel_booked' || event.panelId) {
+                              return `👥 Panel Interview${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}`;
+                            }
                             if (event.status === 'booked' || event.status === 'completed') {
                               return `🔒 ${event.status === 'completed' ? 'Completed' : 'Booked'}${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}${syncLine}`;
                             }
