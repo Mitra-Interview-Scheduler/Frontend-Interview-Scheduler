@@ -18,6 +18,7 @@ const adminLinks = [
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
   { icon: Globe2, label: 'Domains', path: '/admin/domains' },
   { icon: ListChecks, label: 'Interview Types', path: '/admin/interview-types' },
+  { icon: FileText, label: 'Document & Resource Types', path: '/admin/catalog-types' },
   // { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
   // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
