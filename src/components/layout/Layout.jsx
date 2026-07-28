@@ -18,19 +18,19 @@ const Layout = ({ children ,hasPadding = true, className }) => {
     setSidebarOpen(false);
   };
 
-  return (
-        <div className="max-h-screen bg-background relative "> {/* Add relative here */}
+    return (
+      <div className="h-screen bg-background relative overflow-hidden"> {/* full height and prevent page scroll */}
       <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <Sidebar isOpen={sidebarOpen} onNavigate={closeSidebarOnMobile} />
       
       <main 
         className={cn(
-          "pt-16 transition-all duration-300 relative z-0",
+          "pt-16 transition-all duration-300 relative z-0 h-full overflow-hidden",
           sidebarOpen ? "pl-64" : "pl-0",
           "bg-gradient-to-br from-slate-50 to-slate-100"
         )}
       >
-        <div className={cn("p-6", hasPadding ? "p-6" : "p-0", className)}>
+        <div className={cn(hasPadding ? "p-6 h-full overflow-hidden" : "p-0 h-full overflow-hidden", className)}>
           {children}
         </div>
       </main>
