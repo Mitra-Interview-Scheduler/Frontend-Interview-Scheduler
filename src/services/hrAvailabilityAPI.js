@@ -27,12 +27,52 @@ export const hrAvailabilityAPI = {
   },
 
   /**
+   * Check the selected interviewer(s)' Google Calendars for events that overlap
+   * the proposed interview window. Returns an array of
+   * { interviewerId, interviewerName, conflicts: [{ title, startDateTime, endDateTime, calendarName, allDay }] }.
+   * An empty array means no conflicts. HR may still schedule after confirming in the UI.
+   */
+  checkConflicts: async ({ interviewerIds, startDateTime, endDateTime }) => {
+    const response = await api.post('/hr/interviews/conflict-check', {
+      interviewerIds,
+      startDateTime,
+      endDateTime,
+    });
+    return response.data;
+  },
+
+  /**
    * Cancel a single-interviewer interview request.
    * Backend: DELETE /api/hr/interviews/{requestId}
    * This restores the slot to AVAILABLE and notifies the interviewer.
    */
   cancelInterviewRequest: async (requestId) => {
     await api.delete(`/hr/interviews/${requestId}`);
+  },
+
+  /**
+   * Accept an interviewer's proposed time: cancels the old booking and schedules the new one.
+   */
+  approvePostponeRequest: async (postponeRequestId, { reviewNotes, acknowledgeCalendarConflict } = {}) => {
+    const response = await api.patch(
+      `/hr/interviews/postpone-requests/${postponeRequestId}/approve`,
+      {
+        reviewNotes: reviewNotes || null,
+        acknowledgeCalendarConflict: acknowledgeCalendarConflict ?? null,
+      },
+    );
+    return response.data;
+  },
+
+  /**
+   * Decline an interviewer's proposed time change.
+   */
+  rejectPostponeRequest: async (postponeRequestId, { reviewNotes } = {}) => {
+    const response = await api.patch(
+      `/hr/interviews/postpone-requests/${postponeRequestId}/reject`,
+      { reviewNotes: reviewNotes || null },
+    );
+    return response.data;
   },
 
   /**
@@ -94,6 +134,27 @@ export const hrAvailabilityAPI = {
    */
   getInterviewsForCandidate: async (candidateId) => {
     const response = await api.get(`/hr/interviews/candidate/${candidateId}`);
+    return response.data;
+  },
+
+  /**
+   * Match interviewers to a candidate by technologies and domains (profile-based).
+   */
+  getMatchingInterviewers: async (payload) => {
+    const response = await api.post('/hr/availability/match', payload);
+    return response.data;
+  },
+
+  /**
+   * Get an interviewer's slots within a date range (for match detail free-time view).
+   */
+  getInterviewerSlots: async (interviewerId, { startDateTime, endDateTime } = {}) => {
+    const response = await api.get(
+      withQuery(`/hr/availability/interviewers/${interviewerId}/slots`, {
+        startDateTime,
+        endDateTime,
+      }),
+    );
     return response.data;
   },
 };

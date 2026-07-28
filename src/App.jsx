@@ -33,7 +33,9 @@ import PreferencesPage from "./pages/interviewer/PreferencesPage";
 import InterviewerProfilePage from "./pages/interviewer/ProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import ConnectGoogleCalendarPage from "./pages/interviewer/ConnectGoogleCalendarPage";
 import NotFound from "./pages/NotFound";
+import { InterviewerCalendarGuard } from "@/components/InterviewerCalendarGuard";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +49,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+            <InterviewerCalendarGuard>
             <Routes>
               <Route path="/login" element={<Login />} />
             
@@ -204,6 +207,14 @@ const App = () => (
             
             {/* Interviewer Routes */}
             <Route
+              path="/interviewer/connect-calendar"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN', 'HR', 'INTERVIEWER']}>
+                  <ConnectGoogleCalendarPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/interviewer/dashboard"
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
@@ -282,6 +293,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+            </InterviewerCalendarGuard>
             </BrowserRouter>
           </TooltipProvider>
         </TimeFormatProvider>

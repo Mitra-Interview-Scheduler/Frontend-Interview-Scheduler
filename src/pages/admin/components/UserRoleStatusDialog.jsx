@@ -38,6 +38,7 @@ import profileAPI from '@/services/profileService';
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
 import { getInitial } from '@/lib/personUtils';
+import { getNormalizedRoles, sortRoles } from '@/lib/roleHelpers';
 
 const ROLE_OPTIONS = ['ADMIN', 'HR', 'INTERVIEWER'];
 
@@ -145,11 +146,11 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
     setEditing(false);
     setSaving(false);
     setError('');
-    const userRoles = user.roles || (user.role ? [user.role] : []);
+    const userRoles = getNormalizedRoles(user);
     setForm({
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
-      roles: Array.isArray(userRoles) ? userRoles : [],
+      roles: userRoles,
       active: user.active !== false,
     });
     resetProfessionalForm(user);
@@ -158,9 +159,11 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
   const toggleRole = (role) => {
     setForm((prev) => ({
       ...prev,
-      roles: prev.roles.includes(role)
-        ? prev.roles.filter((r) => r !== role)
-        : [...prev.roles, role],
+      roles: sortRoles(
+        prev.roles.includes(role)
+          ? prev.roles.filter((r) => r !== role)
+          : [...prev.roles, role],
+      ),
     }));
     setError('');
   };
@@ -172,11 +175,11 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
 
   const resetForm = () => {
     if (!user) return;
-    const userRoles = user.roles || (user.role ? [user.role] : []);
+    const userRoles = getNormalizedRoles(user);
     setForm({
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
-      roles: Array.isArray(userRoles) ? [...userRoles] : [],
+      roles: userRoles,
       active: user.active !== false,
     });
     resetProfessionalForm(user);
@@ -267,9 +270,10 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
   const handleSave = async () => {
     if (!user?.id) return;
 
-    const userRoles = user.roles || (user.role ? [user.role] : []);
+    const userRoles = getNormalizedRoles(user);
+    const sortedFormRoles = sortRoles(form.roles);
     const rolesChanged =
-      JSON.stringify([...form.roles].sort()) !== JSON.stringify([...userRoles].sort());
+      JSON.stringify(sortedFormRoles) !== JSON.stringify(userRoles);
     const statusChanged = form.active !== (user.active !== false);
     const basicChanged = basicInfoChanged();
     const professionalChanged = professionalDetailsChanged();
@@ -296,12 +300,12 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
       let updatedUser = { ...user };
 
       if (rolesChanged) {
-        const rolesResponse = await usersAPI.updateRoles(user.id, form.roles);
+        const rolesResponse = await usersAPI.updateRoles(user.id, sortedFormRoles);
         updatedUser = {
           ...updatedUser,
           ...rolesResponse,
-          roles: rolesResponse?.roles ?? form.roles,
-          role: rolesResponse?.role ?? form.roles[0],
+          roles: sortRoles(rolesResponse?.roles ?? sortedFormRoles),
+          role: sortRoles(rolesResponse?.roles ?? sortedFormRoles)[0],
         };
       }
 
@@ -361,7 +365,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
   const selectedTier = tiersForSelectedDept.find((t) => t.id === professionalForm.selectedTierId);
   const displayFirstName = editing ? form.firstName : user?.firstName;
   const displayLastName = editing ? form.lastName : user?.lastName;
-  const displayRoles = editing ? form.roles : (user?.roles || (user?.role ? [user.role] : []));
+  const displayRoles = editing ? sortRoles(form.roles) : getNormalizedRoles(user);
   const displayActive = editing ? form.active : (user?.active !== false);
   const displayDomains = editing ? [] : (user?.domains || []);
 

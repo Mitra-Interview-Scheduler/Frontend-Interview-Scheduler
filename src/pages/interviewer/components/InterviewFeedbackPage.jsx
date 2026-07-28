@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass } from 'lucide-react';
+import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -667,11 +667,28 @@ function InterviewFeedbackPage() {
               <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <h2 className="text-lg font-bold text-gray-900">Feedback Questions</h2>
-                  {interviewCompleted && (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-                      Interview completed
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {interviewDetails?.meetingLink && !interviewCompleted && (
+                      <Button
+                        asChild
+                        className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                      >
+                        <a
+                          href={interviewDetails.meetingLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Video className="w-4 h-4" />
+                          Join Meeting
+                        </a>
+                      </Button>
+                    )}
+                    {interviewCompleted && (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                        Interview completed
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
                   {panelPeerFeedback

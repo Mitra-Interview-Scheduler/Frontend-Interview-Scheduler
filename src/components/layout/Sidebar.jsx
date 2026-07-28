@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { getNormalizedRoles } from '@/lib/roleHelpers';
 import { useAuth } from '@/context/AuthContext';
 import { useState } from 'react';
 import PropTypes from 'prop-types';
@@ -41,7 +42,7 @@ const Sidebar = ({ isOpen, onNavigate }) => {
 
   // Get links grouped by role
   const getRoleGroupedLinks = () => {
-    const userRoles = user?.roles || (user?.role ? [user.role] : []);
+    const userRoles = getNormalizedRoles(user);
     const roleLinks = [];
 
     const roleConfig = {

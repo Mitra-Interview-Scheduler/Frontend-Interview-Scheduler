@@ -1,5 +1,8 @@
+import { isToday, isTomorrow } from 'date-fns';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useTimeZone } from '@/context/TimeZoneContext';
+
+const toDate = (value) => (value instanceof Date ? value : new Date(value));
 
 const formatDateParts = (date, timeZone) => {
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -137,6 +140,67 @@ export const useFormattedDateTime = () => {
       return formattedDate && formattedStart && formattedEnd
         ? `${formattedDate} · ${formattedStart} – ${formattedEnd}`
         : '';
+    },
+
+    /**
+     * Human-friendly schedule label, e.g. "Today · 6:30 AM – 7:00 AM"
+     * or "Monday, Jul 20, 2026 · 6:30 AM – 7:00 AM".
+     */
+    formatFriendlyDateTimeRange: (startDate, endDate) => {
+      if (!startDate || !endDate) return '';
+
+      try {
+        const start = toDate(startDate);
+        const end = toDate(endDate);
+        const timeRange = formatTimeByPreference(start, timeFormatStr, selectedTimeZone)
+          && formatTimeByPreference(end, timeFormatStr, selectedTimeZone)
+          ? `${formatTimeByPreference(start, timeFormatStr, selectedTimeZone)} – ${formatTimeByPreference(end, timeFormatStr, selectedTimeZone)}`
+          : '';
+
+        if (!timeRange) return '';
+
+        let dayLabel;
+        if (isToday(start)) {
+          dayLabel = 'Today';
+        } else if (isTomorrow(start)) {
+          dayLabel = 'Tomorrow';
+        } else {
+          dayLabel = new Intl.DateTimeFormat('en-US', {
+            timeZone: selectedTimeZone,
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          }).format(start);
+        }
+
+        return `${dayLabel} · ${timeRange}`;
+      } catch {
+        return '';
+      }
+    },
+
+    /**
+     * Duration between two times, e.g. "30 minutes" or "1 hour 15 minutes".
+     */
+    formatDuration: (startDate, endDate) => {
+      if (!startDate || !endDate) return '';
+
+      try {
+        const start = toDate(startDate);
+        const end = toDate(endDate);
+        const totalMinutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+        if (totalMinutes === 0) return '0 minutes';
+
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        if (hours === 0) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+        if (minutes === 0) return `${hours} hour${hours === 1 ? '' : 's'}`;
+        return `${hours} hour${hours === 1 ? '' : 's'} ${minutes} minute${minutes === 1 ? '' : 's'}`;
+      } catch {
+        return '';
+      }
     },
 
     /**

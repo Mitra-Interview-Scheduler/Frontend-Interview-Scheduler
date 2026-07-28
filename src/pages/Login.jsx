@@ -8,6 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Calendar, Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
+import { googleCalendarAPI } from '@/services/api';
+import {
+  getDefaultDashboardPath,
+  getNormalizedRoles,
+  hasInterviewerRole,
+} from '@/lib/roleHelpers';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -38,17 +44,28 @@ const Login = () => {
     return () => observer.disconnect();
   }, []);
 
-  const navigateByRole = (user) => {
-    const role = user?.role || user?.roles?.[0];
-    if (role === 'ADMIN') {
-      navigate('/admin/dashboard');
-    } else if (role === 'HR') {
-      navigate('/hr/dashboard');
-    } else if (role === 'INTERVIEWER') {
-      navigate('/interviewer/dashboard');
-    } else {
+  const navigateByRole = async (user) => {
+    const roles = getNormalizedRoles(user);
+
+    if (roles.length === 0) {
       setError('Your account has no assigned role. Contact an administrator.');
+      return;
     }
+
+    if (hasInterviewerRole(roles)) {
+      try {
+        const status = await googleCalendarAPI.getStatus();
+        if (!status.connected) {
+          navigate('/interviewer/connect-calendar', { replace: true });
+          return;
+        }
+      } catch {
+        navigate('/interviewer/connect-calendar', { replace: true });
+        return;
+      }
+    }
+
+    navigate(getDefaultDashboardPath(roles), { replace: true });
   };
 
   const handleSubmit = async (e) => {

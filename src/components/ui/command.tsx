@@ -103,9 +103,10 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "ui-dropdown-option relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
+      "ui-dropdown-option relative flex w-full min-w-full cursor-pointer select-none items-center gap-2 rounded-sm py-2 pl-3 pr-3 text-sm outline-none",
       "hover:bg-primary-light hover:text-foreground focus:bg-primary-light focus:text-foreground",
-      "data-[highlighted]:bg-primary-light data-[highlighted]:text-foreground data-[selected=true]:bg-primary-light data-[selected=true]:text-foreground",
+      "data-[selected=true]:bg-primary-light data-[selected=true]:text-foreground",
+      "aria-selected:bg-primary-light aria-selected:text-foreground",
       "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
       className,
     )}

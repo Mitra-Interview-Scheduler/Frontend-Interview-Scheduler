@@ -9,6 +9,8 @@ import { tierAPI } from '@/services/tierAPI';
 import { usersAPI } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
 
+import { sortRoles } from '@/lib/roleHelpers';
+
 const StatCard = ({ icon: Icon, title, value, description, loading }) => (
   <Card className="shadow-sm">
     <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -160,17 +162,11 @@ const AdminDashboard = () => {
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                       </div>
                       <div className="flex gap-1 flex-wrap justify-end">
-                        {user.roles && user.roles.length > 0 ? (
-                          user.roles.map((role) => (
-                            <Badge key={role} className={`text-xs shrink-0 ${roleColor(role)}`}>
-                              {role}
-                            </Badge>
-                          ))
-                        ) : (
-                          <Badge className={`text-xs shrink-0 ${roleColor(user.role)}`}>
-                            {user.role}
+                        {sortRoles(user.roles || (user.role ? [user.role] : [])).map((role) => (
+                          <Badge key={role} className={`text-xs shrink-0 ${roleColor(role)}`}>
+                            {role}
                           </Badge>
-                        )}
+                        ))}
                       </div>
                     </motion.div>
                   ))}

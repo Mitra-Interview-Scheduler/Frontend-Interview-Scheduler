@@ -21,28 +21,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from 'react-big-calendar';
-import { format, startOfDay } from 'date-fns';
+import {
+  format, startOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  endOfDay,
+} from 'date-fns';
 import {
   Calendar as CalendarIcon, Filter, X, User, Briefcase, Code, Clock,
   Send, TrendingUp, Award, Search, ChevronDown, Users, AlertCircle,
-  CheckCircle2, Scissors, Trash2, ShieldAlert, Star,
+  CheckCircle2, Scissors, Trash2, ShieldAlert, Star, Globe, CalendarClock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { technologyAPI } from '@/services/technologyAPI';
 import { domainAPI } from '@/services/domainAPI';
 import DomainMultiSelect from '@/components/DomainMultiSelect';
-import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { getTechnologyCategoryLabel, getTechnologyCategoryCode, getCandidateTechnologyIds, getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { designationAPI } from '@/services/designationAPI';
 import { tierAPI } from '@/services/tierAPI';
 import  candidateAPI from '@/services/candidateAPI';
 
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText } from './utils/AvailabilityViewPageUiUtils';
+import { INTERVIEWER_PALETTES, CalendarEventComponent, getEventStyle, getTooltipText, isEventBeforeDateFilter } from './utils/AvailabilityViewPageUiUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots, formatInterviewTypeLabel } from './utils/AvailabilityViewPageHelperUtils';
+import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
+import MatchingPanelDetailDialog from './components/MatchingPanelDetailDialog';
+import ScheduleConflictDialog from './components/ScheduleConflictDialog';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -68,6 +73,7 @@ const resolveInterviewType = (...values) => {
 const EMPTY_REQUEST_FORM = {
   candidateId: null,
   candidateName: '',
+  candidateEmail: '',
   candidateDesignationId: '',
   requiredTechnologyIds: [],
   isUrgent: false,
@@ -116,11 +122,28 @@ const AvailabilityViewPage = () => {
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
+  const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
+  const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
+  const [selectedMatchingInterviewer, setSelectedMatchingInterviewer] = useState(null);
+  const [matchingDetailOpen, setMatchingDetailOpen] = useState(false);
+  const [matchingPanelMode, setMatchingPanelMode] = useState(false);
+  const [selectedMatchPanelIds, setSelectedMatchPanelIds] = useState([]);
+  const [matchingPanelDetailOpen, setMatchingPanelDetailOpen] = useState(false);
 
   // Panel mode
   const [panelMode, setPanelMode] = useState(false);
   const [panelSlots, setPanelSlots] = useState([]);
   const [panelDialogOpen, setPanelDialogOpen] = useState(false);
+
+  // Google Calendar conflict confirmation (shown when HR proceeds despite overlap)
+  const [conflictDialog, setConflictDialog] = useState({ open: false, conflicts: [], panelMode: false });
+  const conflictConfirmRef = useRef(null);
+  // Live conflict preview for the chosen interview window
+  const [slotWindowConflicts, setSlotWindowConflicts] = useState({
+    loading: false,
+    conflicts: [],
+    error: null,
+  });
 
   // Single interview dialog
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
@@ -134,23 +157,45 @@ const AvailabilityViewPage = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [postponeActionLoading, setPostponeActionLoading] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
 
   const techDropdownRef = useRef(null);
   const appliedCandidateFiltersRef = useRef(null);
   const loadedCandidateDetailsRef = useRef(new Set());
+  const conflictPreviewRequestIdRef = useRef(0);
   const calendarLockStart = dateRange.start ? new Date(dateRange.start) : null;
 
   // ── Derived: selected candidate object (for privilege check) ─────────────
   const selectedCandidate = requestForm.candidateId
-    ? candidates.find((c) => c.id === requestForm.candidateId) || null
+    ? candidates.find((c) => Number(c.id) === Number(requestForm.candidateId)) || null
     : null;
+
+  const candidateTechIds = useMemo(
+    () => getCandidateTechnologyIds(selectedCandidate?.technologies || []),
+    [selectedCandidate],
+  );
 
   const candidateCoreTechIds = useMemo(
     () => getCandidateCoreTechnologyIds(selectedCandidate?.technologies || []),
     [selectedCandidate],
   );
+
+  const candidateDomainIds = useMemo(
+    () => (selectedCandidate?.domains || []).map((d) => d.id).filter(Boolean),
+    [selectedCandidate],
+  );
+
+  const candidateDomainNames = useMemo(() => {
+    const names = new Set();
+    (selectedCandidate?.domains || []).forEach((d) => {
+      const name = d?.name || d;
+      if (name) names.add(String(name).trim().toLowerCase());
+    });
+    return names;
+  }, [selectedCandidate]);
 
   const candidateCoreTechNames = useMemo(() => {
     const names = new Set();
@@ -163,6 +208,11 @@ const AvailabilityViewPage = () => {
       });
     return names;
   }, [selectedCandidate]);
+
+  const isCandidateTech = useCallback(
+    (technologyId) => candidateTechIds.includes(technologyId),
+    [candidateTechIds],
+  );
 
   const isCandidateCoreTech = useCallback(
     (technologyId) => candidateCoreTechIds.includes(technologyId),
@@ -214,12 +264,12 @@ const AvailabilityViewPage = () => {
     : [];
 
     const eventStyleGetter = useCallback((event) => 
-    getEventStyle(event, panelSlots), 
-  [panelSlots]);
+    getEventStyle(event, panelSlots, calendarLockStart), 
+  [panelSlots, calendarLockStart]);
 
   const tooltipAccessor = useCallback((event) => 
-    getTooltipText(event, panelSlots, formatTimeRange), 
-  [panelSlots, formatTimeRange]);
+    getTooltipText(event, panelSlots, formatTimeRange, calendarLockStart), 
+  [panelSlots, formatTimeRange, calendarLockStart]);
 
   // For the calendar components prop
   const calendarComponents = useMemo(() => ({
@@ -563,7 +613,7 @@ const AvailabilityViewPage = () => {
 
   
   
-  // ── Auto-set candidate filters once when a candidate is first selected ──
+  // ── Validate candidate + fill designation only (do not touch calendar filters) ──
   useEffect(() => {
     if (!requestForm.candidateId || candidates.length === 0) {
       if (!requestForm.candidateId) {
@@ -594,17 +644,38 @@ const AvailabilityViewPage = () => {
       }));
     }
     if (candidate) {
-      const ids = getCandidateCoreTechnologyIds(candidate.technologies || []);
-      if (ids.length > 0) {
-        setFilterTech(ids);
-      }
-      const domainIds = (candidate.domains || []).map((d) => d.id).filter(Boolean);
-      if (domainIds.length > 0) {
-        setFilterDomain(domainIds);
-      }
       appliedCandidateFiltersRef.current = requestForm.candidateId;
     }
   }, [requestForm.candidateId, candidates]);
+
+  // Load matching interviewers when candidate or dept/tier/level filters change.
+  useEffect(() => {
+    if (!requestForm.candidateId) {
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      setSelectedMatchingInterviewer(null);
+      setMatchingDetailOpen(false);
+      return undefined;
+    }
+
+    // Wait until async tier/level option lists are ready when those filters are set
+    if (selectedTierInDept && tiersForSelectedDept.length === 0) return undefined;
+    if (minDesignationLevel && designationsForSelectedTier.length === 0) return undefined;
+
+    const timer = setTimeout(() => {
+      loadMatchingInterviewers();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    requestForm.candidateId,
+    filterDept,
+    minExperience,
+    selectedDeptForDesignation,
+    selectedTierInDept,
+    minDesignationLevel,
+    tiersForSelectedDept,
+    designationsForSelectedTier,
+  ]);
 
   // Load full candidate profile (technologies/domains) when missing from list payload
   useEffect(() => {
@@ -648,6 +719,80 @@ const AvailabilityViewPage = () => {
     } catch (e) { console.error(e); }
   };
 
+  const loadMatchingInterviewers = async () => {
+    if (!requestForm.candidateId) {
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      return;
+    }
+
+    try {
+      setMatchingInterviewersLoading(true);
+
+      let tierOrderToSend = null;
+      if (selectedTierInDept) {
+        const t = tiersForSelectedDept.find((tier) => tier.id.toString() === selectedTierInDept);
+        tierOrderToSend = t ? t.tierOrder : null;
+      }
+
+      let levelOrderToSend = null;
+      if (minDesignationLevel) {
+        const d = designationsForSelectedTier.find(
+          (desig) => desig.levelOrder.toString() === minDesignationLevel,
+        );
+        levelOrderToSend = d ? d.levelOrder : null;
+      }
+
+      const data = await hrAvailabilityAPI.getMatchingInterviewers({
+        candidateId: requestForm.candidateId,
+        departmentIds: filterDept.length > 0 ? filterDept : null,
+        minYearsOfExperience: minExperience ? parseInt(minExperience, 10) : null,
+        departmentIdForDesignationFilter: selectedDeptForDesignation
+          ? parseInt(selectedDeptForDesignation, 10)
+          : null,
+        minTierId: tierOrderToSend,
+        minDesignationLevelInDepartment: levelOrderToSend,
+        limit: 5,
+      });
+
+      // Re-bucket by match counts so dual matches always land in "both"
+      // (never duplicated under tech-only / domain-only).
+      const byId = new Map();
+      for (const match of [
+        ...(data?.both || []),
+        ...(data?.technologies || []),
+        ...(data?.domains || []),
+      ]) {
+        if (match?.interviewerId == null) continue;
+        byId.set(Number(match.interviewerId), match);
+      }
+
+      const both = [];
+      const technologies = [];
+      const domains = [];
+      for (const match of byId.values()) {
+        const techCount = Number(match.techMatchCount)
+          || ((match.matchedCore || []).length + (match.matchedNonCore || []).length);
+        const domainCount = Number(match.domainMatchCount)
+          || (match.matchedDomains || []).length;
+        if (techCount > 0 && domainCount > 0) both.push(match);
+        else if (techCount > 0) technologies.push(match);
+        else if (domainCount > 0) domains.push(match);
+      }
+
+      setMatchingInterviewers({ both, technologies, domains });
+    } catch (err) {
+      console.error('Failed to load matching interviewers:', err);
+      setMatchingInterviewers(EMPTY_MATCHING_INTERVIEWERS);
+      toast({
+        title: 'Could not load matching interviewers',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setMatchingInterviewersLoading(false);
+    }
+  };
+
   const applyFilters = async () => {
     try {
       let tierOrderToSend = null;
@@ -663,9 +808,11 @@ const AvailabilityViewPage = () => {
       }
 
       const visibleRange = computeRangeForView(currentView, calendarDate);
+      // Always load the full visible calendar range so slots before "From"
+      // still appear (grayed out). Booking is blocked client-side by calendarLockStart.
       const filters = {
         ...buildCalendarAvailabilityFilters(currentView, calendarDate),
-        startDateTime: formatLocalDateTime(dateRange.start || visibleRange.start),
+        startDateTime: formatLocalDateTime(visibleRange.start),
         endDateTime: formatLocalDateTime(dateRange.end || visibleRange.end),
         departmentIdForDesignationFilter: selectedDeptForDesignation ? parseInt(selectedDeptForDesignation) : null,
         minTierId: tierOrderToSend,
@@ -706,13 +853,28 @@ const AvailabilityViewPage = () => {
     if (!cancelTarget) return;
     setCancelling(true);
     try {
+      const panelId = cancelTarget.resource.panelId;
       const requestId = cancelTarget.resource.requestId;
-      if (!requestId) throw new Error('No request ID on this slot — cannot cancel from calendar.');
-      await hrAvailabilityAPI.cancelInterviewRequest(requestId);
-      toast({
-        title: '✓ Interview cancelled',
-        description: `${cancelTarget.resource.interviewer}'s slot is now available again. Interviewer notified.`,
-      });
+
+      if (panelId) {
+        await hrAvailabilityAPI.cancelPanelInterview(panelId);
+        const panelInterviewerCount = events.filter(
+          (e) => e.resource?.panelId === panelId && e.resource?.status === SlotStatus.BOOKED,
+        ).length;
+        toast({
+          title: '✓ Panel interview cancelled',
+          description: panelInterviewerCount > 0
+            ? `All ${panelInterviewerCount} interviewer slot${panelInterviewerCount === 1 ? '' : 's'} restored. Interviewers notified.`
+            : 'All panel interviewer slots restored. Interviewers notified.',
+        });
+      } else {
+        if (!requestId) throw new Error('No request ID on this slot — cannot cancel from calendar.');
+        await hrAvailabilityAPI.cancelInterviewRequest(requestId);
+        toast({
+          title: '✓ Interview cancelled',
+          description: `${cancelTarget.resource.interviewer}'s slot is now available again. Interviewer notified.`,
+        });
+      }
       setCancelDialogOpen(false);
       setCancelTarget(null);
       await refreshCalendar();
@@ -720,6 +882,54 @@ const AvailabilityViewPage = () => {
       toast({ title: 'Cancel failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleApprovePostpone = async () => {
+    const postponeRequestId = cancelTarget?.resource?.pendingPostponeRequestId;
+    if (!postponeRequestId) return;
+    setPostponeActionLoading(true);
+    try {
+      await hrAvailabilityAPI.approvePostponeRequest(postponeRequestId);
+      toast({
+        title: 'Proposed time accepted',
+        description: 'The previous interview was cancelled and the new time was scheduled.',
+      });
+      setCancelDialogOpen(false);
+      setCancelTarget(null);
+      await refreshCalendar();
+    } catch (err) {
+      toast({
+        title: 'Could not accept proposed time',
+        description: err.response?.data?.message || err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setPostponeActionLoading(false);
+    }
+  };
+
+  const handleRejectPostpone = async () => {
+    const postponeRequestId = cancelTarget?.resource?.pendingPostponeRequestId;
+    if (!postponeRequestId) return;
+    setPostponeActionLoading(true);
+    try {
+      await hrAvailabilityAPI.rejectPostponeRequest(postponeRequestId);
+      toast({
+        title: 'Proposed time declined',
+        description: 'The interviewer was notified. The original interview remains scheduled.',
+      });
+      setCancelDialogOpen(false);
+      setCancelTarget(null);
+      await refreshCalendar();
+    } catch (err) {
+      toast({
+        title: 'Could not decline proposed time',
+        description: err.response?.data?.message || err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setPostponeActionLoading(false);
     }
   };
 
@@ -784,6 +994,86 @@ const AvailabilityViewPage = () => {
     
   };
 
+  const handleMatchingFreeSlotSelect = (slotDto) => {
+    if (!slotDto) return;
+
+    const end = new Date(slotDto.endDateTime);
+    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) {
+      toast({
+        title: 'Slot unavailable',
+        description: 'This free time has already passed. Pick another slot.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const [event] = formatSlots([slotDto], interviewerColorMap);
+    if (!event) return;
+
+    setMatchingDetailOpen(false);
+    setSelectedMatchingInterviewer(null);
+    handleEventClick(event);
+  };
+
+  const allMatchingInterviewers = useMemo(() => {
+    const byId = new Map();
+    for (const match of [
+      ...(matchingInterviewers.both || []),
+      ...(matchingInterviewers.technologies || []),
+      ...(matchingInterviewers.domains || []),
+    ]) {
+      if (match?.interviewerId == null) continue;
+      byId.set(Number(match.interviewerId), match);
+    }
+    return Array.from(byId.values());
+  }, [matchingInterviewers]);
+
+  const selectedMatchPanelInterviewers = useMemo(
+    () => allMatchingInterviewers.filter((m) => selectedMatchPanelIds.includes(Number(m.interviewerId))),
+    [allMatchingInterviewers, selectedMatchPanelIds],
+  );
+
+  const toggleMatchPanelSelection = (match) => {
+    const id = Number(match.interviewerId);
+    setSelectedMatchPanelIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      if (next.length >= 2) {
+        setMatchingPanelDetailOpen(true);
+      } else {
+        setMatchingPanelDetailOpen(false);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setMatchingPanelMode(false);
+    setSelectedMatchPanelIds([]);
+    setMatchingPanelDetailOpen(false);
+  }, [requestForm.candidateId]);
+
+  const openPanelFromMatchingOverlap = (overlap) => {
+    if (!overlap?.panelSlots?.length) return;
+    setMatchingPanelDetailOpen(false);
+    setPanelMode(true);
+    setPanelSlots(overlap.panelSlots);
+    setPanelBookStartOverride(format(overlap.start, 'HH:mm'));
+    setPanelBookEndOverride(format(overlap.end, 'HH:mm'));
+    setRequestForm((prev) => ({
+      candidateId: prev.candidateId,
+      candidateName: prev.candidateName,
+      candidateDesignationId: prev.candidateDesignationId,
+      interviewType: prev.interviewType,
+      interviewCoordinatorId: prev.interviewCoordinatorId,
+      interviewCoordinatorDepartmentId: prev.interviewCoordinatorDepartmentId,
+      requiredTechnologyIds: [],
+      isUrgent: false,
+      notes: '',
+    }));
+    setCandidateSearchTerm('');
+    setPanelDialogOpen(true);
+  };
+
 
   // ── Candidate helpers ─────────────────────────────────────────────────────
   const handleSelectCandidate = (c) => {
@@ -791,13 +1081,125 @@ const AvailabilityViewPage = () => {
       ...requestForm,
       candidateId: c.id,
       candidateName: c.name,
+      candidateEmail: c.email?.trim() || '',
       candidateDesignationId: c.targetDesignationId || '',
     });
     setCandidateSearchTerm('');
   };
 
   const handleClearCandidate = () =>
-    setRequestForm({ ...requestForm, candidateId: null, candidateName: '', candidateDesignationId: '' });
+    setRequestForm({
+      ...requestForm,
+      candidateId: null,
+      candidateName: '',
+      candidateEmail: '',
+      candidateDesignationId: '',
+    });
+
+  // ── Google Calendar conflict check (advisory + confirm on submit) ───────
+  const flattenConflictEvents = (conflicts) => {
+    if (!Array.isArray(conflicts)) return [];
+    return conflicts.flatMap((ic) =>
+      (ic.conflicts || []).map((event) => ({
+        interviewerName: ic.interviewerName,
+        title: event.title || 'Untitled event',
+        calendarName: event.calendarName,
+        startDateTime: event.startDateTime,
+        endDateTime: event.endDateTime,
+        googleEventId: event.googleEventId,
+      })),
+    );
+  };
+
+  const previewConflictEvents = flattenConflictEvents(slotWindowConflicts.conflicts);
+  const hasSlotWindowConflict = previewConflictEvents.length > 0;
+
+  const fetchSlotWindowConflicts = useCallback(async (interviewerIds, bookStart, bookEnd) => {
+    const ids = (interviewerIds || []).filter((id) => id != null);
+    const requestId = ++conflictPreviewRequestIdRef.current;
+
+    if (ids.length === 0 || !bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return;
+    }
+
+    setSlotWindowConflicts((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const conflicts = await hrAvailabilityAPI.checkConflicts({
+        interviewerIds: ids,
+        startDateTime: formatLocalDateTime(bookStart),
+        endDateTime: formatLocalDateTime(bookEnd),
+      });
+      if (requestId !== conflictPreviewRequestIdRef.current) return;
+      setSlotWindowConflicts({
+        loading: false,
+        conflicts: Array.isArray(conflicts) ? conflicts : [],
+        error: null,
+      });
+    } catch (e) {
+      if (requestId !== conflictPreviewRequestIdRef.current) return;
+      setSlotWindowConflicts({
+        loading: false,
+        conflicts: [],
+        error: e.response?.data?.message || e.message || 'Could not verify Google Calendar',
+      });
+    }
+  }, []);
+
+  const fetchSubmitConflicts = async (interviewerIds, bookStart, bookEnd) => {
+    const ids = (interviewerIds || []).filter((id) => id != null);
+    if (ids.length === 0) return [];
+    const conflicts = await hrAvailabilityAPI.checkConflicts({
+      interviewerIds: ids,
+      startDateTime: formatLocalDateTime(bookStart),
+      endDateTime: formatLocalDateTime(bookEnd),
+    });
+    return Array.isArray(conflicts) ? conflicts : [];
+  };
+
+  const openConflictConfirmDialog = (conflicts, onConfirm, isPanel = false) => {
+    conflictConfirmRef.current = onConfirm;
+    setConflictDialog({ open: true, conflicts, panelMode: isPanel });
+  };
+
+  const handleConflictConfirm = async () => {
+    const confirm = conflictConfirmRef.current;
+    if (!confirm) return;
+    await confirm();
+  };
+
+  const closeConflictDialog = () => {
+    conflictConfirmRef.current = null;
+    setConflictDialog({ open: false, conflicts: [], panelMode: false });
+  };
+
+  // Live conflict preview while choosing the interview window (single)
+  useEffect(() => {
+    if (!requestDialogOpen || !selectedSlot || !bookStartTime || !bookEndTime) {
+      if (!requestDialogOpen && !panelDialogOpen) {
+        setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      }
+      return undefined;
+    }
+    const bookStart = parseTimeOnDate(bookStartTime, selectedSlot.start);
+    const bookEnd = parseTimeOnDate(bookEndTime, selectedSlot.start);
+    if (!bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return undefined;
+    }
+    const interviewerId = selectedSlot?.interviewerId ?? selectedSlot?.resource?.interviewerId;
+    const timerId = window.setTimeout(() => {
+      fetchSlotWindowConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd);
+    }, 250);
+    return () => window.clearTimeout(timerId);
+  }, [
+    requestDialogOpen,
+    panelDialogOpen,
+    selectedSlot,
+    bookStartTime,
+    bookEndTime,
+    fetchSlotWindowConflicts,
+  ]);
 
   // ── Submit single interview ───────────────────────────────────────────────
   const handleSendRequest = async () => {
@@ -813,29 +1215,59 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
+    const performSubmit = async (acknowledgeCalendarConflict = false) => {
+      setScheduling(true);
+      try {
+        await hrAvailabilityAPI.createInterviewRequest({
+          candidateId: requestForm.candidateId,
+          candidateName: requestForm.candidateName,
+          candidateEmail: requestForm.candidateEmail?.trim() || null,
+          candidateDesignationId: requestForm.candidateDesignationId || null,
+          requiredTechnologyIds: requestForm.requiredTechnologyIds,
+          availabilitySlotId: selectedSlot.id,
+          preferredStartDateTime: formatLocalDateTime(bookStart),
+          preferredEndDateTime: formatLocalDateTime(bookEnd),
+          isUrgent: requestForm.isUrgent,
+          notes: requestForm.notes,
+          interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+          interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+          interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+          acknowledgeCalendarConflict,
+        });
+        toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
+        closeConflictDialog();
+        setRequestDialogOpen(false);
+        setSelectedSlot(null);
+        finalizeScheduledInterview(cameFromCandidateFlow);
+        await refreshCalendar();
+      } catch (err) {
+        toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      } finally {
+        setScheduling(false);
+      }
+    };
+
+    const interviewerId = selectedSlot?.interviewerId ?? selectedSlot?.resource?.interviewerId;
+    let conflicts = hasSlotWindowConflict ? slotWindowConflicts.conflicts : [];
     try {
-      await hrAvailabilityAPI.createInterviewRequest({
-        candidateId: requestForm.candidateId,
-        candidateName: requestForm.candidateName,
-        candidateDesignationId: requestForm.candidateDesignationId || null,
-        requiredTechnologyIds: requestForm.requiredTechnologyIds,
-        availabilitySlotId: selectedSlot.id,
-        preferredStartDateTime: formatLocalDateTime(bookStart),
-        preferredEndDateTime: formatLocalDateTime(bookEnd),
-        isUrgent: requestForm.isUrgent,
-        notes: requestForm.notes,
-        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
-        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
-        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+      if (conflicts.length === 0) {
+        conflicts = await fetchSubmitConflicts(interviewerId ? [interviewerId] : [], bookStart, bookEnd);
+      }
+    } catch (e) {
+      toast({
+        title: 'Could not verify Google Calendar',
+        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
+        variant: 'destructive',
       });
-      toast({ title: '✓ Interview scheduled', description: `${requestForm.candidateName} with ${selectedSlot.resource.interviewer}` });
-      setRequestDialogOpen(false);
-      setSelectedSlot(null);
-      finalizeScheduledInterview(cameFromCandidateFlow);
-      await refreshCalendar();
-    } catch (err) {
-      toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      return;
     }
+
+    if (conflicts.length > 0) {
+      openConflictConfirmDialog(conflicts, () => performSubmit(true));
+      return;
+    }
+
+    await performSubmit(false);
   };
 
   // ── Submit panel interview ────────────────────────────────────────────────
@@ -862,31 +1294,69 @@ const AvailabilityViewPage = () => {
     if (bookEnd <= bookStart) {
       toast({ title: 'End must be after start', variant: 'destructive' }); return;
     }
+    const performSubmit = async (acknowledgeCalendarConflict = false) => {
+      setScheduling(true);
+      try {
+        const panel = await hrAvailabilityAPI.createPanelInterview({
+          candidateId: requestForm.candidateId,
+          candidateName: requestForm.candidateName,
+          candidateEmail: requestForm.candidateEmail?.trim() || null,
+          candidateDesignationId: requestForm.candidateDesignationId || null,
+          startDateTime: formatLocalDateTime(bookStart),
+          endDateTime: formatLocalDateTime(bookEnd),
+          availabilitySlotIds: panelSlots.map((ps) => ps.slot.id),
+          requiredTechnologyIds: requestForm.requiredTechnologyIds,
+          isUrgent: requestForm.isUrgent,
+          notes: requestForm.notes,
+          interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
+          interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
+          interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+          acknowledgeCalendarConflict,
+        });
+        toast({
+          title: '✓ Panel interview scheduled',
+          description: panel?.meetingLink
+            ? `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Google Meet link created.`
+            : `${requestForm.candidateName} with ${panelSlots.length} interviewer(s). Connect Google Calendar on at least one interviewer to generate a Meet link.`,
+        });
+        closeConflictDialog();
+        setPanelDialogOpen(false);
+        setPanelSlots([]);
+        setPanelBookStartOverride('');
+        setPanelBookEndOverride('');
+        finalizeScheduledInterview(cameFromCandidateFlow);
+        await refreshCalendar();
+      } catch (err) {
+        toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      } finally {
+        setScheduling(false);
+      }
+    };
+
+    const panelInterviewerIds = panelSlots
+      .map((ps) => ps.slot?.interviewerId ?? ps.slot?.resource?.interviewerId)
+      .filter((id) => id != null);
+
+    let conflicts = hasSlotWindowConflict ? slotWindowConflicts.conflicts : [];
     try {
-      await hrAvailabilityAPI.createPanelInterview({
-        candidateId: requestForm.candidateId,
-        candidateName: requestForm.candidateName,
-        candidateDesignationId: requestForm.candidateDesignationId || null,
-        startDateTime: formatLocalDateTime(bookStart),
-        endDateTime: formatLocalDateTime(bookEnd),
-        availabilitySlotIds: panelSlots.map((ps) => ps.slot.id),
-        requiredTechnologyIds: requestForm.requiredTechnologyIds,
-        isUrgent: requestForm.isUrgent,
-        notes: requestForm.notes,
-        interviewType: resolveInterviewType(requestForm.interviewType, interviewType),
-        interviewCoordinatorId: requestForm.interviewCoordinatorId || null,
-        interviewCoordinatorDepartmentId: requestForm.interviewCoordinatorDepartmentId || null,
+      if (conflicts.length === 0) {
+        conflicts = await fetchSubmitConflicts(panelInterviewerIds, bookStart, bookEnd);
+      }
+    } catch (e) {
+      toast({
+        title: 'Could not verify Google Calendar',
+        description: e.response?.data?.message || e.message || 'Try again or reconnect Google Calendar.',
+        variant: 'destructive',
       });
-      toast({ title: '✓ Panel interview scheduled', description: `${requestForm.candidateName} with ${panelSlots.length} interviewer(s)` });
-      setPanelDialogOpen(false);
-      setPanelSlots([]);
-      setPanelBookStartOverride('');
-      setPanelBookEndOverride('');
-      finalizeScheduledInterview(cameFromCandidateFlow);
-      await refreshCalendar();
-    } catch (err) {
-      toast({ title: 'Failed', description: err.response?.data?.message || err.message, variant: 'destructive' });
+      return;
     }
+
+    if (conflicts.length > 0) {
+      openConflictConfirmDialog(conflicts, () => performSubmit(true), true);
+      return;
+    }
+
+    await performSubmit(false);
   };
 
   // ── Panel time overlap ────────────────────────────────────────────────────
@@ -909,6 +1379,26 @@ const AvailabilityViewPage = () => {
     setPanelBookStartOverride('');
     setPanelBookEndOverride('');
   }, [panelSlots.length]);
+
+  // Live conflict preview while choosing the panel interview window
+  useEffect(() => {
+    if (!panelDialogOpen || panelSlots.length === 0 || !panelBookStart || !panelBookEnd) {
+      return undefined;
+    }
+    const bookStart = parseTimeOnDate(panelBookStart, panelSlots[0].slot.start);
+    const bookEnd = parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start);
+    if (!bookStart || !bookEnd || bookEnd <= bookStart) {
+      setSlotWindowConflicts({ loading: false, conflicts: [], error: null });
+      return undefined;
+    }
+    const panelInterviewerIds = panelSlots
+      .map((ps) => ps.slot?.interviewerId ?? ps.slot?.resource?.interviewerId)
+      .filter((id) => id != null);
+    const timerId = window.setTimeout(() => {
+      fetchSlotWindowConflicts(panelInterviewerIds, bookStart, bookEnd);
+    }, 250);
+    return () => window.clearTimeout(timerId);
+  }, [panelDialogOpen, panelSlots, panelBookStart, panelBookEnd, fetchSlotWindowConflicts]);
 
   // ── Tech filter helpers ───────────────────────────────────────────────────
   const handleDepartmentChange = (value) => {
@@ -1035,13 +1525,142 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const availableCount = events.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
-  const bookedCount = events.filter(
-    (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED,
+  const countableEvents = events.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
+  const availableCount = countableEvents.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
+  const postponeCount = countableEvents.filter(
+    (e) => e.resource?.status === SlotStatus.BOOKED
+      && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED
+      && e.resource?.hasPendingPostponeRequest,
   ).length;
-  const completedCount = events.filter(
+  const bookedCount = countableEvents.filter(
+    (e) => e.resource?.status === SlotStatus.BOOKED
+      && e.resource?.interviewStatus !== InterviewScheduleStatus.COMPLETED
+      && !e.resource?.hasPendingPostponeRequest,
+  ).length;
+  const completedCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED && e.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED,
   ).length;
+
+  const hasMatchingInterviewers = (
+    matchingInterviewers.both.length
+    + matchingInterviewers.technologies.length
+    + matchingInterviewers.domains.length
+  ) > 0;
+
+  const openMatchingDetail = (match) => {
+    setSelectedMatchingInterviewer(match);
+    setMatchingDetailOpen(true);
+  };
+
+  const renderMatchingCard = (match, groupKey) => {
+    const hasFreeTime = Boolean(match.hasFreeTimeInWeek);
+    const interviewerId = Number(match.interviewerId);
+    const isSelectedForPanel = selectedMatchPanelIds.includes(interviewerId);
+
+    return (
+      <div
+        key={`${groupKey}-${match.interviewerId}`}
+        className={`min-w-[180px] max-w-[220px] flex-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+          matchingPanelMode && isSelectedForPanel
+            ? 'border-sky-400 bg-sky-50 ring-1 ring-sky-300'
+            : hasFreeTime
+              ? 'border-emerald-300 bg-emerald-50'
+              : 'border-slate-200 bg-slate-50'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (matchingPanelMode) {
+              toggleMatchPanelSelection(match);
+              return;
+            }
+            openMatchingDetail(match);
+          }}
+          className="w-full text-left"
+        >
+          <div className="flex items-start gap-2">
+            {matchingPanelMode && (
+              <span
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
+                  isSelectedForPanel
+                    ? 'border-sky-500 bg-sky-600 text-white'
+                    : 'border-slate-300 bg-white'
+                }`}
+              >
+                {isSelectedForPanel && <CheckCircle2 className="h-3 w-3" />}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm font-semibold truncate ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-900'
+                  : hasFreeTime ? 'text-emerald-900' : 'text-slate-800'
+              }`}
+              >
+                {match.interviewerName}
+              </p>
+              <p className={`text-xs truncate mt-0.5 ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-700'
+                  : hasFreeTime ? 'text-emerald-700' : 'text-muted-foreground'
+              }`}
+              >
+                {[match.designation, match.department].filter(Boolean).join(' · ') || 'Interviewer'}
+              </p>
+              {match.email && (
+                <p className={`text-[10px] truncate mt-0.5 ${
+                  matchingPanelMode && isSelectedForPanel
+                    ? 'text-sky-600/80'
+                    : hasFreeTime ? 'text-emerald-600/80' : 'text-slate-400'
+                }`}
+                >
+                  {match.email}
+                </p>
+              )}
+              <p className={`text-[11px] mt-1.5 font-medium ${
+                matchingPanelMode && isSelectedForPanel
+                  ? 'text-sky-700'
+                  : hasFreeTime ? 'text-emerald-700' : 'text-slate-500'
+              }`}
+              >
+                {hasFreeTime ? 'Free within a week' : 'No free time this week'}
+                {' · '}
+                {match.totalMatches} match{match.totalMatches === 1 ? '' : 'es'}
+              </p>
+            </div>
+          </div>
+        </button>
+        {matchingPanelMode && (
+          <button
+            type="button"
+            className="mt-2 text-[11px] text-sky-700 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              openMatchingDetail(match);
+            }}
+          >
+            View details
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderMatchingGroup = (title, items, groupKey) => {
+    if (!items.length) return null;
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+          <span className="ml-1 font-normal normal-case tracking-normal">({items.length})</span>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {items.map((match) => renderMatchingCard(match, groupKey))}
+        </div>
+      </div>
+    );
+  };
 
   // ── Interview type (shared between single + panel dialogs) ───────────────
   const renderInterviewTypeSection = () => (
@@ -1105,7 +1724,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   ? 'Select department first'
                   : coordinatorUsersLoading
                     ? 'Loading users...'
-                    : undefined
+                    : 'Select Coordinator'
               }
               searchPlaceholder="Search coordinators..."
               emptyMessage={
@@ -1113,6 +1732,14 @@ const calendarSlotPropGetter = useCallback((date) => {
                   ? 'No user found for selected department'
                   : 'No matching users found'
               }
+              emptyOption={{
+                value: 'NONE',
+                label: !requestForm.interviewCoordinatorDepartmentId
+                  ? 'Select department first'
+                  : coordinatorUsersLoading
+                    ? 'Loading users...'
+                    : 'Select Coordinator',
+              }}
               options={coordinatorUsers.map((user) => ({
                 value: user.id.toString(),
                 label: `${user.fullName} (${user.email})`,
@@ -1161,9 +1788,6 @@ const calendarSlotPropGetter = useCallback((date) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">{requestForm.candidateName}</p>
-                <p className="text-sm text-muted-foreground">
-                  {candidates.find((c) => c.id === requestForm.candidateId)?.email}
-                </p>
                 {selectedCandidate?.targetDesignationName && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Target: {selectedCandidate.targetDesignationName}
@@ -1205,6 +1829,20 @@ const calendarSlotPropGetter = useCallback((date) => {
             )}
           </>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="candidate-invite-email">Calendar invite email (optional)</Label>
+        <Input
+          id="candidate-invite-email"
+          type="email"
+          placeholder="e.g. candidate@gmail.com"
+          value={requestForm.candidateEmail}
+          onChange={(e) => setRequestForm({ ...requestForm, candidateEmail: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Any email for the Google Calendar invite. Does not need to be a Mitra account.
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -1335,10 +1973,18 @@ const calendarSlotPropGetter = useCallback((date) => {
                             {filteredTechnologies.map((tech) => {
                               const isSelected = filterTech.includes(tech.id);
                               const isCore = isCandidateCoreTech(tech.id);
+                              const isCandidate = isCandidateTech(tech.id);
+                              const isCandidateNonCore = isCandidate && !isCore;
                               return (
                               <button key={tech.id} onClick={() => handleTechSelect(tech.id)}
                                 className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center justify-between ${
-                                  isSelected ? (isCore ? 'bg-amber-50' : 'bg-primary/10') : ''
+                                  isSelected
+                                    ? (isCore
+                                      ? 'bg-amber-50'
+                                      : isCandidateNonCore
+                                        ? 'bg-sky-50'
+                                        : 'bg-primary/10')
+                                    : ''
                                 }`}>
                                 <span className="flex items-center gap-2 font-medium">
                                   {isCore && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
@@ -1352,10 +1998,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                                       className={`text-xs ${
                                         isCore
                                           ? 'border-amber-300 bg-amber-50 text-amber-900'
-                                          : ''
+                                          : isCandidateNonCore
+                                            ? 'border-sky-300 bg-sky-50 text-sky-900'
+                                            : ''
                                       }`}
                                     >
-                                      {isCore ? 'Candidate Core' : 'Selected'}
+                                      {isCore ? 'Candidate Core' : isCandidate ? 'Candidate' : 'Selected'}
                                     </Badge>
                                   )}
                                 </span>
@@ -1374,6 +2022,8 @@ const calendarSlotPropGetter = useCallback((date) => {
                     {filterTech.map((id) => {
                       const tech = technologies.find((t) => t.id === id);
                       const isCore = isCandidateCoreTech(id);
+                      const isCandidate = isCandidateTech(id);
+                      const isCandidateNonCore = isCandidate && !isCore;
                       return tech ? (
                         <Badge
                           key={id}
@@ -1381,7 +2031,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                           className={`gap-1 pr-1 ${
                             isCore
                               ? 'border-amber-300 bg-amber-50 text-amber-900'
-                              : 'border-slate-200 bg-secondary text-secondary-foreground'
+                              : isCandidateNonCore
+                                ? 'border-sky-300 bg-sky-50 text-sky-900'
+                                : 'border-slate-200 bg-secondary text-secondary-foreground'
                           }`}
                         >
                           {isCore && <Star className="h-3 w-3 fill-amber-500 text-amber-500" />}
@@ -1403,6 +2055,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   label="Domains"
                   domains={domains}
                   selectedIds={filterDomain}
+                  highlightIds={candidateDomainIds}
                   onChange={setFilterDomain}
                   placeholder="Filter by domains…"
                 />
@@ -1484,13 +2137,19 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
                   </div>
+                  {postponeCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500" />
+                      <span className="text-sm"><span className="font-bold text-amber-600">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-emerald-700" />
                     <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
-                    <span className="text-sm"><span className="font-bold text-slate-600">{events.length}</span><span className="text-muted-foreground ml-1">total</span></span>
+                    <span className="text-sm"><span className="font-bold text-slate-600">{countableEvents.length}</span><span className="text-muted-foreground ml-1">total</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={clearFilters} className="gap-2">
@@ -1503,6 +2162,159 @@ const calendarSlotPropGetter = useCallback((date) => {
           </CardContent>
           )}
         </Card>
+
+        {/* ── Top Matching Interviewers ─────────────────────────────────────── */}
+        {requestForm.candidateId && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    Top Matching Interviewers
+                    {matchingPanelMode && (
+                      <Badge className="bg-sky-100 text-sky-800 border-sky-300">Panel Mode</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {matchingPanelMode
+                      ? 'Select 2+ interviewers to find overlapping free times and schedule a panel.'
+                      : 'Green = free within a week. Click a card for match details and free time.'}
+                  </CardDescription>
+                </div>
+                {hasMatchingInterviewers && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={matchingPanelMode ? 'default' : 'outline'}
+                    className="gap-2 shrink-0"
+                    onClick={() => {
+                      setMatchingPanelMode((value) => {
+                        if (value) {
+                          setSelectedMatchPanelIds([]);
+                          setMatchingPanelDetailOpen(false);
+                        }
+                        return !value;
+                      });
+                    }}
+                  >
+                    <Users className="w-4 h-4" />
+                    {matchingPanelMode ? 'Exit Panel Mode' : 'Panel Mode'}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {matchingInterviewersLoading ? (
+                <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
+              ) : !hasMatchingInterviewers ? (
+                <p className="text-sm text-muted-foreground italic">
+                  No matching interviewers for{' '}
+                  {selectedCandidate?.name || requestForm.candidateName || 'this candidate'}
+                  {' '}with the current department / tier / level filters.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    {renderMatchingGroup(
+                      'Matches both technologies & domains',
+                      matchingInterviewers.both,
+                      'both',
+                    )}
+                    {renderMatchingGroup(
+                      'Matches technologies only',
+                      matchingInterviewers.technologies,
+                      'tech',
+                    )}
+                    {renderMatchingGroup(
+                      'Matches domains only',
+                      matchingInterviewers.domains,
+                      'domain',
+                    )}
+                  </div>
+
+                  {matchingPanelMode && (
+                    <div className="rounded-xl border border-sky-300 bg-sky-50/80 p-3 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-sky-900">
+                            Panel selection ({selectedMatchPanelIds.length})
+                          </p>
+                          <p className="text-xs text-sky-700/80 mt-0.5">
+                            {selectedMatchPanelIds.length < 2
+                              ? 'Select at least 2 interviewers, then pick an overlapping free time.'
+                              : 'Pick a time opens the panel schedule view with shared free windows.'}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={selectedMatchPanelIds.length < 2}
+                          className="gap-2 shrink-0"
+                          onClick={() => setMatchingPanelDetailOpen(true)}
+                        >
+                          <Clock className="w-4 h-4" />
+                          Pick a time
+                        </Button>
+                      </div>
+
+                      {selectedMatchPanelInterviewers.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedMatchPanelInterviewers.map((match) => (
+                            <Badge
+                              key={`panel-sel-${match.interviewerId}`}
+                              className="bg-sky-100 text-sky-800 border-sky-300 gap-1 pr-1"
+                            >
+                              {match.interviewerName}
+                              <button
+                                type="button"
+                                onClick={() => toggleMatchPanelSelection(match)}
+                                className="ml-0.5 hover:text-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <MatchingInterviewerDetailDialog
+          open={matchingDetailOpen}
+          onOpenChange={(open) => {
+            setMatchingDetailOpen(open);
+            if (!open) setSelectedMatchingInterviewer(null);
+          }}
+          match={selectedMatchingInterviewer}
+          formatDateTimeRange={formatDateTimeRange}
+          onSelectFreeSlot={handleMatchingFreeSlotSelect}
+        />
+
+        <MatchingPanelDetailDialog
+          open={matchingPanelDetailOpen}
+          onOpenChange={setMatchingPanelDetailOpen}
+          interviewers={selectedMatchPanelInterviewers}
+          interviewerColorMap={interviewerColorMap}
+          onRemoveInterviewer={toggleMatchPanelSelection}
+          onSelectOverlap={openPanelFromMatchingOverlap}
+        />
+
+        <ScheduleConflictDialog
+          open={conflictDialog.open}
+          onOpenChange={(open) => {
+            if (!open && !scheduling) closeConflictDialog();
+          }}
+          conflicts={conflictDialog.conflicts}
+          onConfirm={handleConflictConfirm}
+          confirming={scheduling}
+          panelMode={conflictDialog.panelMode}
+        />
 
         {/* ── Calendar ─────────────────────────────────────────────────────── */}
         <Card>
@@ -1661,63 +2473,212 @@ const calendarSlotPropGetter = useCallback((date) => {
         </Card>
       </div>
 
-      {/* ══ CANCEL BOOKED DIALOG ═══════════════════════════════════════════ */}
-      <Dialog open={cancelDialogOpen} onOpenChange={(o) => { if (!cancelling) setCancelDialogOpen(o); }}>
-        <DialogContent className="px-3 py-0 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-700">
-              <Trash2 className="w-5 h-5" /> Cancel Interview
+      {/* ══ CANCEL / REVIEW TIME CHANGE DIALOG ═══════════════════════════════ */}
+      <Dialog open={cancelDialogOpen} onOpenChange={(o) => {
+        if (!cancelling && !postponeActionLoading) setCancelDialogOpen(o);
+      }}>
+        <DialogContent className="max-w-lg gap-0 p-0 m-4 overflow-hidden">
+          <DialogHeader className="border-b border-gray-100 px-5 py-4">
+            <DialogTitle className={`flex items-center gap-2 ${
+              cancelTarget?.resource?.hasPendingPostponeRequest ? 'text-amber-800' : 'text-red-700'
+            }`}>
+              {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+                <><CalendarClock className="w-5 h-5 shrink-0" /> Review Time Change</>
+              ) : (
+                <><Trash2 className="w-5 h-5 shrink-0" /> Cancel Interview</>
+              )}
             </DialogTitle>
             <DialogDescription>
-              The slot will be immediately restored to <strong>Available</strong> and the interviewer will be notified.
+              {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+                <>
+                  Accepting will <strong>cancel the current interview</strong> and schedule the
+                  interviewer&apos;s proposed time. Declining keeps the original booking.
+                </>
+              ) : cancelTarget?.resource?.panelId ? (
+                <>
+                  This is a <strong>panel interview</strong>. Cancelling will restore slots for{' '}
+                  <strong>all panel interviewers</strong> and notify them.
+                </>
+              ) : (
+                <>
+                  The slot will be immediately restored to <strong>Available</strong> and the interviewer will be notified.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           {cancelTarget && (
-            <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 space-y-2">
-              <p className="font-semibold text-sm">🔒 Booked Interview</p>
-              <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
-              {cancelTarget.resource.candidateName && (
-                <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
+            <DialogBody className="px-5 py-4 space-y-3">
+              {cancelTarget.resource?.hasPendingPostponeRequest && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                  <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 shrink-0" />
+                    Time change requested
+                  </p>
+                  <p className="text-xs text-amber-800">
+                    Current:{' '}
+                    <strong>{formatDateTimeRange(cancelTarget.start, cancelTarget.end)}</strong>
+                  </p>
+                  {cancelTarget.resource.pendingPostponePreferredStart
+                    && cancelTarget.resource.pendingPostponePreferredEnd && (
+                    <p className="text-xs text-amber-800">
+                      Proposed:{' '}
+                      <strong>
+                        {formatDateTimeRange(
+                          new Date(cancelTarget.resource.pendingPostponePreferredStart),
+                          new Date(cancelTarget.resource.pendingPostponePreferredEnd),
+                        )}
+                      </strong>
+                    </p>
+                  )}
+                  {cancelTarget.resource.pendingPostponeReason && (
+                    <p className="text-xs text-amber-800 break-words">
+                      Reason: <strong>{cancelTarget.resource.pendingPostponeReason}</strong>
+                    </p>
+                  )}
+                </div>
               )}
-              {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
-                <p className="text-sm">
-                  Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+              <div className={`rounded-xl border p-4 space-y-2 ${
+                cancelTarget.resource?.hasPendingPostponeRequest
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-red-100 bg-red-50'
+              }`}>
+                <p className="font-semibold text-sm">
+                  {cancelTarget.resource.panelId ? 'Panel Interview' : 'Booked Interview'}
                 </p>
-              )}
-              {cancelTarget.resource.interviewCoordinatorName && (
-                <p className="text-sm">
-                  Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
+                {cancelTarget.resource.panelId && (
+                  <p className="text-sm text-red-700">
+                    Also cancelling:{' '}
+                    <strong>
+                      {events
+                        .filter(
+                          (e) =>
+                            e.resource?.panelId === cancelTarget.resource.panelId
+                            && e.resource?.status === SlotStatus.BOOKED
+                            && e.id !== cancelTarget.id,
+                        )
+                        .map((e) => e.resource.interviewer)
+                        .filter(Boolean)
+                        .join(', ') || 'other panel interviewers'}
+                    </strong>
+                  </p>
+                )}
+                {cancelTarget.resource.candidateName && (
+                  <p className="text-sm">Candidate: <strong>{cancelTarget.resource.candidateName}</strong></p>
+                )}
+                {formatInterviewTypeLabel(cancelTarget.resource.interviewType) && (
+                  <p className="text-sm">
+                    Interview Type: <strong>{formatInterviewTypeLabel(cancelTarget.resource.interviewType)}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.interviewCoordinatorName && (
+                  <p className="text-sm">
+                    Interview Coordinator: <strong>{cancelTarget.resource.interviewCoordinatorName}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.coordinatedHrName && (
+                  <p className="text-sm">
+                    Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
+                  </p>
+                )}
+                {cancelTarget.resource.meetingLink && (
+                  <p className="text-sm break-all">
+                    Google Meet:{' '}
+                    <a
+                      href={cancelTarget.resource.meetingLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-600 underline"
+                    >
+                      {cancelTarget.resource.meetingLink}
+                    </a>
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
                 </p>
-              )}
-              {cancelTarget.resource.coordinatedHrName && (
-                <p className="text-sm">
-                  Candidate Coordinator: <strong>{cancelTarget.resource.coordinatedHrName}</strong>
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {formatDateTimeRange(cancelTarget.start, cancelTarget.end)}
-              </p>
-            </div>
+              </div>
+            </DialogBody>
           )}
 
-          <DialogFooter >
-            <Button variant="outline" onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
-              Keep Interview
-            </Button>
-            <Button variant="destructive" onClick={handleCancelBooked} disabled={cancelling} className="gap-2">
-              {cancelling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Cancelling…</>
-              ) : (
-                <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>
-              )}
-            </Button>
+          <DialogFooter className="flex-col gap-2 border-t border-gray-100 bg-slate-50/80 px-5 py-4 sm:flex-col sm:justify-stretch">
+            {cancelTarget?.resource?.hasPendingPostponeRequest ? (
+              <>
+                <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleRejectPostpone}
+                    disabled={cancelling || postponeActionLoading}
+                    className="w-full border-amber-300 text-amber-900 hover:bg-amber-50"
+                  >
+                    {postponeActionLoading ? 'Working…' : 'Decline Proposal'}
+                  </Button>
+                  <Button
+                    onClick={handleApprovePostpone}
+                    disabled={cancelling || postponeActionLoading}
+                    className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
+                  >
+                    {postponeActionLoading ? (
+                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Accepting…</>
+                    ) : (
+                      <><CheckCircle2 className="w-4 h-4 shrink-0" /> Accept Proposed Time</>
+                    )}
+                  </Button>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelBooked}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full gap-2"
+                >
+                  {cancelling ? (
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                  ) : cancelTarget?.resource?.panelId ? (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Interview</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCancelDialogOpen(false)}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full"
+                >
+                  Keep Interview
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelBooked}
+                  disabled={cancelling || postponeActionLoading}
+                  className="w-full gap-2"
+                >
+                  {cancelling ? (
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                  ) : cancelTarget?.resource?.panelId ? (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel & Restore Slots</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4 shrink-0" /> Cancel & Restore Slot</>
+                  )}
+                </Button>
+              </div>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ══ SINGLE INTERVIEW DIALOG ════════════════════════════════════════ */}
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
+      <Dialog
+        open={requestDialogOpen}
+        onOpenChange={(open) => {
+          if (scheduling) return;
+          setRequestDialogOpen(open);
+        }}
+      >
         <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -1770,6 +2731,30 @@ const calendarSlotPropGetter = useCallback((date) => {
                       ))}
                     </div>
                   </div>
+                  {(selectedSlot.resource.domains || []).length > 0 && (
+                    <div className="flex items-start gap-3">
+                      <Globe className="w-5 h-5 text-primary mt-1" />
+                      <div className="flex flex-wrap gap-2">
+                        {selectedSlot.resource.domains.map((domain) => {
+                          const isMatch = candidateDomainNames.has(String(domain).trim().toLowerCase());
+                          return (
+                            <Badge
+                              key={`domain-${domain}`}
+                              variant="outline"
+                              className={
+                                isMatch
+                                  ? 'bg-teal-50 text-teal-900 border-teal-300'
+                                  : 'bg-white text-slate-600 border-slate-200'
+                              }
+                              title={isMatch ? 'Matches candidate domain' : undefined}
+                            >
+                              {domain}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1808,13 +2793,57 @@ const calendarSlotPropGetter = useCallback((date) => {
                     </div>
                   </div>
                   {bookStartTime && bookEndTime && (
-                    <div className="mt-3 p-2 rounded bg-amber-100 dark:bg-amber-900/30 text-xs text-amber-800 space-y-1">
-                      <p><strong>Interview:</strong> {formatTimeRange(parseTimeOnDate(bookStartTime, selectedSlot.start), parseTimeOnDate(bookEndTime, selectedSlot.start))}</p>
-                      {bookStartTime > format(selectedSlot.start, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available</p>
+                    <div className={`mt-3 p-2 rounded text-xs space-y-1 ${
+                      hasSlotWindowConflict || slotWindowConflicts.error
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800'
+                    }`}>
+                      <p>
+                        <strong>Interview:</strong>{' '}
+                        {formatTimeRange(
+                          parseTimeOnDate(bookStartTime, selectedSlot.start),
+                          parseTimeOnDate(bookEndTime, selectedSlot.start),
+                        )}
+                      </p>
+                      {bookStartTime > format(selectedSlot.start, 'HH:mm') && !hasSlotWindowConflict && (
+                        <p className="text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                          {formatTimeRange(selectedSlot.start, parseTimeOnDate(bookStartTime, selectedSlot.start))} remains available
+                        </p>
                       )}
-                      {bookEndTime < format(selectedSlot.end, 'HH:mm') && (
-                        <p className="text-emerald-700"><CheckCircle2 className="w-3 h-3 inline mr-1" />{formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available</p>
+                      {bookEndTime < format(selectedSlot.end, 'HH:mm') && !hasSlotWindowConflict && (
+                        <p className="text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                          {formatTimeRange(parseTimeOnDate(bookEndTime, selectedSlot.start), selectedSlot.end)} remains available
+                        </p>
+                      )}
+                      {slotWindowConflicts.loading && (
+                        <p className="text-amber-700 dark:text-amber-300">Checking Google Calendar…</p>
+                      )}
+                      {slotWindowConflicts.error && (
+                        <p className="flex items-start gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                          <span>{slotWindowConflicts.error}</span>
+                        </p>
+                      )}
+                      {hasSlotWindowConflict && (
+                        <div className="space-y-1 pt-1 border-t border-red-200/80">
+                          <p className="font-semibold flex items-center gap-1 text-red-800">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            Calendar conflict detected — review before scheduling
+                          </p>
+                          {previewConflictEvents.map((event) => (
+                            <p
+                              key={event.googleEventId || `${event.title}-${event.startDateTime}`}
+                              className="pl-4"
+                            >
+                              <strong>{event.title}</strong>
+                              {': '}
+                              {formatTimeRange(event.startDateTime, event.endDateTime)}
+                              {event.calendarName ? ` · ${event.calendarName}` : ''}
+                            </p>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
@@ -1832,21 +2861,39 @@ const calendarSlotPropGetter = useCallback((date) => {
           </DialogBody>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRequestDialogOpen(false)} disabled={scheduling}>
+              Cancel
+            </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError}
-              className="gap-2"
-              title={singlePrivilegeError ? 'Interviewer privilege too low for this candidate' : undefined}
+              disabled={!!singlePrivilegeError || scheduling || slotWindowConflicts.loading}
+              className={`gap-2${hasSlotWindowConflict ? ' bg-red-600 hover:bg-red-700 text-white' : ''}`}
+              title={
+                hasSlotWindowConflict
+                  ? 'Calendar conflict detected — click to review and proceed'
+                  : singlePrivilegeError
+                    ? 'Interviewer privilege too low for this candidate'
+                    : undefined
+              }
             >
-              <Send className="w-4 h-4" /> Schedule Interview
+              {scheduling ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
+              ) : (
+                <><Send className="w-4 h-4" /> Schedule Interview</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* ══ PANEL INTERVIEW DIALOG ════════════════════════════════════════ */}
-      <Dialog open={panelDialogOpen} onOpenChange={setPanelDialogOpen}>
+      <Dialog
+        open={panelDialogOpen}
+        onOpenChange={(open) => {
+          if (scheduling) return;
+          setPanelDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -1946,10 +2993,47 @@ const calendarSlotPropGetter = useCallback((date) => {
                       </div>
                     </div>
                     {panelBookStart && panelBookEnd && (
-                      <p className="mt-2 text-xs text-amber-800">
-                        <strong>Interview:</strong>{' '}
-                        {formatTimeRange(parseTimeOnDate(panelBookStart, panelSlots[0].slot.start), parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start))}
-                      </p>
+                      <div className={`mt-2 p-2 rounded text-xs space-y-1 ${
+                        hasSlotWindowConflict || slotWindowConflicts.error
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                          : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800'
+                      }`}>
+                        <p>
+                          <strong>Interview:</strong>{' '}
+                          {formatTimeRange(
+                            parseTimeOnDate(panelBookStart, panelSlots[0].slot.start),
+                            parseTimeOnDate(panelBookEnd, panelSlots[0].slot.start),
+                          )}
+                        </p>
+                        {slotWindowConflicts.loading && (
+                          <p className="text-amber-700 dark:text-amber-300">Checking Google Calendar…</p>
+                        )}
+                        {slotWindowConflicts.error && (
+                          <p className="flex items-start gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>{slotWindowConflicts.error}</span>
+                          </p>
+                        )}
+                        {hasSlotWindowConflict && (
+                          <div className="space-y-1 pt-1 border-t border-red-200/80">
+                            <p className="font-semibold flex items-center gap-1 text-red-800">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              Calendar conflict detected — review before scheduling
+                            </p>
+                            {previewConflictEvents.map((event) => (
+                              <p
+                                key={event.googleEventId || `${event.interviewerName}-${event.title}-${event.startDateTime}`}
+                                className="pl-4"
+                              >
+                                <strong>{event.interviewerName}:</strong> {event.title}
+                                {': '}
+                                {formatTimeRange(event.startDateTime, event.endDateTime)}
+                                {event.calendarName ? ` · ${event.calendarName}` : ''}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
@@ -1965,14 +3049,35 @@ const calendarSlotPropGetter = useCallback((date) => {
           </div>
         </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPanelDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setPanelDialogOpen(false)} disabled={scheduling}>
+              Cancel
+            </Button>
             <Button
               onClick={handleSendPanelRequest}
-              className="gap-2 bg-sky-600 hover:bg-sky-700"
-              disabled={panelTimeOptions.length === 0 || panelPrivilegeErrors.length > 0}
-              title={panelPrivilegeErrors.length > 0 ? 'One or more interviewers have insufficient privilege' : undefined}
+              className={`gap-2${
+                hasSlotWindowConflict
+                  ? ' bg-red-600 hover:bg-red-700 text-white'
+                  : ' bg-sky-600 hover:bg-sky-700'
+              }`}
+              disabled={
+                panelTimeOptions.length === 0
+                || panelPrivilegeErrors.length > 0
+                || scheduling
+                || slotWindowConflicts.loading
+              }
+              title={
+                hasSlotWindowConflict
+                  ? 'Calendar conflict detected — click to review and proceed'
+                  : panelPrivilegeErrors.length > 0
+                    ? 'One or more interviewers have insufficient privilege'
+                    : undefined
+              }
             >
-              <Users className="w-4 h-4" /> Schedule Panel Interview
+              {scheduling ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
+              ) : (
+                <><Users className="w-4 h-4" /> Schedule Panel Interview</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

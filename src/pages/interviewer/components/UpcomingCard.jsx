@@ -55,6 +55,7 @@ const UpcomingCard = ({
 
   // Derive upcoming events only from the full future list
   const upcomingEvents = sourceEvents
+    .filter((e) => e.status !== 'google_external')
     .filter((e) => isAfter(new Date(e.start), new Date()))
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 

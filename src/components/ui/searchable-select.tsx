@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -37,6 +38,12 @@ type SearchableSelectProps = {
   "aria-invalid"?: boolean | "true" | "false";
 };
 
+type MenuPosition = {
+  top: number;
+  left: number;
+  width: number;
+};
+
 function getOptionKeywords(option: SearchableSelectOption | SearchableSelectEmptyOption) {
   const keywords = [option.label];
   if ("keywords" in option && option.keywords) {
@@ -60,7 +67,8 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const anchorRef = React.useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = React.useState<MenuPosition | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   const resolvedPlaceholder = placeholder ?? (label ? `Select ${label}` : "Select an option");
@@ -74,22 +82,40 @@ export function SearchableSelect({
   const selectedOption = options.find((option) => option.value === value);
   const displayText = isUnset ? resolvedPlaceholder : (selectedOption?.label ?? resolvedPlaceholder);
 
+  const updateMenuPosition = React.useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
   const closeMenu = React.useCallback(() => {
     setOpen(false);
     setSearch("");
+    setMenuPosition(null);
   }, []);
+
+  const selectOption = React.useCallback((nextValue: string) => {
+    onValueChange(nextValue);
+    closeMenu();
+  }, [onValueChange, closeMenu]);
 
   const openMenu = React.useCallback(() => {
     if (disabled) return;
+    updateMenuPosition();
     setOpen(true);
-  }, [disabled]);
+  }, [disabled, updateMenuPosition]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (anchorRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) {
         return;
       }
       closeMenu();
@@ -102,26 +128,29 @@ export function SearchableSelect({
       }
     };
 
-    // Defer so the opening click does not immediately close the menu.
+    const handleReposition = () => updateMenuPosition();
+
     const timerId = window.setTimeout(() => {
       document.addEventListener("mousedown", handlePointerDown);
     }, 0);
 
     document.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
 
     return () => {
       window.clearTimeout(timerId);
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
     };
-  }, [open, closeMenu]);
+  }, [open, closeMenu, updateMenuPosition]);
 
   return (
-    <div
-      ref={anchorRef}
-      className={cn("relative w-full", open && "z-[200]")}
-    >
+    <div className="relative w-full">
       <Button
+        ref={triggerRef}
         type="button"
         variant="outline"
         role="combobox"
@@ -141,50 +170,66 @@ export function SearchableSelect({
         <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
       </Button>
 
-      {open && (
-        <div
-          ref={menuRef}
-          role="listbox"
-          className="absolute left-0 top-full z-[200] mt-1 w-full overflow-hidden rounded-md border border-border bg-card text-foreground shadow-lg"
-        >
-          <Command
-            filter={(itemValue, searchTerm, keywords) => {
-              const haystack = [itemValue, ...(keywords ?? [])].join(" ").toLowerCase();
-              return haystack.includes(searchTerm.toLowerCase()) ? 1 : 0;
+      {open
+        && menuPosition
+        && createPortal(
+          <div
+            ref={menuRef}
+            data-searchable-select-menu=""
+            role="listbox"
+            className="pointer-events-auto overflow-hidden rounded-md border border-border bg-card text-foreground shadow-lg backdrop-blur-sm"
+            style={{
+              position: "fixed",
+              top: menuPosition.top,
+              left: menuPosition.left,
+              width: menuPosition.width,
+              zIndex: 100020,
             }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
           >
-            <CommandInput
-              placeholder={searchPlaceholder}
-              value={search}
-              onValueChange={setSearch}
-            />
-            <CommandList className="max-h-[240px]">
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <CommandGroup>
-                {menuOptions.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.value}
-                    keywords={getOptionKeywords(option)}
-                    onSelect={() => {
-                      onValueChange(option.value);
-                      closeMenu();
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4 shrink-0",
-                        !isUnset && value === option.value ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span className="truncate">{option.label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </div>
-      )}
+            <Command
+              shouldFilter
+              filter={(itemValue, searchTerm, keywords) => {
+                const haystack = [itemValue, ...(keywords ?? [])].join(" ").toLowerCase();
+                return haystack.includes(searchTerm.toLowerCase()) ? 1 : 0;
+              }}
+            >
+              <CommandInput
+                placeholder={searchPlaceholder}
+                value={search}
+                onValueChange={setSearch}
+              />
+              <CommandList className="max-h-[240px] select-dropdown-scroll">
+                <CommandEmpty>{emptyMessage}</CommandEmpty>
+                <CommandGroup>
+                  {menuOptions.map((option) => (
+                    <CommandItem
+                      key={option.value}
+                      value={`${option.label} ${option.value}`}
+                      keywords={getOptionKeywords(option)}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        selectOption(option.value);
+                      }}
+                      onSelect={() => selectOption(option.value)}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4 shrink-0",
+                          !isUnset && value === option.value ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="truncate">{option.label}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

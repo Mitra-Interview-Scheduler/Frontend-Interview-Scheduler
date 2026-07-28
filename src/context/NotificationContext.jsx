@@ -5,10 +5,9 @@ import { env } from '@/config/env';
 
 const NotificationContext = createContext(null);
 
-const getWsBaseUrl = () => {
-  const apiBase = env.API_BASE_URL;
-  return apiBase.replace(/\/api\/?$/, '');
-};
+const POLL_INTERVAL_MS = 15_000;
+
+const getWsBaseUrl = () => env.API_ORIGIN;
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
@@ -16,6 +15,21 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const clientRef = useRef(null);
+  const subscriptionRef = useRef(null);
+
+  const refreshUnreadCount = useCallback(async () => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    try {
+      const count = await notificationAPI.getUnreadCount();
+      setUnreadCount(typeof count === 'number' ? count : 0);
+    } catch (error) {
+      console.error('Failed to load unread notification count:', error);
+    }
+  }, [user]);
 
   const refreshNotifications = useCallback(async () => {
     if (!user) {
@@ -65,6 +79,32 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user) {
+      return undefined;
+    }
+
+    const syncUnread = () => {
+      if (document.visibilityState === 'visible') {
+        refreshUnreadCount();
+      }
+    };
+
+    const intervalId = window.setInterval(syncUnread, POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', syncUnread);
+    window.addEventListener('focus', syncUnread);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', syncUnread);
+      window.removeEventListener('focus', syncUnread);
+    };
+  }, [user, refreshUnreadCount]);
+
+  useEffect(() => {
+    if (!user) {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
       if (clientRef.current) {
         clientRef.current.deactivate();
         clientRef.current = null;
@@ -90,12 +130,21 @@ export const NotificationProvider = ({ children }) => {
 
         const client = new Client({
           webSocketFactory: () => new SockJS(`${getWsBaseUrl()}/ws`),
-          connectHeaders: {
-            Authorization: `Bearer ${token}`,
-          },
           reconnectDelay: 5000,
+          heartbeatIncoming: 10_000,
+          heartbeatOutgoing: 10_000,
+          beforeConnect: () => {
+            const currentToken = localStorage.getItem('token');
+            if (currentToken) {
+              client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
+            }
+          },
           onConnect: () => {
-            client.subscribe('/user/queue/notifications', (message) => {
+            if (subscriptionRef.current) {
+              subscriptionRef.current.unsubscribe();
+            }
+
+            subscriptionRef.current = client.subscribe('/user/queue/notifications', (message) => {
               try {
                 const payload = JSON.parse(message.body);
                 setNotifications((prev) => {
@@ -109,9 +158,17 @@ export const NotificationProvider = ({ children }) => {
                 console.error('Failed to parse notification message:', error);
               }
             });
+
+            refreshUnreadCount();
           },
           onStompError: (frame) => {
             console.error('STOMP error:', frame.headers?.message || frame);
+          },
+          onWebSocketClose: () => {
+            if (subscriptionRef.current) {
+              subscriptionRef.current.unsubscribe();
+              subscriptionRef.current = null;
+            }
           },
         });
 
@@ -126,12 +183,16 @@ export const NotificationProvider = ({ children }) => {
 
     return () => {
       cancelled = true;
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
       if (clientRef.current) {
         clientRef.current.deactivate();
         clientRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, refreshUnreadCount]);
 
   const value = useMemo(
     () => ({
@@ -139,10 +200,11 @@ export const NotificationProvider = ({ children }) => {
       unreadCount,
       loading,
       refreshNotifications,
+      refreshUnreadCount,
       markAsRead,
       markAllAsRead,
     }),
-    [notifications, unreadCount, loading, refreshNotifications, markAsRead, markAllAsRead]
+    [notifications, unreadCount, loading, refreshNotifications, refreshUnreadCount, markAsRead, markAllAsRead]
   );
 
   return (

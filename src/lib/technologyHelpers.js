@@ -6,6 +6,11 @@ export const getTechnologyCategoryCode = (tech) =>
 
 export const getSkillIsCore = (item) => Boolean(item?.isCore ?? item?.core);
 
+export const getCandidateTechnologyIds = (technologies = []) =>
+  technologies
+    .map((item) => item.technology?.id)
+    .filter(Boolean);
+
 export const getCandidateCoreTechnologyIds = (technologies = []) =>
   technologies
     .filter((item) => getSkillIsCore(item))

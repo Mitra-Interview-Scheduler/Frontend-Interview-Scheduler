@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Lock } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Lock } from 'lucide-react';
 import { InterviewScheduleStatus, InterviewType, SlotStatus } from '@/lib/statusConstants';
 
 export const INTERVIEWER_PALETTES = [
@@ -56,6 +56,14 @@ export const COMPLETED_EVENT_PALETTE = {
   text: '#fff',
 };
 
+/** Booked interview with a pending interviewer time-change proposal */
+export const POSTPONE_REQUEST_PALETTE = {
+  bg: 'linear-gradient(135deg, #f59e0b, #d97706)',
+  solid: '#f59e0b',
+  border: '#b45309',
+  text: '#fff',
+};
+
 export const getBookedTypePalette = (interviewType) =>
   BOOKED_TYPE_PALETTES[interviewType] || BOOKED_TYPE_PALETTES.DEFAULT;
 
@@ -86,6 +94,7 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const isBooked = event.resource?.status === SlotStatus.BOOKED;
   const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
+  const hasPostponeRequest = Boolean(event.resource?.hasPendingPostponeRequest) && !isCompleted;
   const resource = event.resource || {};
   const candidateName = resource.candidateName?.trim();
   const interviewerName = resource.interviewer?.trim();
@@ -102,6 +111,8 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
         <div className="booked-event-header">
           {isCompleted ? (
             <CheckCircle2 className="booked-event-lock completed-event-icon" aria-hidden="true" />
+          ) : hasPostponeRequest ? (
+            <CalendarClock className="booked-event-lock postpone-event-icon" aria-hidden="true" />
           ) : (
             <Lock className="booked-event-lock" aria-hidden="true" />
           )}
@@ -112,12 +123,16 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
         {isCompleted && (
           <span className="booked-event-completed-badge">Completed</span>
         )}
+        {hasPostponeRequest && (
+          <span className="booked-event-postpone-badge">Time change requested</span>
+        )}
         {showInterviewer && (
           <span className="booked-event-interviewer">{interviewerName}</span>
         )}
         {timeLabel && (
           <span className="booked-event-time">{timeLabel}</span>
         )}
+        
       </div>
     );
   }
@@ -137,26 +152,73 @@ export const CalendarEventComponent = ({ event, panelSlots, formatTimeRange }) =
   );
 };
 
-export const getEventStyle = (event, panelSlots) => {
+export const isEventBeforeDateFilter = (event, lockStart) =>
+  Boolean(lockStart && event?.start && event.start < lockStart);
+
+export const getEventStyle = (event, panelSlots, lockStart = null) => {
   const isBooked = event.resource?.status === SlotStatus.BOOKED;
   const isCompleted = event.resource?.interviewStatus === InterviewScheduleStatus.COMPLETED;
+  const hasPostponeRequest = Boolean(event.resource?.hasPendingPostponeRequest) && isBooked && !isCompleted;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
+  const isBeforeFilter = isEventBeforeDateFilter(event, lockStart);
   const deptPalette = getDepartmentPalette(event.resource?.department);
   const basePalette = deptPalette || event.resource?.palette || INTERVIEWER_PALETTES[0];
-  const typePalette = isBooked && !isCompleted ? getBookedTypePalette(event.resource?.interviewType) : null;
+  const typePalette = isBooked && !isCompleted && !hasPostponeRequest
+    ? getBookedTypePalette(event.resource?.interviewType)
+    : null;
   const completedPalette = isCompleted ? COMPLETED_EVENT_PALETTE : null;
-  const leftBorderColor = isCompleted
-    ? completedPalette.border
-    : (isBooked && typePalette ? typePalette.border || typePalette.solid : basePalette.border || basePalette.solid);
+  const postponePalette = hasPostponeRequest ? POSTPONE_REQUEST_PALETTE : null;
+  const leftBorderColor = isBeforeFilter
+    ? '#94a3b8'
+    : (isCompleted
+      ? completedPalette.border
+      : (hasPostponeRequest
+        ? postponePalette.border
+        : (isBooked && typePalette ? typePalette.border || typePalette.solid : basePalette.border || basePalette.solid)));
+
+  if (isBeforeFilter) {
+    return {
+      className: 'available-event outside-date-filter-event',
+      style: {
+        background: 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
+        borderRadius: '5px',
+        opacity: 0.42,
+        color: '#f8fafc',
+        borderLeft: '3px solid #94a3b8',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
+        padding: '3px 6px',
+        fontSize: '11px',
+        fontWeight: '500',
+        boxShadow: 'none',
+        cursor: 'not-allowed',
+        overflow: 'hidden',
+        maxWidth: '100%',
+        outline: 'none',
+        filter: 'grayscale(1)',
+      },
+    };
+  }
+
+  const activePalette = isCompleted
+    ? completedPalette
+    : (hasPostponeRequest
+      ? postponePalette
+      : (typePalette || basePalette));
 
   return {
-    className: isCompleted ? 'booked-event completed-event' : (isBooked ? 'booked-event' : 'available-event'),
+    className: isCompleted
+      ? 'booked-event completed-event'
+      : (hasPostponeRequest
+        ? 'booked-event postpone-request-event'
+        : (isBooked ? 'booked-event' : 'available-event')),
     style: {
-      background: isCompleted ? completedPalette.bg : basePalette.bg,
+      background: activePalette.bg,
       borderRadius: '5px',
       opacity: isCompleted ? 0.92 : (isBooked ? 0.97 : 0.94),
-      color: isCompleted ? completedPalette.text : (basePalette.text || 'white'),
-      borderLeft: `${isBooked || isCompleted ? 4 : 3}px solid ${leftBorderColor}`,
+      color: activePalette.text || 'white',
+      borderLeft: `${isBooked || isCompleted || hasPostponeRequest ? 4 : 3}px solid ${leftBorderColor}`,
       borderTop: 'none',
       borderRight: 'none',
       borderBottom: 'none',
@@ -165,7 +227,9 @@ export const getEventStyle = (event, panelSlots) => {
       fontWeight: isBooked ? '600' : '500',
       boxShadow: isInPanel
         ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 2px #7dd3fc`
-        : `0 1px 4px ${basePalette.solid}40`,
+        : hasPostponeRequest
+          ? `0 2px 10px ${POSTPONE_REQUEST_PALETTE.solid}55, 0 0 0 1px ${POSTPONE_REQUEST_PALETTE.border}66`
+          : `0 1px 4px ${activePalette.solid}40`,
       cursor: 'pointer',
       overflow: 'hidden',
       maxWidth: '100%',
@@ -174,16 +238,38 @@ export const getEventStyle = (event, panelSlots) => {
   };
 };
 
-export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`) => {
+export const getTooltipText = (event, panelSlots, formatTimeRange = (start, end) => `${start} - ${end}`, lockStart = null) => {
   const r = event.resource;
   const isInPanel = panelSlots.some((ps) => ps.slot.id === event.id);
   const timeRange = formatTimeRange(event.start, event.end);
 
+  if (isEventBeforeDateFilter(event, lockStart)) {
+    return [
+      `Interviewer: ${r?.interviewer || event.title}`,
+      `Time: ${timeRange}`,
+      '',
+      'Outside selected From date — not bookable',
+    ].join('\n');
+  }
+
   if (r?.status === SlotStatus.BOOKED) {
+    const meetLine = r.meetingLink ? `\nGoogle Meet: ${r.meetingLink}` : '';
     if (r.interviewStatus === InterviewScheduleStatus.COMPLETED) {
-      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nInterview finished — feedback locked`;
+      return `COMPLETED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nInterview finished — feedback locked`;
     }
-    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}\n\nClick to cancel & restore slot`;
+    if (r.hasPendingPostponeRequest) {
+      const reasonLine = r.pendingPostponeReason
+        ? `\nReason: ${r.pendingPostponeReason}`
+        : '';
+      const proposedLine = (r.pendingPostponePreferredStart && r.pendingPostponePreferredEnd)
+        ? `\nProposed: ${formatTimeRange(
+          new Date(r.pendingPostponePreferredStart),
+          new Date(r.pendingPostponePreferredEnd),
+        )}`
+        : '';
+      return `TIME CHANGE REQUESTED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\nCurrent: ${timeRange}${proposedLine}${reasonLine}${meetLine}\n\nInterviewer proposed a new time — click to review`;
+    }
+    return `BOOKED - ${r.interviewer}\n${r.candidateName ? 'Candidate: ' + r.candidateName : ''}\n${timeRange}${meetLine}\n\nClick to cancel & restore slot`;
   }
 
   if (isInPanel) {

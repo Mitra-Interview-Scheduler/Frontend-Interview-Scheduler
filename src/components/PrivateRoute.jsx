@@ -2,16 +2,9 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import PropTypes from 'prop-types';
+import { getNormalizedRoles, normalizeRole } from '@/lib/roleHelpers';
 
-const normalizeRole = (role) => {
-  if (typeof role !== 'string') return '';
-  return role.startsWith('ROLE_') ? role.slice(5) : role.toUpperCase();
-};
-
-const getUserRoles = (user) => {
-  const rawRoles = user?.roles || (user?.role ? [user.role] : []);
-  return [...new Set(rawRoles.map(normalizeRole).filter(Boolean))];
-};
+const getUserRoles = (user) => getNormalizedRoles(user);
 
 export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
@@ -41,7 +34,7 @@ export const PrivateRoute = ({ children, allowedRoles = [] }) => {
         return <Navigate to="/hr/dashboard" replace />;
       }
       if (userRoles.includes('INTERVIEWER')) {
-        return <Navigate to="/interviewer/dashboard" replace />;
+        return <Navigate to="/interviewer/connect-calendar" replace />;
       }
       return <Navigate to="/login" replace />;
     }

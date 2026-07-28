@@ -15,7 +15,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -26,21 +26,44 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-50  max-w-2xl max-h-[90vh] m-9 p-6 translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] overflow-hidden flex flex-col ",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(({ className, children, onPointerDownOutside, onInteractOutside, onFocusOutside, ...props }, ref) => {
+  const isSearchableSelectMenu = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(target.closest("[data-searchable-select-menu]"));
+
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed left-[50%] top-[50%] z-50  max-w-2xl max-h-[90vh] m-9 p-6 translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] overflow-hidden flex flex-col ",
+          className
+        )}
+        onPointerDownOutside={(event) => {
+          if (isSearchableSelectMenu(event.target)) {
+            event.preventDefault();
+          }
+          onPointerDownOutside?.(event);
+        }}
+        onInteractOutside={(event) => {
+          if (isSearchableSelectMenu(event.target)) {
+            event.preventDefault();
+          }
+          onInteractOutside?.(event);
+        }}
+        onFocusOutside={(event) => {
+          if (isSearchableSelectMenu(event.target)) {
+            event.preventDefault();
+          }
+          onFocusOutside?.(event);
+        }}
+        {...props}
+      >
+        {children}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
