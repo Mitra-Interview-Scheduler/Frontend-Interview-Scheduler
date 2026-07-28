@@ -1,16 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Phone, User, UserCheck, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
@@ -82,6 +72,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     || candidateCoordinatorName;
   const canWithdrawPostpone = !!pendingPostpone
     && (!pendingPostpone.requestedById || pendingPostpone.requestedById === user?.id);
+  const hasProposedTime = !!(pendingPostpone?.preferredStartDateTime && pendingPostpone?.preferredEndDateTime);
 
   const loadInterviewData = async () => {
     try {
@@ -119,7 +110,14 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   };
 
   const handleWithdrawPostpone = async () => {
-    if (!pendingPostpone?.id) return;
+    if (!pendingPostpone?.id) {
+      toast({
+        title: 'Could not withdraw request',
+        description: 'Missing postpone request id. Refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setWithdrawingPostpone(true);
     try {
       await availabilityAPI.withdrawPostponeRequest(pendingPostpone.id);
@@ -128,12 +126,12 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
       setIsProposeDialogOpen(false);
       onOpenChange(false);
       toast({
-        title: 'Proposal declined',
-        description: 'Your time-change request was withdrawn. The original interview remains scheduled.',
+        title: hasProposedTime ? 'Proposal declined' : 'Request withdrawn',
+        description: 'Your postpone request was withdrawn. The original interview remains scheduled.',
       });
     } catch (err) {
       toast({
-        title: 'Could not decline proposal',
+        title: hasProposedTime ? 'Could not decline proposal' : 'Could not withdraw request',
         description: err.response?.data?.message || err.message,
         variant: 'destructive',
       });
@@ -153,13 +151,30 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     : 'Review candidate information before starting the interview';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        // Keep session open while propose dialog is showing.
+        if (!nextOpen && (isProposeDialogOpen || withdrawingPostpone)) return;
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent
         className={`max-w-5xl gap-0 p-0 m-4 overflow-hidden ${
-          isProposeDialogOpen || declineConfirmOpen
+          isProposeDialogOpen
             ? 'pointer-events-none select-none opacity-60 blur-[6px]'
             : ''
         }`}
+        onPointerDownOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
+        onFocusOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
       >
         <DialogHeader className="px-5 py-4 shrink-0">
           <DialogTitle className="text-2xl">{dialogTitle}</DialogTitle>
@@ -220,15 +235,48 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                     </div>
                   </div>
                   {canWithdrawPostpone && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDeclineConfirmOpen(true)}
-                      disabled={withdrawingPostpone}
-                      className="border-amber-300 text-amber-900 hover:bg-amber-100"
-                    >
-                      {pendingPostpone.preferredStartDateTime ? 'Decline proposal' : 'Withdraw request'}
-                    </Button>
+                    declineConfirmOpen ? (
+                      <div className="rounded-lg border border-amber-300 bg-white/80 p-3 space-y-3">
+                        <p className="text-sm font-medium text-amber-950">
+                          {hasProposedTime
+                            ? 'Decline this time proposal? The original interview stays scheduled.'
+                            : 'Withdraw this postpone request? The original interview stays scheduled.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeclineConfirmOpen(false)}
+                            disabled={withdrawingPostpone}
+                            className="border-amber-300 text-amber-900 hover:bg-amber-50"
+                          >
+                            No, keep it
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleWithdrawPostpone}
+                            disabled={withdrawingPostpone}
+                            className="bg-amber-600 text-white hover:bg-amber-700"
+                          >
+                            {withdrawingPostpone ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {hasProposedTime ? 'Declining…' : 'Withdrawing…'}</>
+                            ) : (
+                              hasProposedTime ? 'Yes, decline' : 'Yes, withdraw'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeclineConfirmOpen(true)}
+                        disabled={withdrawingPostpone}
+                        className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                      >
+                        {hasProposedTime ? 'Decline proposal' : 'Withdraw request'}
+                      </Button>
+                    )
                   )}
                 </div>
               )}
@@ -489,6 +537,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           </Button>
         </DialogFooter>
       </DialogContent>
+    </Dialog>
 
       <ProposeTimeDialog
         open={isProposeDialogOpen}
@@ -499,42 +548,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
         interviewScheduleId={interviewScheduleId}
         currentInterview={interviewDetails}
       />
-
-      <AlertDialog
-        open={declineConfirmOpen}
-        onOpenChange={(nextOpen) => {
-          if (withdrawingPostpone) return;
-          setDeclineConfirmOpen(nextOpen);
-        }}
-      >
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Decline time proposal?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This withdraws your proposed time. The original interview stays scheduled.
-              HR will no longer see a pending time-change request.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={withdrawingPostpone}>No</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={withdrawingPostpone}
-              onClick={(event) => {
-                event.preventDefault();
-                handleWithdrawPostpone();
-              }}
-              className="bg-amber-600 text-white hover:bg-amber-700"
-            >
-              {withdrawingPostpone ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Declining…</>
-              ) : (
-                'Yes, decline'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Dialog>
+    </>
   );
 }
 

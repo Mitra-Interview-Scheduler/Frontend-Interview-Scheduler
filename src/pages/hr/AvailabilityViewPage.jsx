@@ -2185,22 +2185,22 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <span className="text-sm font-semibold text-muted-foreground">Slots Shown </span>
                 <div className="flex gap-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-indigo-500" />
-                    <span className="text-sm"><span className="font-bold text-indigo-600">{availableCount}</span><span className="text-muted-foreground ml-1">available</span></span>
+                    <div className="w-3 h-3 rounded-full bg-sky-600" />
+                    <span className="text-sm"><span className="font-bold text-sky-700">{availableCount}</span><span className="text-muted-foreground ml-1">available</span></span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
+                    <div className="w-3 h-3 rounded-full bg-indigo-600" />
+                    <span className="text-sm"><span className="font-bold text-indigo-700">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
                   </div>
                   {postponeCount > 0 && (
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-500" />
-                      <span className="text-sm"><span className="font-bold text-amber-600">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
+                      <div className="w-3 h-3 rounded-full bg-orange-600" />
+                      <span className="text-sm"><span className="font-bold text-orange-700">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-700" />
-                    <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
+                    <div className="w-3 h-3 rounded-full bg-slate-500" />
+                    <span className="text-sm"><span className="font-bold text-slate-600">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />

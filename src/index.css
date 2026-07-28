@@ -466,15 +466,7 @@ All colors MUST be HSL.
   white-space: nowrap;
 }
 
-.rbc-selected {
-  background: linear-gradient(135deg, hsl(var(--primary-hover)), hsl(var(--primary))) !important;
-}
-
-.availability-calendar-container .rbc-event.booked-event.rbc-selected {
-  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%) !important;
-}
-
-.availability-calendar-container .rbc-event.available-event.rbc-selected {
+.rbc-selected:not(.rbc-event) {
   background: linear-gradient(135deg, hsl(var(--primary-hover)), hsl(var(--primary))) !important;
 }
 

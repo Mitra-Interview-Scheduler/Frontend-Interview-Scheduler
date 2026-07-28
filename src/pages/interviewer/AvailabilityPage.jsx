@@ -28,52 +28,14 @@ import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
 import { calendarLocalizer, computeSlotDurationHours } from '@/lib/calendarUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
-import { PANEL_PALETTE, POSTPONE_REQUEST_PALETTE } from './../hr/utils/AvailabilityViewPageUiUtils';
+import {
+  CALENDAR_STATUS_PALETTES,
+  PANEL_PALETTE,
+  POSTPONE_REQUEST_PALETTE,
+} from './../hr/utils/AvailabilityViewPageUiUtils';
 
 const POSTPONE_PROPOSAL_LABEL = 'Postpone proposal';
-
-
-// ── Status colours ────────────────────────────────────────────────────────────
-const STATUS_COLORS = {
-  available: {
-    bg: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    border: '#312e81',
-    solid: '#6366f1',
-    label: 'Available',
-  },
-  booked: {
-    bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border: '#065f46',
-    solid: '#10b981',
-    label: 'Booked',
-  },
-  panel_booked: {
-    ...PANEL_PALETTE,
-    label: 'Panel Interview',
-  },
-  postpone_request: {
-    ...POSTPONE_REQUEST_PALETTE,
-    label: POSTPONE_PROPOSAL_LABEL,
-  },
-  completed: {
-    bg: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-    border: '#064e3b',
-    solid: '#059669',
-    label: 'Completed',
-  },
-  blocked: {
-    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: '#92400e',
-    solid: '#f59e0b',
-    label: 'Blocked',
-  },
-  google_external: {
-    bg: '#4b5563',
-    border: '#1f2937',
-    solid: '#4b5563',
-    label: 'Google Calendar',
-  },
-};
+const STATUS_COLORS = CALENDAR_STATUS_PALETTES;
 
 const CALENDAR_PAGE_SIZES = {
   month: 500,
@@ -82,21 +44,26 @@ const CALENDAR_PAGE_SIZES = {
 };
 
 const CALENDAR_LEGEND_ITEMS = [
-  { key: 'available', label: 'Available', swatch: STATUS_COLORS.available.solid },
-  { key: 'booked', label: 'Booked', swatch: STATUS_COLORS.booked.solid },
-  { key: 'panel_booked', label: 'Panel', swatch: PANEL_PALETTE.solid },
-  { key: 'postpone_request', label: 'Postpone proposal', swatch: POSTPONE_REQUEST_PALETTE.solid },
-  { key: 'completed', label: 'Completed', swatch: STATUS_COLORS.completed.solid },
+  { key: 'available', label: STATUS_COLORS.available.label, swatch: STATUS_COLORS.available.solid },
+  { key: 'booked', label: STATUS_COLORS.booked.label, swatch: STATUS_COLORS.booked.solid },
+  { key: 'panel_booked', label: STATUS_COLORS.panel_booked.label, swatch: STATUS_COLORS.panel_booked.solid },
+  { key: 'postpone_request', label: STATUS_COLORS.postpone_request.label, swatch: STATUS_COLORS.postpone_request.solid },
+  { key: 'overdue', label: STATUS_COLORS.overdue.label, swatch: STATUS_COLORS.overdue.solid },
+  { key: 'completed', label: STATUS_COLORS.completed.label, swatch: STATUS_COLORS.completed.solid },
 ];
 
 const BookedCalendarEvent = ({ event }) => {
-  const isPostponeProposal = event.status === 'postpone_request'
+  const isOverdue = event.status === 'overdue' || event.isOverdue;
+  const isPostponeProposal = !isOverdue && (
+    event.status === 'postpone_request'
     || event.hasPendingPostponeRequest
-    || event.isProposedTime;
+    || event.isProposedTime
+  );
 
   const isBookedLike = event.status === 'booked'
     || event.status === 'panel_booked'
     || event.status === 'completed'
+    || event.status === 'overdue'
     || isPostponeProposal;
   if (!isBookedLike) {
     return <span className="truncate">{event.title}</span>;
@@ -110,8 +77,11 @@ const BookedCalendarEvent = ({ event }) => {
         )}
         <span className="booked-event-candidate truncate">{event.title}</span>
       </div>
-      {event.panelId && !isPostponeProposal && (
+      {event.panelId && !isPostponeProposal && !isOverdue && (
         <span className="calendar-event-panel-badge">Panel</span>
+      )}
+      {isOverdue && (
+        <span className="booked-event-overdue-badge">Overdue</span>
       )}
       {isPostponeProposal && (
         <span className="booked-event-postpone-badge">
@@ -266,14 +236,23 @@ const AvailabilityPage = () => {
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
   const mapSlotsToEvents = (data) => (data || []).flatMap((slot) => {
     const isCompleted = slot.interviewStatus === InterviewScheduleStatus.COMPLETED;
-    const hasPendingPostponeRequest = Boolean(slot.hasPendingPostponeRequest) && !isCompleted;
+    const isCancelled = slot.interviewStatus === InterviewScheduleStatus.CANCELLED;
+    const endMs = new Date(slot.endDateTime).getTime();
+    const isOverdue = slot.status === SlotStatus.BOOKED
+      && !isCompleted
+      && !isCancelled
+      && Number.isFinite(endMs)
+      && endMs < Date.now();
+    const hasPendingPostponeRequest = Boolean(slot.hasPendingPostponeRequest) && !isCompleted && !isOverdue;
     const isPanel = Boolean(slot.panelId);
     const statusKey = slot.status === SlotStatus.BOOKED
       ? (isCompleted
         ? 'completed'
-        : (hasPendingPostponeRequest
-          ? 'postpone_request'
-          : (isPanel ? 'panel_booked' : 'booked')))
+        : (isOverdue
+          ? 'overdue'
+          : (hasPendingPostponeRequest
+            ? 'postpone_request'
+            : (isPanel ? 'panel_booked' : 'booked'))))
       : slot.status.toLowerCase();
 
     const baseEvent = {
@@ -281,7 +260,9 @@ const AvailabilityPage = () => {
       title: slot.status === SlotStatus.BOOKED
         ? (isCompleted
           ? `✓ ${slot.candidateName || 'Interview Completed'}`
-          : `🔒 ${slot.candidateName || 'Interview Scheduled'}`)
+          : (isOverdue
+            ? `⚠ ${slot.candidateName || 'Interview Overdue'}`
+            : `🔒 ${slot.candidateName || 'Interview Scheduled'}`))
         : slot.description || 'Available',
       start: new Date(slot.startDateTime),
       end: new Date(slot.endDateTime),
@@ -299,6 +280,7 @@ const AvailabilityPage = () => {
         ? (slot.meetingLink || null)
         : null,
       panelId: slot.panelId ?? null,
+      isOverdue,
       hasPendingPostponeRequest,
       pendingPostponeRequestId: slot.pendingPostponeRequestId ?? null,
       pendingPostponeReason: slot.pendingPostponeReason ?? null,
@@ -630,6 +612,7 @@ const handleSelectSlot = ({ start, end }) => {
     if (event.status === 'booked'
       || event.status === 'panel_booked'
       || event.status === 'completed'
+      || event.status === 'overdue'
       || event.status === 'postpone_request'
       || event.hasPendingPostponeRequest
       || event.isProposedTime) {
@@ -738,47 +721,57 @@ const handleSelectSlot = ({ start, end }) => {
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
-    const isPostponeRequest = event.status === 'postpone_request'
+    const isOverdue = event.status === 'overdue' || event.isOverdue;
+    const isPostponeRequest = !isOverdue && (
+      event.status === 'postpone_request'
       || event.hasPendingPostponeRequest
-      || event.isProposedTime;
-    const colors = isPostponeRequest
-      ? STATUS_COLORS.postpone_request
-      : (STATUS_COLORS[event.status] || STATUS_COLORS.available);
+      || event.isProposedTime
+    );
+    const colors = isOverdue
+      ? STATUS_COLORS.overdue
+      : (isPostponeRequest
+        ? STATUS_COLORS.postpone_request
+        : (STATUS_COLORS[event.status] || STATUS_COLORS.available));
     const isGoogleExternal = event.status === 'google_external';
-    const isPanelBooked = !isPostponeRequest && (
+    const isPanelBooked = !isPostponeRequest && !isOverdue && (
       event.status === 'panel_booked' || Boolean(event.panelId)
     );
     const isBookedLike = event.status === 'booked'
       || event.status === 'panel_booked'
       || event.status === 'completed'
+      || event.status === 'overdue'
       || isPostponeRequest;
     return {
       className: isGoogleExternal
         ? 'google-external-event'
         : (event.status === 'completed'
           ? 'booked-event completed-event'
-          : (isPostponeRequest
-            ? 'booked-event postpone-request-event'
-            : (isPanelBooked
-              ? 'booked-event panel-booked-event'
-              : (event.status === 'booked' ? 'booked-event' : 'available-event')))),
+          : (isOverdue
+            ? 'booked-event overdue-event'
+            : (isPostponeRequest
+              ? 'booked-event postpone-request-event'
+              : (isPanelBooked
+                ? 'booked-event panel-booked-event'
+                : (event.status === 'booked' ? 'booked-event' : 'available-event'))))),
       style: {
         background:   colors.bg,
         borderRadius: '5px',
         opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
         color:        isGoogleExternal ? '#ffffff' : 'white',
-        borderLeft:   `${isPanelBooked || isPostponeRequest ? 4 : 3}px solid ${colors.border}`,
+        borderLeft:   `${isPanelBooked || isPostponeRequest || isOverdue ? 4 : 3}px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
         padding:      '4px 8px',
         fontSize:     '12px',
         fontWeight:   isGoogleExternal ? '600' : '500',
         boxShadow:    isGoogleExternal
           ? '0 2px 6px rgba(0, 0, 0, 0.2)'
-          : (isPostponeRequest
-            ? `0 2px 10px ${POSTPONE_REQUEST_PALETTE.solid}55, 0 0 0 1px ${POSTPONE_REQUEST_PALETTE.border}66`
-            : (isPanelBooked
-              ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 1px #7dd3fc66`
-              : `0 2px 6px ${colors.solid}40`)),
+          : (isOverdue
+            ? `0 2px 10px ${STATUS_COLORS.overdue.solid}55, 0 0 0 1px ${STATUS_COLORS.overdue.border}66`
+            : (isPostponeRequest
+              ? `0 2px 10px ${POSTPONE_REQUEST_PALETTE.solid}55, 0 0 0 1px ${POSTPONE_REQUEST_PALETTE.border}66`
+              : (isPanelBooked
+                ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 1px #c4b5fd66`
+                : `0 2px 6px ${colors.solid}40`))),
         cursor:       isGoogleExternal ? 'not-allowed' : 'pointer',
         overflow:     'hidden',
         backgroundImage: isGoogleExternal
@@ -943,6 +936,9 @@ const handleSelectSlot = ({ start, end }) => {
                                   ? '\nIncludes a proposed alternative time'
                                   : '\nNo alternative time proposed yet');
                               return `⏳ ${POSTPONE_PROPOSAL_LABEL}${event.candidateName ? ': ' + event.candidateName : ''}${byLine}${proposedLine}\n${timeRange}${meetLine}`;
+                            }
+                            if (event.status === 'overdue' || event.isOverdue) {
+                              return `⚠ Overdue interview${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}\nPast interview not completed`;
                             }
                             if (event.status === 'panel_booked' || event.panelId) {
                               return `👥 Panel Interview${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}`;

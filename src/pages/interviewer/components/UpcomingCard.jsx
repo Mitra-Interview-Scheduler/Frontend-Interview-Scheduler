@@ -14,41 +14,10 @@ import {
 import { motion } from 'framer-motion';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { computeSlotDurationHours, formatSlotTotalHours } from '@/lib/calendarUtils';
+import { CALENDAR_STATUS_PALETTES } from '@/pages/hr/utils/AvailabilityViewPageUiUtils';
 
 const UPCOMING_SLOTS_PER_PAGE = 10;
-
-const STATUS_COLORS = {
-  available: {
-    bg: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    border: '#312e81',
-    solid: '#6366f1',
-    label: 'Available',
-  },
-  booked: {
-    bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border: '#065f46',
-    solid: '#10b981',
-    label: 'Booked',
-  },
-  panel_booked: {
-    bg: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-    border: '#0c4a6e',
-    solid: '#0ea5e9',
-    label: 'Panel',
-  },
-  postpone_request: {
-    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: '#b45309',
-    solid: '#f59e0b',
-    label: 'Postpone',
-  },
-  blocked: {
-    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: '#92400e',
-    solid: '#f59e0b',
-    label: 'Blocked',
-  },
-};
+const STATUS_COLORS = CALENDAR_STATUS_PALETTES;
 
 const UpcomingCard = ({
   events = [],
