@@ -353,86 +353,90 @@ const InterviewTypesPage = () => {
           </DialogHeader>
 
           <DialogBody className="px-6 py-5 space-y-4">
-            <section className="rounded-xl border bg-white p-4 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <FileText className="h-4 w-4 text-sky-600" />
-                Details
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Label <span className="text-red-400 normal-case">*</span>
-                </Label>
-                <Input
-                  value={form.label}
-                  onChange={(e) => setForm({ ...form, label: e.target.value })}
-                  placeholder="e.g. Manager Interview"
-                  disabled={isMutating}
-                  className="h-10"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Description
-                </Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Short note for admins (optional)"
-                  disabled={isMutating}
-                  rows={2}
-                  className="resize-none"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Display order
-                </Label>
-                <Input
-                  type="number"
-                  value={form.displayOrder}
-                  onChange={(e) => setForm({ ...form, displayOrder: e.target.value })}
-                  disabled={isMutating}
-                  className="h-10 max-w-xs"
-                />
-                {!editing && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Pre-filled after existing types.
-                  </p>
-                )}
-              </div>
-            </section>
+            
 
-            <section className="rounded-xl border bg-white p-4 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <GitBranch className="h-4 w-4 text-sky-600" />
-                Pipeline
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {editing
-                  ? 'Choose which candidate pipeline stage this type advances to, and where to restore on cancel.'
-                  : 'A pipeline stage is created automatically from the label (like Technical / HR rounds). On cancel defaults to Screening unless you change it.'}
-              </p>
-              {editing && (
+            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr] p-1">
+              <section className="rounded-xl border bg-white p-4 space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <FileText className="h-4 w-4 text-sky-600" />
+                  Details
+                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Advances candidate to
+                    Label <span className="text-red-400 normal-case">*</span>
                   </Label>
-                  <StatusSelect
-                    value={form.roundStatusKey}
-                    onChange={(v) => setForm({ ...form, roundStatusKey: v })}
+                  <Input
+                    value={form.label}
+                    onChange={(e) => setForm({ ...form, label: e.target.value })}
+                    placeholder="e.g. Manager Interview"
+                    disabled={isMutating}
+                    className="h-10"
                   />
                 </div>
-              )}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  On cancel, restore to
-                </Label>
-                <StatusSelect
-                  value={form.cancelRestoreStatusKey}
-                  onChange={(v) => setForm({ ...form, cancelRestoreStatusKey: v })}
-                />
-              </div>
-            </section>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Description
+                  </Label>
+                  <Textarea
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="Short note for admins (optional)"
+                    disabled={isMutating}
+                    rows={2}
+                    className="resize-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Display order
+                  </Label>
+                  <Input
+                    type="number"
+                    value={form.displayOrder}
+                    onChange={(e) => setForm({ ...form, displayOrder: e.target.value })}
+                    disabled={isMutating}
+                    className="h-10 max-w-xs"
+                  />
+                  {!editing && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Pre-filled after existing types.
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-white p-4 space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <GitBranch className="h-4 w-4 text-sky-600" />
+                  Pipeline
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {editing
+                    ? 'Choose which candidate pipeline stage this type advances to, and where to restore on cancel.'
+                    : 'A pipeline stage is created automatically from the label (like Technical / HR rounds). On cancel defaults to Screening unless you change it.'}
+                </p>
+                {editing && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Advances candidate to
+                    </Label>
+                    <StatusSelect
+                      value={form.roundStatusKey}
+                      onChange={(v) => setForm({ ...form, roundStatusKey: v })}
+                    />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    On cancel, restore to
+                  </Label>
+                  <StatusSelect
+                    value={form.cancelRestoreStatusKey}
+                    onChange={(v) => setForm({ ...form, cancelRestoreStatusKey: v })}
+                  />
+                </div>
+              </section>
+            </div>
 
             <InterviewTypeFilterRulesFields
               rules={form.filterRules}
