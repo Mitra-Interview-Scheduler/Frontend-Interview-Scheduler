@@ -97,8 +97,17 @@ function dispatch(action) {
   });
 }
 
+function inferVariant(props) {
+  if (props.variant) return props.variant;
+  const text = `${props.title || ''} ${props.description || ''}`.toLowerCase();
+  const negativePatterns = /fail|error|invalid|denied|unauthorized|not found|couldn't|unable|rejected|already exists/;
+  if (negativePatterns.test(text)) return 'destructive';
+  return 'success';
+}
+
 function toast({ ...props }) {
   const id = genId();
+  const variant = inferVariant(props);
 
   const update = (props) =>
     dispatch({
@@ -111,6 +120,7 @@ function toast({ ...props }) {
     type: "ADD_TOAST",
     toast: {
       ...props,
+      variant,
       id,
       open: true,
       onOpenChange: (open) => {

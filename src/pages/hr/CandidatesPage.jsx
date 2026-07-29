@@ -51,20 +51,6 @@ const getTargetDesignation = (candidate) => {
   return candidate.targetDesignationName || '-';
 };
 
-const getRowTooltip = (candidate) => {
-  if (!candidate) return '';
-  const parts = [
-    candidate.name || '-',
-    candidate.email || '-',
-    candidate.phone || '-',
-    `RR: ${candidate.resourceRequestNumber || '-'}`,
-    `Exp: ${candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y` : '-'}`,
-    `Target: ${candidate.targetDesignationName || '-'}`,
-    `Status: ${candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}`,
-  ];
-  return parts.join(' • ');
-};
-
 const CandidatesPage = () => {
   const navigate = useNavigate();
   const { formatDate } = useFormattedDateTime();
@@ -239,17 +225,19 @@ const CandidatesPage = () => {
             ) : (
               <div className="space-y-3">
                 <div className="hidden lg:block rounded-lg border bg-card">
-                  <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto">
+                  <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto" style={{ minWidth: '1100px' }}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[18%]">Candidate</TableHead>
-                        <TableHead className="w-[17%]">Email</TableHead>
-                        <TableHead className="w-[14%]">Phone Number</TableHead>
-                        <TableHead className="w-[14%]">RR Number</TableHead>
-                        <TableHead className="w-[12%]">Experience</TableHead>
-                        <TableHead className="w-[12%]">Target Designation</TableHead>
-                        <TableHead className="w-[12%]">Status</TableHead>
-                        <TableHead className="w-[13%] text-right">Actions</TableHead>
+                        <TableHead style={{ width: 170 }}>Candidate</TableHead>
+                        <TableHead style={{ width: 170 }}>Email</TableHead>
+                        <TableHead style={{ width: 120 }}>Phone Number</TableHead>
+                        <TableHead style={{ width: 120 }}>RR Number</TableHead>
+                        <TableHead style={{ width: 90 }}>Experience</TableHead>
+                        <TableHead style={{ width: 150 }}>Target Designation</TableHead>
+                        <TableHead style={{ width: 110 }}>Created On</TableHead>
+                        <TableHead style={{ width: 130 }}>Created By</TableHead>
+                        <TableHead style={{ width: 90 }}>Status</TableHead>
+                        <TableHead style={{ width: 100 }} className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -324,6 +312,26 @@ const CandidatesPage = () => {
                                 <span className="truncate">{getTargetDesignation(candidate)}</span>
                               </TooltipTrigger>
                               <TooltipContent>{getTargetDesignation(candidate)}</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">
+                                  {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{candidate.createdByName || '-'}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.createdByName || '-'}</TooltipContent>
                             </Tooltip>
                           </TableCell>
                           <TableCell>
@@ -418,6 +426,8 @@ const CandidatesPage = () => {
                             <span><span className="font-medium text-foreground">RR:</span> {candidate.resourceRequestNumber || '-'}</span>
                             <span><span className="font-medium text-foreground">Exp:</span> {candidate.yearsOfExperience ? `${candidate.yearsOfExperience} years` : '-'}</span>
                             <span><span className="font-medium text-foreground">Target:</span> {getTargetDesignation(candidate)}</span>
+                            <span><span className="font-medium text-foreground">Created On:</span> {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}</span>
+                            <span><span className="font-medium text-foreground">Created By:</span> {candidate.createdByName || '-'}</span>
                           </div>
 
                           <div className="mt-2 pt-2 border-t flex items-center justify-end gap-1.5">

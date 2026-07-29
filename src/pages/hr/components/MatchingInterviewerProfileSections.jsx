@@ -141,7 +141,7 @@ export function MatchingInterviewerProfileSections({ match }) {
               showStarOnMatch
             />
             <ProfileGroup
-              label="Other technologies"
+              label="Sub technologies"
               tone="sky"
               items={match.nonCoreTechnologies}
               matchedSet={matchedNameSet}
