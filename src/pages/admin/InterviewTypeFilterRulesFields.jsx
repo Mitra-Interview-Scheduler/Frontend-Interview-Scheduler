@@ -114,6 +114,24 @@ const InterviewTypeFilterRulesFields = ({
 
   const scopedDepartmentId =
     rules.departmentFilterMode === FILTER_MODE.FIXED ? rules.fixedDepartmentId : null;
+  const isDepartmentDependent = rules.departmentFilterMode === FILTER_MODE.SAME_AS_CANDIDATE;
+
+  useEffect(() => {
+    if (!isDepartmentDependent) return;
+    if (
+      rules.tierFilterMode !== FILTER_MODE.SAME_AS_CANDIDATE
+      || rules.designationFilterMode !== FILTER_MODE.SAME_AS_CANDIDATE
+      || rules.fixedMinTierId != null
+      || rules.fixedMinDesignationId != null
+    ) {
+      set({
+        tierFilterMode: FILTER_MODE.SAME_AS_CANDIDATE,
+        designationFilterMode: FILTER_MODE.SAME_AS_CANDIDATE,
+        fixedMinTierId: null,
+        fixedMinDesignationId: null,
+      });
+    }
+  }, [isDepartmentDependent]);
 
   // Department → tiers (same as availability filters)
   useEffect(() => {
@@ -206,9 +224,14 @@ const InterviewTypeFilterRulesFields = ({
     rules.designationFilterMode === FILTER_MODE.FIXED && !scopedTierId;
 
   const handleDepartmentModeChange = (departmentFilterMode) => {
+    const isSameAsCandidate = departmentFilterMode === FILTER_MODE.SAME_AS_CANDIDATE;
     set({
       departmentFilterMode,
       fixedDepartmentId: departmentFilterMode === FILTER_MODE.FIXED ? rules.fixedDepartmentId : null,
+      tierFilterMode: isSameAsCandidate ? FILTER_MODE.SAME_AS_CANDIDATE : rules.tierFilterMode,
+      designationFilterMode: isSameAsCandidate ? FILTER_MODE.SAME_AS_CANDIDATE : rules.designationFilterMode,
+      fixedMinTierId: isSameAsCandidate ? null : rules.fixedMinTierId,
+      fixedMinDesignationId: isSameAsCandidate ? null : rules.fixedMinDesignationId,
       ...(departmentFilterMode !== FILTER_MODE.FIXED
         ? { fixedMinTierId: null, fixedMinDesignationId: null }
         : {}),
@@ -293,9 +316,9 @@ const InterviewTypeFilterRulesFields = ({
       <div className="space-y-2">
         <Label>Min. tier</Label>
         <ModeSelect
-          value={rules.tierFilterMode}
+          value={isDepartmentDependent ? FILTER_MODE.SAME_AS_CANDIDATE : rules.tierFilterMode}
           onChange={handleTierModeChange}
-          disabled={disabled}
+          disabled={disabled || isDepartmentDependent}
         />
         {rules.tierFilterMode === FILTER_MODE.FIXED && (
           needsFixedDepartment ? (
@@ -306,7 +329,7 @@ const InterviewTypeFilterRulesFields = ({
             <Select
               value={rules.fixedMinTierId != null ? String(rules.fixedMinTierId) : ''}
               onValueChange={(v) => set({ fixedMinTierId: Number(v), fixedMinDesignationId: null })}
-              disabled={disabled || loadingTiers || tiersForDept.length === 0}
+              disabled={disabled || isDepartmentDependent || loadingTiers || tiersForDept.length === 0}
             >
               <SelectTrigger>
                 <SelectValue placeholder={loadingTiers ? 'Loading tiers…' : 'Select minimum tier'} />
@@ -326,13 +349,13 @@ const InterviewTypeFilterRulesFields = ({
       <div className="space-y-2">
         <Label>Min. designation</Label>
         <ModeSelect
-          value={rules.designationFilterMode}
+          value={isDepartmentDependent ? FILTER_MODE.SAME_AS_CANDIDATE : rules.designationFilterMode}
           onChange={(designationFilterMode) => set({
             designationFilterMode,
             fixedMinDesignationId:
               designationFilterMode === FILTER_MODE.FIXED ? rules.fixedMinDesignationId : null,
           })}
-          disabled={disabled}
+          disabled={disabled || isDepartmentDependent}
         />
         {rules.designationFilterMode === FILTER_MODE.FIXED && (
           needsFixedDepartment ? (
@@ -347,7 +370,7 @@ const InterviewTypeFilterRulesFields = ({
             <Select
               value={rules.fixedMinDesignationId != null ? String(rules.fixedMinDesignationId) : ''}
               onValueChange={(v) => set({ fixedMinDesignationId: Number(v) })}
-              disabled={disabled || loadingDesignations || designationsForScope.length === 0}
+              disabled={disabled || isDepartmentDependent || loadingDesignations || designationsForScope.length === 0}
             >
               <SelectTrigger>
                 <SelectValue
