@@ -163,7 +163,7 @@ const DomainsPage = () => {
                 {activeDomains.map((domain) => (
                   <div
                     key={domain.id}
-                    className="border rounded-lg p-4 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow"
+                    className="border rounded-lg p-2 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow"
                   >
                     <div>
                       <p className="font-semibold">{domain.name}</p>

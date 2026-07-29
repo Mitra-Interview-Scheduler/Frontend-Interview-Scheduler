@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+<<<<<<< HEAD
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck } from 'lucide-react';
+=======
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
+import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+>>>>>>> dev
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
@@ -18,6 +24,7 @@ import { useCandidateInterviews } from '@/hooks/useCandidateInterviews';
 import { isFinalClosingStage } from '@/lib/nextStepsConfig';
 function CandidateDetailsPage() {
   const navigate = useNavigate();
+  const { formatDate } = useFormattedDateTime();
   const { candidateId } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -298,6 +305,22 @@ function CandidateDetailsPage() {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-gray-600">Resource Request Number</p>
                       <p className="text-sm text-gray-900">{candidate.resourceRequestNumber || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <CalendarDays className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Created On</p>
+                      <p className="text-sm text-gray-900">{candidate.createdAt ? formatDate(candidate.createdAt) : '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <UserPlus className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-600">Created By</p>
+                      <p className="text-sm text-gray-900">{candidate.createdByName || '-'}</p>
                     </div>
                   </div>
                 </div>
