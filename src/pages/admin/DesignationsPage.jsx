@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers, Briefcase } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { designationAPI } from '@/services/designationAPI';
@@ -70,12 +70,6 @@ const DesignationsPage = () => {
     name: '',
     code: ''
   });
-
-  const [expandedDepartments, setExpandedDepartments] = useState([]);
-
-  const toggleDepartment = (id) => {
-    setExpandedDepartments(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
 
   useEffect(() => {
     loadData();
@@ -589,112 +583,22 @@ const DesignationsPage = () => {
                 </CardContent>
               </Card>
             ) : (
-              <div className="flex gap-4">
-                <div className="w-1/3 max-h-[70vh] overflow-auto">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Departments</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-2">
-                      <div className="space-y-2">
-                        {departments.map((dept) => (
-                          <div
-                            key={dept.id}
-                            onClick={() => setSelectedDepartment(dept.id.toString())}
-                            className={`p-3 rounded cursor-pointer flex items-center justify-between gap-3 ${selectedDepartment === dept.id.toString() ? 'bg-muted-foreground/10' : 'hover:bg-muted-foreground/5'}`}>
-                            <div>
-                              <div className="font-semibold truncate">{dept.name}</div>
-                              {dept.code && <div className="text-xs text-muted-foreground">Code: {dept.code}</div>}
-                            </div>
-                            <Badge variant="outline">{dept.code || '—'}</Badge>
-                          </div>
-                        ))}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {departments.map((department) => (
+                  <Card key={department.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold">{department.name}</h3>
+                          {department.code && (
+                            <p className="text-xs text-muted-foreground mt-1">Code: {department.code}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline">{department.code || '—'}</Badge>
                       </div>
                     </CardContent>
                   </Card>
-                </div>
-
-                <div className="flex-1 max-h-[70vh] overflow-auto">
-                  {selectedDepartment === 'all' ? (
-                    <Card>
-                      <CardContent>
-                        <p className="text-muted-foreground">Select a department on the left to view details.</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    (() => {
-                      const deptId = parseInt(selectedDepartment);
-                      const dept = departments.find(d => d.id === deptId);
-                      const deptTiers = tiers.filter(t => t.departmentId === dept?.id).sort((a, b) => a.tierOrder - b.tierOrder);
-                      const deptDesignations = designations.filter(d => deptTiers.some(t => t.id === d.tierId));
-                      return (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                              <div>
-                                <div className="font-semibold">{dept?.name}</div>
-                                {dept?.code && <div className="text-sm text-muted-foreground">Code: {dept.code}</div>}
-                              </div>
-                              <div className="text-sm text-muted-foreground">Tiers: {deptTiers.length} · Designations: {deptDesignations.length}</div>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-4">
-                              {deptTiers.length === 0 ? (
-                                <div className="text-muted-foreground">No tiers for this department.</div>
-                              ) : (
-                                deptTiers.map((tier) => {
-                                  const tierDesignations = designations.filter(d => d.tierId === tier.id).sort((a,b)=>a.levelOrder-b.levelOrder);
-                                  return (
-                                    <div key={tier.id} className="space-y-2">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                          <Badge className={getTierColor(tier.tierOrder)}>Tier {tier.tierOrder}</Badge>
-                                          <div>
-                                            <div className="font-medium">{tier.name}</div>
-                                            {tier.description && <div className="text-sm text-muted-foreground">{tier.description}</div>}
-                                          </div>
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">{tierDesignations.length} designations</div>
-                                      </div>
-                                      <div className="space-y-2">
-                                        {tierDesignations.map(des => (
-                                          <Card key={des.id} className="hover:shadow-sm">
-                                            <CardContent className="p-3 flex items-center justify-between">
-                                              <div className="flex items-center gap-3">
-                                                <Badge className={getLevelColor(des.levelOrder)}>Level {des.levelOrder}</Badge>
-                                                <div className="min-w-0">
-                                                  <div className="font-medium truncate">{des.name}</div>
-                                                  {des.description && <div className="text-sm text-muted-foreground line-clamp-2">{des.description}</div>}
-                                                </div>
-                                              </div>
-                                              <div className="flex gap-1">
-                                                {isAdmin && (
-                                                  <>
-                                                    <Button variant="outline" size="icon" onClick={() => handleOpenEditDesignation(des)} disabled={isMutating}>
-                                                      <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button variant="outline" size="icon" onClick={() => handleDeleteDesignation(des.id)} disabled={isMutating}>
-                                                      <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                  </>
-                                                )}
-                                              </div>
-                                            </CardContent>
-                                          </Card>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })()
-                  )}
-                </div>
+                ))}
               </div>
             )}
           </div>
