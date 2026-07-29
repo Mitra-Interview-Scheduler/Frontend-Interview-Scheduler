@@ -119,13 +119,13 @@ function InterviewerTechnologiesPanel({  isEditing = false,
         onTechnologiesChange?.(
           interviewerTechs.map((entry) => (entry.id === existingEntry.id ? updated : entry)),
         );
-        toast.success(isCore ? 'Marked as core technology' : 'Moved to can do');
+        toast.success(isCore ? 'Marked as core technology' : 'Moved to sub technology');
       } else {
         const created = normalizeSkillAssignment(
           await profileAPI.addInterviewerTechnology(technology.id, 0, isCore),
         );
         onTechnologiesChange?.([...interviewerTechs, created]);
-        toast.success(isCore ? 'Core technology added' : 'Can do technology added');
+        toast.success(isCore ? 'Core technology added' : 'Sub technology added');
       }
 
       setNewSkill('');
@@ -225,7 +225,7 @@ function InterviewerTechnologiesPanel({  isEditing = false,
         <CardHeader>
           <CardTitle>Technical Skills & Interview Preferences</CardTitle>
           <CardDescription>
-            Pick a category, choose a technology, then mark it as Core Technology or Can Do.
+            Pick a category, choose a technology, then mark it as Core Technology or Sub Technology.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -308,7 +308,7 @@ function InterviewerTechnologiesPanel({  isEditing = false,
                                     {getTechnologyCategoryLabel(tech)}
                                     {existingEntry && (
                                       <Badge variant="secondary" className="text-[10px]">
-                                        {getSkillIsCore(existingEntry) ? 'Core' : 'Can Do'}
+                                        {getSkillIsCore(existingEntry) ? 'Core' : 'Sub'}
                                       </Badge>
                                     )}
                                   </span>
@@ -332,7 +332,7 @@ function InterviewerTechnologiesPanel({  isEditing = false,
 
                 <p className="text-xs text-muted-foreground">
                   Select a category, then click the search field to browse technologies.
-                  Type to filter, or pick one to set Core Technology or Can Do.
+                  Type to filter, or pick one to set Core Technology or Sub Technology.
                 </p>
               </div>
             </div>
@@ -352,13 +352,13 @@ function InterviewerTechnologiesPanel({  isEditing = false,
                 'No core technologies marked yet.',
               )}
               {otherTechnologies.length > 0 && renderTechnologyGroup(
-                'Can Do',
+                'Sub Technologies',
                 otherTechnologies,
-                'No can do technologies added.',
+                'No sub technologies added.',
               )}
               {coreTechnologies.length === 0 && otherTechnologies.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Existing skills are shown under Can Do. Click Edit Profile to mark any as Core Technology.
+                  Existing skills are shown under Sub Technologies. Click Edit Profile to mark any as Core Technology.
                 </p>
               )}
             </div>
