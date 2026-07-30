@@ -1225,6 +1225,16 @@ const AvailabilityViewPage = () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
+    const resolvedType = resolveInterviewType(requestForm.interviewType, interviewType);
+    const typeMeta = (availableInterviewTypes || []).find((t) => t.code === resolvedType);
+    if (typeMeta && typeMeta.requiresInterviewer === false) {
+      toast({
+        title: 'Assessment type',
+        description: 'This type does not use interviewer slots. Record it from Schedule Interview on the candidate page.',
+        variant: 'destructive',
+      });
+      return;
+    }
     // Privilege gate
     if (singlePrivilegeError) {
       toast({ title: '⛔ Insufficient interviewer privilege', description: singlePrivilegeError, variant: 'destructive' }); return;
@@ -1293,6 +1303,16 @@ const AvailabilityViewPage = () => {
   const handleSendPanelRequest = async () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
+    }
+    const resolvedPanelType = resolveInterviewType(requestForm.interviewType, interviewType);
+    const panelTypeMeta = (availableInterviewTypes || []).find((t) => t.code === resolvedPanelType);
+    if (panelTypeMeta && panelTypeMeta.requiresInterviewer === false) {
+      toast({
+        title: 'Assessment type',
+        description: 'Panel booking is not used for assessment types. Record the assessment from the candidate Schedule dialog.',
+        variant: 'destructive',
+      });
+      return;
     }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;

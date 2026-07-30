@@ -108,9 +108,8 @@ const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   SelectContentProps
 >(({ className, children, position, style, hideSelectedFromMenu, maxVisibleItems = DEFAULT_MAX_VISIBLE_ITEMS, ...props }, ref) => {
-  const uiContext = React.useContext(SelectUiContext);
-  const shouldHideSelected = hideSelectedFromMenu ?? uiContext.hideSelectedFromMenu;
-  const resolvedPosition = position ?? (shouldHideSelected ? "popper" : "item-aligned");
+  // Always prefer popper inside dialogs/modals so menus aren't clipped or mis-positioned.
+  const resolvedPosition = position ?? "popper";
   const viewportMaxHeight = `${SELECT_ITEM_HEIGHT_REM * maxVisibleItems}rem`;
 
   return (
@@ -119,13 +118,14 @@ const SelectContent = React.forwardRef<
         ref={ref}
         position={resolvedPosition}
         className={cn(
-          "relative z-50 overflow-hidden rounded-md border border-border bg-card text-foreground shadow-lg backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "relative z-[200] overflow-hidden rounded-md border border-border bg-card text-foreground shadow-lg backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           resolvedPosition === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,
         )}
         style={{
           maxHeight: viewportMaxHeight,
+          zIndex: 200,
           ...(resolvedPosition === "popper"
             ? {
                 width: "var(--radix-select-trigger-width)",

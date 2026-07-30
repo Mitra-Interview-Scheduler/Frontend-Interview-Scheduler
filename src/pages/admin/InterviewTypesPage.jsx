@@ -40,6 +40,23 @@ import InterviewTypeFilterRulesFields, {
 
 const NONE_VALUE = '__none__';
 
+/** Coerce API / form values to a real boolean (avoids string "false" being truthy). */
+const toBool = (value, defaultValue = true) => {
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (value === 'false' || value === 0 || value === '0') return false;
+  if (value === 'true' || value === 1 || value === '1') return true;
+  return Boolean(value);
+};
+
+/** Read meeting flag from API (supports camelCase / snake_case). */
+const readCreateCalendarMeeting = (type) =>
+  toBool(type?.createCalendarMeeting ?? type?.create_calendar_meeting, true);
+
+/** Read interviewer-required flag from API. */
+const readRequiresInterviewer = (type) =>
+  toBool(type?.requiresInterviewer ?? type?.requires_interviewer, true);
+
 /** "Manager Interview" → MANAGER_INTERVIEW (preview only; uniqueness is server-side) */
 const slugifyFromLabel = (label) => {
   if (!label?.trim()) return '';
@@ -59,6 +76,8 @@ const emptyForm = {
   displayOrder: 0,
   roundStatusKey: '',
   cancelRestoreStatusKey: 'SCREENING',
+  createCalendarMeeting: true,
+  requiresInterviewer: true,
   filterRules: defaultFilterRules(),
 };
 
@@ -127,6 +146,8 @@ const InterviewTypesPage = () => {
       displayOrder: type.displayOrder ?? 0,
       roundStatusKey: type.roundStatusKey || '',
       cancelRestoreStatusKey: type.cancelRestoreStatusKey || '',
+      createCalendarMeeting: readCreateCalendarMeeting(type),
+      requiresInterviewer: readRequiresInterviewer(type),
       filterRules: filterRulesFromType(type),
     });
     setDialogOpen(true);
@@ -170,23 +191,41 @@ const InterviewTypesPage = () => {
     }
     setIsMutating(true);
     try {
+      const createCalendarMeeting = readCreateCalendarMeeting(form);
+      const requiresInterviewer = readRequiresInterviewer(form);
       const payload = {
         label: form.label.trim(),
         description: form.description?.trim() || null,
         active: true,
         displayOrder: Number(form.displayOrder) || 0,
         cancelRestoreStatusKey: form.cancelRestoreStatusKey || null,
+        createCalendarMeeting: requiresInterviewer ? createCalendarMeeting : false,
+        requiresInterviewer,
         filterRules: form.filterRules,
       };
+      let saved;
       if (editing) {
-        await interviewTypeAPI.update(editing.id, {
+        saved = await interviewTypeAPI.update(editing.id, {
           ...payload,
           roundStatusKey: form.roundStatusKey || null,
         });
-        toast({ title: 'Saved', description: `${form.label} updated` });
+        toast({
+          title: 'Saved',
+          description: `${form.label} updated · meeting ${readCreateCalendarMeeting(saved) ? 'on' : 'off'}`,
+        });
       } else {
-        await interviewTypeAPI.create(payload);
-        toast({ title: 'Created', description: `${form.label} added` });
+        saved = await interviewTypeAPI.create(payload);
+        toast({
+          title: 'Created',
+          description: `${form.label} added · meeting ${readCreateCalendarMeeting(saved) ? 'on' : 'off'}`,
+        });
+      }
+      if (saved && saved.createCalendarMeeting === undefined && saved.create_calendar_meeting === undefined) {
+        toast({
+          title: 'Warning',
+          description: 'Backend did not return createCalendarMeeting. Restart the backend so migration V80 is applied.',
+          variant: 'destructive',
+        });
       }
       setDialogOpen(false);
       await loadData();
@@ -239,7 +278,7 @@ const InterviewTypesPage = () => {
       disabled={isMutating}
     >
       <SelectTrigger><SelectValue placeholder="None (generic scheduled)" /></SelectTrigger>
-      <SelectContent className="max-h-64">
+      <SelectContent className="max-h-64" position="popper">
         <SelectItem value={NONE_VALUE}>None (generic scheduled)</SelectItem>
         {candidateSteps.map((s) => (
           <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
@@ -302,6 +341,10 @@ const InterviewTypesPage = () => {
                       )}
                       <p className="text-[11px] text-muted-foreground mt-1.5">
                         Pipeline: {stepLabel(type.roundStatusKey)}
+                        {' · '}
+                        {readRequiresInterviewer(type) ? 'Needs interviewer' : 'No interviewer'}
+                        {' · '}
+                        {readCreateCalendarMeeting(type) ? 'Meeting on' : 'Meeting off'}
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -367,7 +410,7 @@ const InterviewTypesPage = () => {
                   </Label>
                   <Input
                     value={form.label}
-                    onChange={(e) => setForm({ ...form, label: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
                     placeholder="e.g. Manager Interview"
                     disabled={isMutating}
                     className="h-10"
@@ -379,7 +422,7 @@ const InterviewTypesPage = () => {
                   </Label>
                   <Textarea
                     value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                     placeholder="Short note for admins (optional)"
                     disabled={isMutating}
                     rows={2}
@@ -393,7 +436,7 @@ const InterviewTypesPage = () => {
                   <Input
                     type="number"
                     value={form.displayOrder}
-                    onChange={(e) => setForm({ ...form, displayOrder: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, displayOrder: e.target.value }))}
                     disabled={isMutating}
                     className="h-10 max-w-xs"
                   />
@@ -402,6 +445,62 @@ const InterviewTypesPage = () => {
                       Pre-filled after existing types.
                     </p>
                   )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Requires interviewer
+                  </Label>
+                  <Select
+                    value={readRequiresInterviewer(form) ? 'true' : 'false'}
+                    onValueChange={(value) => {
+                      const requires = value === 'true';
+                      setForm((prev) => ({
+                        ...prev,
+                        requiresInterviewer: requires,
+                        // Assessments default to no Meet unless user turns it back on
+                        createCalendarMeeting: requires ? prev.createCalendarMeeting : false,
+                      }));
+                    }}
+                    disabled={isMutating}
+                    hideSelectedFromMenu={false}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent hideSelectedFromMenu={false} position="popper">
+                      <SelectItem value="true">True — book interviewer slots</SelectItem>
+                      <SelectItem value="false">False — assessment (no interviewer)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    False is for assessments: schedule with a due date/notes only, then book a review type later if needed.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Create calendar meeting
+                  </Label>
+                  <Select
+                    value={readCreateCalendarMeeting(form) ? 'true' : 'false'}
+                    onValueChange={(value) =>
+                      setForm((prev) => ({ ...prev, createCalendarMeeting: value === 'true' }))
+                    }
+                    disabled={isMutating || !readRequiresInterviewer(form)}
+                    hideSelectedFromMenu={false}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent hideSelectedFromMenu={false} position="popper">
+                      <SelectItem value="true">True</SelectItem>
+                      <SelectItem value="false">False</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {readRequiresInterviewer(form)
+                      ? 'True creates a Google Meet on booking. False skips meeting creation.'
+                      : 'Disabled for assessment types (no interviewer booking / Meet).'}
+                  </p>
                 </div>
               </section>
 
@@ -422,7 +521,7 @@ const InterviewTypesPage = () => {
                     </Label>
                     <StatusSelect
                       value={form.roundStatusKey}
-                      onChange={(v) => setForm({ ...form, roundStatusKey: v })}
+                      onChange={(v) => setForm((prev) => ({ ...prev, roundStatusKey: v }))}
                     />
                   </div>
                 )}
@@ -432,7 +531,7 @@ const InterviewTypesPage = () => {
                   </Label>
                   <StatusSelect
                     value={form.cancelRestoreStatusKey}
-                    onChange={(v) => setForm({ ...form, cancelRestoreStatusKey: v })}
+                    onChange={(v) => setForm((prev) => ({ ...prev, cancelRestoreStatusKey: v }))}
                   />
                 </div>
               </section>
@@ -440,7 +539,7 @@ const InterviewTypesPage = () => {
 
             <InterviewTypeFilterRulesFields
               rules={form.filterRules}
-              onChange={(filterRules) => setForm({ ...form, filterRules })}
+              onChange={(filterRules) => setForm((prev) => ({ ...prev, filterRules }))}
               disabled={isMutating}
               departments={departments}
               domains={domains}

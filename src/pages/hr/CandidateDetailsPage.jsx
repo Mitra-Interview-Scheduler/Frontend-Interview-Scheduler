@@ -1,18 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-<<<<<<< HEAD
-import { CandidateAvatar } from '@/components/CandidateAvatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck } from 'lucide-react';
-=======
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
->>>>>>> dev
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
 import StepProgressIndicator from '@/components/StepProgressIndicator';
+import { CandidateAvatar } from '@/components/CandidateAvatar';
 import CandidateNextStepsCard from './components/CandidateNextStepsCard';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
 import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';

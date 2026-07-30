@@ -27,8 +27,12 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, onPointerDownOutside, onInteractOutside, onFocusOutside, ...props }, ref) => {
-  const isSearchableSelectMenu = (target: EventTarget | null) =>
-    target instanceof Element && Boolean(target.closest("[data-searchable-select-menu]"));
+  const isPortaledMenu = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(
+      target.closest("[data-searchable-select-menu]")
+      || target.closest("[data-radix-select-content]")
+      || target.closest("[data-radix-popper-content-wrapper]")
+    );
 
   return (
     <DialogPortal>
@@ -40,19 +44,19 @@ const DialogContent = React.forwardRef<
           className
         )}
         onPointerDownOutside={(event) => {
-          if (isSearchableSelectMenu(event.target)) {
+          if (isPortaledMenu(event.target)) {
             event.preventDefault();
           }
           onPointerDownOutside?.(event);
         }}
         onInteractOutside={(event) => {
-          if (isSearchableSelectMenu(event.target)) {
+          if (isPortaledMenu(event.target)) {
             event.preventDefault();
           }
           onInteractOutside?.(event);
         }}
         onFocusOutside={(event) => {
-          if (isSearchableSelectMenu(event.target)) {
+          if (isPortaledMenu(event.target)) {
             event.preventDefault();
           }
           onFocusOutside?.(event);
