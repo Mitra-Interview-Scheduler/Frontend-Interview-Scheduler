@@ -50,13 +50,19 @@ export const filterRulesFromType = (type) => {
   };
 };
 
-const ModeSelect = ({ value, onChange, disabled, includeNone = true }) => (
+const ModeSelect = ({
+  value,
+  onChange,
+  disabled,
+  includeNone = true,
+  sameAsCandidateLabel = 'Same as candidate',
+}) => (
   <Select value={value} onValueChange={onChange} disabled={disabled}>
     <SelectTrigger>
       <SelectValue />
     </SelectTrigger>
     <SelectContent>
-      <SelectItem value={FILTER_MODE.SAME_AS_CANDIDATE}>Same as candidate</SelectItem>
+      <SelectItem value={FILTER_MODE.SAME_AS_CANDIDATE}>{sameAsCandidateLabel}</SelectItem>
       <SelectItem value={FILTER_MODE.FIXED}>Fixed (choose below)</SelectItem>
       {includeNone && <SelectItem value={FILTER_MODE.NONE}>None (no filter)</SelectItem>}
     </SelectContent>
@@ -319,6 +325,7 @@ const InterviewTypeFilterRulesFields = ({
           value={isDepartmentDependent ? FILTER_MODE.SAME_AS_CANDIDATE : rules.tierFilterMode}
           onChange={handleTierModeChange}
           disabled={disabled || isDepartmentDependent}
+          sameAsCandidateLabel="Candidate's tier or higher"
         />
         {rules.tierFilterMode === FILTER_MODE.FIXED && (
           needsFixedDepartment ? (
@@ -356,6 +363,7 @@ const InterviewTypeFilterRulesFields = ({
               designationFilterMode === FILTER_MODE.FIXED ? rules.fixedMinDesignationId : null,
           })}
           disabled={disabled || isDepartmentDependent}
+          sameAsCandidateLabel="Candidate's designation or higher"
         />
         {rules.designationFilterMode === FILTER_MODE.FIXED && (
           needsFixedDepartment ? (
