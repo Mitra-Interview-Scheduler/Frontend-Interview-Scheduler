@@ -81,6 +81,27 @@
   line-height: 1.4;
 }
 
+/* Custom shadcn toolbar buttons — override react-big-calendar inline-block stacking */
+.availability-calendar-container .rbc-toolbar button.calendar-toolbar-btn {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0;
+  gap: 0.375rem;
+  white-space: nowrap;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.availability-calendar-container .rbc-toolbar button.calendar-toolbar-btn svg {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
 .availability-calendar-container .rbc-toolbar button:hover {
   background: hsl(var(--accent, 210 40% 96.1%));
   border-color: #6366f1;
@@ -673,8 +694,42 @@
   padding-left: 15px;
 }
 
-.availability-calendar-container .rbc-event.completed-event {
-  box-shadow: 0 1px 6px rgba(5, 150, 105, 0.35);
+.booked-event-meet-link {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ecfdf5;
+  text-decoration: underline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+.booked-event-meet-link:hover {
+  color: #ffffff;
+}
+
+/* ══════════════════════════════════════════════════════════
+   GOOGLE CALENDAR READ-ONLY EVENTS
+   ══════════════════════════════════════════════════════════ */
+.availability-calendar-container .rbc-event.google-external-event {
+  background-color: #4b5563 !important;
+  color: #ffffff !important;
+  border-left: 3px solid #1f2937 !important;
+}
+
+.availability-calendar-container .rbc-event.google-external-event .rbc-event-label,
+.availability-calendar-container .rbc-event.google-external-event .rbc-event-content {
+  color: #ffffff !important;
+  opacity: 1;
+  font-weight: 600;
+}
+
+.availability-calendar-container .rbc-event.google-external-event:hover {
+  filter: brightness(0.95);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25) !important;
 }
 
 .completed-event-icon {
@@ -693,6 +748,135 @@
   background: rgba(255, 255, 255, 0.22);
   color: #ecfdf5;
   margin-left: 15px;
+}
+
+.postpone-event-icon {
+  color: #fffbeb;
+}
+
+.booked-event-postpone-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.28);
+  color: #fffbeb;
+  margin-left: 15px;
+}
+
+.booked-event-overdue-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.28);
+  color: #fef2f2;
+  margin-left: 15px;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.postpone-request-event {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: #ffffff !important;
+  border-left: 4px solid #92400e !important;
+  box-shadow: 0 2px 10px rgba(217, 119, 6, 0.45), 0 0 0 1px rgba(146, 64, 14, 0.35) !important;
+  z-index: 6;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.postpone-request-event .rbc-event-label,
+.availability-calendar-container:not(.hr-calendar) .rbc-event.postpone-request-event .rbc-event-content {
+  color: #ffffff !important;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.panel-booked-event {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+  color: #ffffff !important;
+  border-left: 4px solid #5b21b6 !important;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.4), 0 0 0 1px rgba(196, 181, 253, 0.45) !important;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.panel-booked-event .rbc-event-label,
+.availability-calendar-container:not(.hr-calendar) .rbc-event.panel-booked-event .rbc-event-content {
+  color: #ffffff !important;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.overdue-event {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border-left: 4px solid #991b1b !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.45), 0 0 0 1px rgba(153, 27, 27, 0.35) !important;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.overdue-event .rbc-event-label,
+.availability-calendar-container:not(.hr-calendar) .rbc-event.overdue-event .rbc-event-content {
+  color: #ffffff !important;
+}
+
+.availability-calendar-container:not(.hr-calendar) .rbc-event.completed-event {
+  box-shadow: 0 1px 6px rgba(15, 118, 110, 0.35);
+}
+
+/* HR calendar status colors (distinct from interviewer) */
+.availability-calendar-container.hr-calendar .rbc-event.booked-event:not(.postpone-request-event):not(.completed-event):not(.overdue-event) {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  border-left: 4px solid #312e81 !important;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35) !important;
+}
+
+.availability-calendar-container.hr-calendar .rbc-event.postpone-request-event {
+  background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%) !important;
+  color: #ffffff !important;
+  border-left: 4px solid #9a3412 !important;
+  box-shadow: 0 2px 10px rgba(234, 88, 12, 0.4), 0 0 0 1px rgba(154, 52, 18, 0.3) !important;
+  z-index: 6;
+}
+
+.availability-calendar-container.hr-calendar .rbc-event.completed-event {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%) !important;
+  border-left: 4px solid #334155 !important;
+  box-shadow: 0 1px 6px rgba(100, 116, 139, 0.35) !important;
+}
+
+.availability-calendar-container.hr-calendar .rbc-event.overdue-event {
+  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%) !important;
+  border-left: 4px solid #991b1b !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.4) !important;
+}
+
+.interviewer-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.interviewer-calendar-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.interviewer-calendar-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .calendar-event-inner {

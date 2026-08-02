@@ -23,6 +23,7 @@ import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getInitial } from '@/lib/personUtils';
+import { sortRoles } from '@/lib/roleHelpers';
 import { env } from '@/config/env';
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -567,7 +568,7 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {(user.roles || [user.role]).map((r) => (
+                          {sortRoles(user.roles || [user.role]).map((r) => (
                             <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-medium border ${ROLE_META[r]?.badge}`}>
                               {ROLE_META[r]?.label || r}
                             </Badge>
@@ -652,7 +653,7 @@ export default function UsersPage() {
                           </Badge>
                         </div>
                         <div className="col-span-6 md:col-span-2 flex flex-wrap gap-1">
-                          {(user.roles || [user.role]).map((r) => (
+                          {sortRoles(user.roles || [user.role]).map((r) => (
                             <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 h-5 font-medium border ${ROLE_META[r]?.badge}`}>
                               {ROLE_META[r]?.label || r}
                             </Badge>

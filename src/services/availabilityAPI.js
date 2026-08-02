@@ -1,7 +1,6 @@
 // src/services/availabilityAPI.js
 import api from './api';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
-import { InterviewRequestStatus } from '@/lib/statusConstants';
 
 // ── Local datetime formatter (no timezone suffix) ──────────────────────────
 export const availabilityAPI = {
@@ -13,17 +12,28 @@ export const availabilityAPI = {
     return response.data;
   },
 
-  /** Availability slots in a date range */
-  getAvailabilityByDateRange: async (start, end, page = 0, size = 200) => {
+  /** Availability slots in a date range, optionally with read-only Google Calendar events */
+  getAvailabilityByDateRange: async (start, end, page = 0, size = 200, includeGoogleEvents = true) => {
     const response = await api.get('/availability/range', {
       params: {
         start: formatLocalDateTime(start),
         end:   formatLocalDateTime(end),
         page,
         size,
+        includeGoogleEvents,
       },
     });
-    return response.data?.items || response.data;
+    const data = response.data;
+    if (data && Array.isArray(data.items)) {
+      return {
+        items: data.items,
+        googleExternalEvents: data.googleExternalEvents || [],
+      };
+    }
+    return {
+      items: data || [],
+      googleExternalEvents: [],
+    };
   },
 
   /** Available + booked slot counts */
@@ -54,12 +64,52 @@ export const availabilityAPI = {
   },
 
   /**
-   * TODO: Backend — POST /api/interviewer/interviews/schedules/{scheduleId}/propose-time
-   * Payload: { availabilitySlotId, proposedStartDateTime, proposedEndDateTime, notes? }
+   * Interviewer proposes an alternative time for a scheduled interview.
+   * Creates a postpone request and notifies HR / candidate coordinator.
    */
-  proposeAlternativeTime: async (payload) => {
-    console.info('[STUB] proposeAlternativeTime', payload);
-    return { status: InterviewRequestStatus.PENDING, ...payload };
+  proposeAlternativeTime: async ({
+    interviewScheduleId,
+    proposedStartDateTime,
+    proposedEndDateTime,
+    reason,
+  }) => {
+    const payload = {
+      reason: reason?.trim()
+        || undefined,
+    };
+    if (proposedStartDateTime && proposedEndDateTime) {
+      payload.preferredStartDateTime = formatLocalDateTime(proposedStartDateTime);
+      payload.preferredEndDateTime = formatLocalDateTime(proposedEndDateTime);
+      if (!payload.reason) {
+        payload.reason = 'Interviewer proposed an alternative time for this scheduled interview.';
+      }
+    }
+    const response = await api.post(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/postpone-requests`,
+      payload,
+    );
+    return response.data;
+  },
+
+  getPanelCommonFreeWindows: async (interviewScheduleId) => {
+    const response = await api.get(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/panel-common-windows`,
+    );
+    return response.data;
+  },
+
+  getPendingPostponeRequest: async (interviewScheduleId) => {
+    const response = await api.get(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/postpone-requests/pending`,
+    );
+    return response.data;
+  },
+
+  withdrawPostponeRequest: async (postponeRequestId) => {
+    const response = await api.delete(
+      `/interviewer/interviews/postpone-requests/${postponeRequestId}`,
+    );
+    return response.data;
   },
 
   // ── Write ─────────────────────────────────────────────────────────────────

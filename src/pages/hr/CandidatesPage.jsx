@@ -13,9 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   Plus,
   Search,
@@ -36,10 +38,10 @@ import  candidateAPI from '@/services/candidateAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import CandidateDialogPage from './components/CandidateDialogPage';
 import CandidateInterviewSchedulePage from './components/CandidateInterviewSchedulePage';
-import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
 import { getCandidateStatusBadgeClass, getCandidateStatusLabel } from '@/lib/candidateSteps';
+import { useAuth } from '@/context/AuthContext';
 
 const CANDIDATES_PER_PAGE = 10;
 
@@ -51,22 +53,9 @@ const getTargetDesignation = (candidate) => {
   return candidate.targetDesignationName || '-';
 };
 
-const getRowTooltip = (candidate) => {
-  if (!candidate) return '';
-  const parts = [
-    candidate.name || '-',
-    candidate.email || '-',
-    candidate.phone || '-',
-    `RR: ${candidate.resourceRequestNumber || '-'}`,
-    `Exp: ${candidate.yearsOfExperience ? `${candidate.yearsOfExperience}y` : '-'}`,
-    `Target: ${candidate.targetDesignationName || '-'}`,
-    `Status: ${candidate.status ? candidate.status.replace(/_/g, ' ') : '-'}`,
-  ];
-  return parts.join(' • ');
-};
-
 const CandidatesPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { formatDate } = useFormattedDateTime();
   const { candidateSteps } = useCandidateSteps();
   const [candidates, setCandidates] = useState([]);
@@ -74,6 +63,7 @@ const CandidatesPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
+  const [assignedToMe, setAssignedToMe] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCandidatesCount, setTotalCandidatesCount] = useState(0);
@@ -91,11 +81,11 @@ const CandidatesPage = () => {
   useEffect(() => {
     const id = setTimeout(applyFilters, 300);
     return () => clearTimeout(id);
-  }, [filterDepartment, filterStatus, searchTerm, currentPage]);
+  }, [filterDepartment, filterStatus, searchTerm, assignedToMe, currentPage, user?.id]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterDepartment, filterStatus, searchTerm]);
+  }, [filterDepartment, filterStatus, searchTerm, assignedToMe]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -119,6 +109,7 @@ const CandidatesPage = () => {
       if (filterDepartment !== 'ALL') filters.departmentId = parseInt(filterDepartment, 10);
       if (filterStatus !== 'ALL') filters.status = filterStatus;
       if (searchTerm.trim()) filters.search = searchTerm.trim();
+      if (assignedToMe && user?.id) filters.coordinatedHrId = user.id;
       const data = await candidateAPI.getAllCandidates(filters, {
         page: currentPage - 1,
         size: CANDIDATES_PER_PAGE,
@@ -223,6 +214,16 @@ const CandidatesPage = () => {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2 sm:self-stretch">
+                <Checkbox
+                  id="assigned-to-me"
+                  checked={assignedToMe}
+                  onCheckedChange={(checked) => setAssignedToMe(checked === true)}
+                />
+                <Label htmlFor="assigned-to-me" className="cursor-pointer whitespace-nowrap text-sm font-medium">
+                  Assigned to me
+                </Label>
+              </div>
             </div>
           </CardHeader>
 
@@ -239,17 +240,19 @@ const CandidatesPage = () => {
             ) : (
               <div className="space-y-3">
                 <div className="hidden lg:block rounded-lg border bg-card">
-                  <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto">
+                  <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto" style={{ minWidth: '1100px' }}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[18%]">Candidate</TableHead>
-                        <TableHead className="w-[17%]">Email</TableHead>
-                        <TableHead className="w-[14%]">Phone Number</TableHead>
-                        <TableHead className="w-[14%]">RR Number</TableHead>
-                        <TableHead className="w-[12%]">Experience</TableHead>
-                        <TableHead className="w-[12%]">Target Designation</TableHead>
-                        <TableHead className="w-[12%]">Status</TableHead>
-                        <TableHead className="w-[13%] text-right">Actions</TableHead>
+                        <TableHead style={{ width: 170 }}>Candidate</TableHead>
+                        <TableHead style={{ width: 170 }}>Email</TableHead>
+                        <TableHead style={{ width: 120 }}>Phone Number</TableHead>
+                        <TableHead style={{ width: 120 }}>RR Number</TableHead>
+                        <TableHead style={{ width: 90 }}>Experience</TableHead>
+                        <TableHead style={{ width: 150 }}>Target Designation</TableHead>
+                        <TableHead style={{ width: 110 }}>Created On</TableHead>
+                        <TableHead style={{ width: 130 }}>Created By</TableHead>
+                        <TableHead style={{ width: 90 }}>Status</TableHead>
+                        <TableHead style={{ width: 100 }} className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -259,11 +262,11 @@ const CandidatesPage = () => {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="flex items-center gap-3 min-w-0">
-                                  <Avatar className="h-9 w-9 border border-border shrink-0">
-                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                      {getInitial(candidate.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
+                                  <CandidateAvatar
+                                    candidate={candidate}
+                                    className="h-9 w-9 border border-border shrink-0"
+                                    fallbackClassName="bg-primary/15 text-primary font-semibold text-sm"
+                                  />
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="font-semibold truncate">{candidate.name}</p>
@@ -324,6 +327,26 @@ const CandidatesPage = () => {
                                 <span className="truncate">{getTargetDesignation(candidate)}</span>
                               </TooltipTrigger>
                               <TooltipContent>{getTargetDesignation(candidate)}</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">
+                                  {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="truncate">{candidate.createdByName || '-'}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{candidate.createdByName || '-'}</TooltipContent>
                             </Tooltip>
                           </TableCell>
                           <TableCell>
@@ -390,11 +413,11 @@ const CandidatesPage = () => {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="flex items-center gap-1 min-w-0 w-full">
-                                  <Avatar className="h-9 w-9 border border-border shrink-0">
-                                    <AvatarFallback className="bg-primary/15 text-primary font-semibold text-sm">
-                                      {getInitial(candidate.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
+                                  <CandidateAvatar
+                                    candidate={candidate}
+                                    className="h-9 w-9 border border-border shrink-0"
+                                    fallbackClassName="bg-primary/15 text-primary font-semibold text-sm"
+                                  />
                                   <div className="flex flex-col min-w-0 flex-1">
                                     <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
                                     <p className="text-xs text-muted-foreground truncate">
@@ -418,6 +441,8 @@ const CandidatesPage = () => {
                             <span><span className="font-medium text-foreground">RR:</span> {candidate.resourceRequestNumber || '-'}</span>
                             <span><span className="font-medium text-foreground">Exp:</span> {candidate.yearsOfExperience ? `${candidate.yearsOfExperience} years` : '-'}</span>
                             <span><span className="font-medium text-foreground">Target:</span> {getTargetDesignation(candidate)}</span>
+                            <span><span className="font-medium text-foreground">Created On:</span> {candidate.createdAt ? formatDate(candidate.createdAt) : '-'}</span>
+                            <span><span className="font-medium text-foreground">Created By:</span> {candidate.createdByName || '-'}</span>
                           </div>
 
                           <div className="mt-2 pt-2 border-t flex items-center justify-end gap-1.5">
@@ -503,6 +528,7 @@ const CandidatesPage = () => {
           open={isInterviewSchedulePageOpen}
           candidate={selectedCandidate}
           onOpenChange={setIsInterviewSchedulePageOpen}
+          onScheduled={applyFilters}
         />
       </div>
     </Layout>

@@ -4,20 +4,27 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, CheckCircle, TrendingUp, Settings, Bell } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, TrendingUp, Settings, Bell, ClipboardList } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import { toast } from '@/hooks/use-toast';
+import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { availabilityAPI } from '@/services/availabilityAPI';
 import { interviewRequestAPI } from '@/services/interviewRequestAPI';
+import { assessmentAPI } from '@/services/assessmentAPI';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
-const StatCard = ({ icon: Icon, title, value, description, color, loading }) => (
+const StatCard = ({ icon: Icon, title, value, description, color, loading, onClick }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     whileHover={{ y: -4 }}
     transition={{ duration: 0.3 }}
+    onClick={onClick}
+    className={onClick ? 'cursor-pointer' : undefined}
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
   >
     <Card className="shadow-elegant overflow-hidden relative">
       <div className={`absolute top-0 right-0 w-32 h-32 ${color}/5 rounded-full -mr-16 -mt-16`} />
@@ -54,8 +61,13 @@ const InterviewerDashboard = () => {
     bookedSlots: 0,
     upcomingInterviews: 0,
     completedThisMonth: 0,
+    assessmentsToReview: 0,
   });
   const [upcomingInterviews, setUpcomingInterviews] = useState([]);
+
+  useEffect(() => {
+    handleGoogleCalendarOAuthResult({ navigate, toast });
+  }, [navigate]);
 
   useEffect(() => {
     loadDashboardData();
@@ -67,15 +79,20 @@ const InterviewerDashboard = () => {
       const results = await Promise.allSettled([
         availabilityAPI.getAvailabilityStats(),
         interviewRequestAPI.getUpcomingInterviews({ size: 10 }),
+        assessmentAPI.listMine(),
       ]);
 
-      const [statsRes, upcomingRes] = results;
+      const [statsRes, upcomingRes, assessmentsRes] = results;
 
       const availabilityStats =
         statsRes.status === 'fulfilled' ? statsRes.value : { availableSlots: 0, bookedSlots: 0 };
       const upcomingData =
         upcomingRes.status === 'fulfilled' && Array.isArray(upcomingRes.value)
           ? upcomingRes.value
+          : [];
+      const assessmentsData =
+        assessmentsRes.status === 'fulfilled' && Array.isArray(assessmentsRes.value)
+          ? assessmentsRes.value
           : [];
 
       if (statsRes.status === 'rejected') {
@@ -95,6 +112,7 @@ const InterviewerDashboard = () => {
         bookedSlots: availabilityStats.bookedSlots ?? 0,
         upcomingInterviews: upcomingData.length,
         completedThisMonth: 0,
+        assessmentsToReview: assessmentsData.length,
       });
       setUpcomingInterviews(upcomingData.slice(0, 10));
     } catch (error) {
@@ -123,6 +141,14 @@ const InterviewerDashboard = () => {
       value: stats.upcomingInterviews,
       description: 'Scheduled interviews',
       color: 'bg-warning',
+    },
+    {
+      icon: ClipboardList,
+      title: 'Assessments',
+      value: stats.assessmentsToReview,
+      description: 'Assigned for your review',
+      color: 'bg-emerald-600',
+      onClick: () => navigate('/interviewer/assessments'),
     },
     {
       icon: CheckCircle,

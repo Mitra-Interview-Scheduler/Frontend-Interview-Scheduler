@@ -15,6 +15,8 @@ import UsersPage from "./pages/admin/UsersPage";
 import DesignationsPage from "./pages/admin/DesignationsPage";
 import TechnologiesPage from "./pages/admin/TechnologiesPage";
 import DomainsPage from "./pages/admin/DomainsPage";
+import InterviewTypesPage from "./pages/admin/InterviewTypesPage";
+import CatalogTypesPage from "./pages/admin/CatalogTypesPage";
 import RulesPage from "./pages/admin/RulesPage";
 import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
@@ -28,12 +30,15 @@ import UrgentRequestsPage from "./pages/hr/UrgentRequestsPage";
 import InterviewerDashboard from "./pages/interviewer/InterviewerDashboard";
 import AvailabilityPage from "./pages/interviewer/AvailabilityPage";
 import InterviewFeedbackPage from "./pages/interviewer/components/InterviewFeedbackPage";
+import AssessmentsToReviewPage from "./pages/interviewer/AssessmentsToReviewPage";
 import RequestsPage from "./pages/interviewer/RequestsPage";
 import PreferencesPage from "./pages/interviewer/PreferencesPage";
 import InterviewerProfilePage from "./pages/interviewer/ProfilePage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import ConnectGoogleCalendarPage from "./pages/interviewer/ConnectGoogleCalendarPage";
 import NotFound from "./pages/NotFound";
+import { InterviewerCalendarGuard } from "@/components/InterviewerCalendarGuard";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +52,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+            <InterviewerCalendarGuard>
             <Routes>
               <Route path="/login" element={<Login />} />
             
@@ -88,6 +94,22 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['ADMIN']}>
                   <DomainsPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/interview-types"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <InterviewTypesPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/catalog-types"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN']}>
+                  <CatalogTypesPage />
                 </PrivateRoute>
               }
             />
@@ -204,6 +226,14 @@ const App = () => (
             
             {/* Interviewer Routes */}
             <Route
+              path="/interviewer/connect-calendar"
+              element={
+                <PrivateRoute allowedRoles={['ADMIN', 'HR', 'INTERVIEWER']}>
+                  <ConnectGoogleCalendarPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/interviewer/dashboard"
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
@@ -224,6 +254,14 @@ const App = () => (
               element={
                 <PrivateRoute allowedRoles={['INTERVIEWER']}>
                   <InterviewFeedbackPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/interviewer/assessments"
+              element={
+                <PrivateRoute allowedRoles={['INTERVIEWER']}>
+                  <AssessmentsToReviewPage />
                 </PrivateRoute>
               }
             />
@@ -282,6 +320,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+            </InterviewerCalendarGuard>
             </BrowserRouter>
           </TooltipProvider>
         </TimeFormatProvider>

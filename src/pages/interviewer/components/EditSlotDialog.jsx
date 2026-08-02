@@ -28,6 +28,7 @@ const EditSlotDialog = ({
   onSuccess,
   onDelete,
   getSlotStartError,
+  getSlotEndError,
 }) => {
   const {
     formatDate,
@@ -70,8 +71,8 @@ const EditSlotDialog = ({
       return;
     }
     const newStart = parseTimeOnDate(startTime, slot.start);
-    setError(getSlotStartError(newStart));
-  }, [slot, startTime, getSlotStartError]);
+    setError(getSlotStartError(newStart) || getSlotEndError?.(parseTimeOnDate(endTime, slot.start)));
+  }, [slot, startTime, endTime, getSlotStartError, getSlotEndError]);
 
   const handleSave = async () => {
     if (!slot) return;
@@ -85,6 +86,16 @@ const EditSlotDialog = ({
       toast({
         title: 'Invalid start time',
         description: startErr,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const endErr = getSlotEndError?.(newEnd);
+    if (endErr) {
+      toast({
+        title: 'Invalid end time',
+        description: endErr,
         variant: 'destructive',
       });
       return;

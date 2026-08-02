@@ -3,13 +3,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function DomainMultiSelect({
   label = 'Domains',
   domains = [],
   selectedIds = [],
+  highlightIds = [],
   onChange,
   disabled = false,
   placeholder = 'Search domains…',
@@ -17,6 +18,8 @@ export function DomainMultiSelect({
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = React.useRef(null);
+
+  const highlightSet = useMemo(() => new Set(highlightIds || []), [highlightIds]);
 
   const filteredDomains = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -81,6 +84,7 @@ export function DomainMultiSelect({
               <div className="py-2">
                 {filteredDomains.map((domain) => {
                   const isSelected = selectedIds.includes(domain.id);
+                  const isCandidate = highlightSet.has(domain.id);
                   return (
                     <div
                       key={domain.id}
@@ -95,11 +99,21 @@ export function DomainMultiSelect({
                         }
                       }}
                       className={`w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-3 cursor-pointer ${
-                        isSelected ? 'bg-primary/10' : ''
+                        isSelected ? (isCandidate ? 'bg-amber-50' : 'bg-primary/10') : ''
                       }`}
                     >
                       <Checkbox checked={isSelected} className="pointer-events-none" />
-                      <span className="font-medium flex-1">{domain.name}</span>
+                      <span className="font-medium flex-1 flex items-center gap-2">
+                        {domain.name}
+                      </span>
+                      {isSelected && isCandidate && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-amber-300 bg-amber-50 text-amber-900"
+                        >
+                          Candidate
+                        </Badge>
+                      )}
                       {domain.code && (
                         <span className="text-xs text-muted-foreground">{domain.code}</span>
                       )}
@@ -117,24 +131,26 @@ export function DomainMultiSelect({
           {selectedIds.map((id) => {
             const domain = domains.find((d) => d.id === id);
             if (!domain) return null;
+            const isCandidate = highlightSet.has(id);
             return (
-              <Badge key={id} variant="secondary" className="gap-1">
-                {domain.name}
+              <Badge
+                key={id}
+                variant="outline"
+                className={`gap-1 pr-1 ${
+                  isCandidate
+                    ? 'border-amber-300 bg-amber-50 text-amber-900'
+                    : 'border-slate-200 bg-secondary text-secondary-foreground'
+                }`}
+              >
+                <span>{domain.name}</span>
                 {!disabled && (
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     onClick={() => toggleDomain(id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggleDomain(id);
-                      }
-                    }}
-                    className="ml-1 hover:text-destructive cursor-pointer"
+                    className="ml-1 hover:text-destructive rounded-full p-0.5"
                   >
-                    ×
-                  </span>
+                    <X className="w-3 h-3" />
+                  </button>
                 )}
               </Badge>
             );

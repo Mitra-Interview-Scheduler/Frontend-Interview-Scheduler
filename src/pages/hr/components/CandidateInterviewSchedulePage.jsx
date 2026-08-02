@@ -10,16 +10,34 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Users, Code, Star } from 'lucide-react';
+import { CalendarClock, User, Briefcase, Award, TrendingUp, Mail, AlertCircle, Code, Star, ClipboardList } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import DepartmentAPI from '@/services/departmentAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
-import { InterviewType } from '@/lib/statusConstants';
-import { getCandidateCoreTechnologyIds, getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
+import { InterviewType, isHrInterviewType } from '@/lib/statusConstants';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
+import { getSkillIsCore, normalizeSkillAssignment } from '@/lib/technologyHelpers';
 import { TechnologyProficiencyBadge } from '@/components/technologyProficiencyUi';
+import { interviewTypeAPI } from '@/services/interviewTypeAPI';
+import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
+import { formatLocalDateTime } from '@/lib/calendarUtils';
+import { toast } from '@/hooks/use-toast';
 
-function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
+const toBool = (value, defaultValue = true) => {
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (value === 'false' || value === 0 || value === '0') return false;
+  if (value === 'true' || value === 1 || value === '1') return true;
+  return Boolean(value);
+};
+
+const typeRequiresInterviewer = (type) =>
+  toBool(type?.requiresInterviewer ?? type?.requires_interviewer, true);
+
+function CandidateInterviewSchedulePage({ open, candidate, onOpenChange, onScheduled }) {
   const navigate = useNavigate();
+  const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
   const getTodayDate = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -29,6 +47,9 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   };
 
   const [availabilityDate, setAvailabilityDate] = useState(getTodayDate());
+  const [dueTime, setDueTime] = useState('17:00');
+  const [assessmentNotes, setAssessmentNotes] = useState('');
+  const [savingAssessment, setSavingAssessment] = useState(false);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const [hrDepartmentId, setHrDepartmentId] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -37,6 +58,12 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
   const [coordinatorUsers, setCoordinatorUsers] = useState([]);
   const [coordinatorUsersLoading, setCoordinatorUsersLoading] = useState(false);
   const [candidateTechnologies, setCandidateTechnologies] = useState([]);
+
+  const selectedTypeMeta = useMemo(
+    () => (availableInterviewTypes || []).find((t) => t.code === interviewType) || null,
+    [availableInterviewTypes, interviewType],
+  );
+  const needsInterviewer = typeRequiresInterviewer(selectedTypeMeta);
 
 
   const loadDepartments = async () => {
@@ -89,6 +116,8 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
     loadDepartments();
     getHrDepartmentId();
     setAvailabilityDate(getTodayDate());
+    setDueTime('17:00');
+    setAssessmentNotes('');
     setInterviewType(InterviewType.TECHNICAL);
     setCoordinatorDepartmentId('');
     setCoordinatorUserId('');
@@ -110,36 +139,98 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
 
   if (!candidate) return null;
 
-  const handleGoToAvailability = () => {
-    if (!availabilityDate || !interviewType) return;
+  const handleRecordAssessment = async () => {
+    if (!availabilityDate || !interviewType || !candidate?.id || !dueTime) return;
 
-    const technologyIds = getCandidateCoreTechnologyIds(candidateTechnologies);
+    const dueStart = new Date(`${availabilityDate}T${dueTime}:00`);
+    if (Number.isNaN(dueStart.getTime())) {
+      toast({
+        title: 'Validation',
+        description: 'Enter a valid due date and time',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const dueEnd = new Date(dueStart.getTime() + 60 * 60 * 1000);
 
-    const domainIds = (candidate.domains || [])
-      .map((d) => d.id)
-      .filter(Boolean);
+    setSavingAssessment(true);
+    try {
+      await hrAvailabilityAPI.createInterviewRequest({
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        candidateEmail: candidate.email,
+        candidateDesignationId: candidate.targetDesignationId || null,
+        requiredTechnologyIds: (candidate.technologies || [])
+          .map((item) => item.technology?.id || item.technologyId)
+          .filter(Boolean),
+        preferredStartDateTime: formatLocalDateTime(dueStart),
+        preferredEndDateTime: formatLocalDateTime(dueEnd),
+        isUrgent: false,
+        notes: assessmentNotes?.trim() || null,
+        interviewType,
+        interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
+        interviewCoordinatorDepartmentId: coordinatorDepartmentId
+          ? parseInt(coordinatorDepartmentId, 10)
+          : null,
+      });
+      toast({
+        title: 'Assessment scheduled',
+        description: `${selectedTypeMeta?.label || interviewType} recorded without an interviewer.`,
+      });
+      onScheduled?.();
+      onOpenChange(false);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to record assessment',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingAssessment(false);
+    }
+  };
 
-    const filteredData = {
-      startDateTime: availabilityDate,
-      departmentId: interviewType === InterviewType.HR ? hrDepartmentId : candidate.departmentId,
-      minTierOrder: candidate.tierOrder,
-      minLevelOrder: interviewType === InterviewType.HR ? null : candidate.levelOrder,
-      technologyIds: technologyIds.length > 0 ? technologyIds : null,
-      domainIds: interviewType === InterviewType.TECHNICAL && domainIds.length > 0 ? domainIds : null,
-      candidateId: candidate.id,
-      candidateName: candidate.name,
-      interviewType,
-      interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
-      interviewCoordinatorDepartmentId: coordinatorDepartmentId
-        ? parseInt(coordinatorDepartmentId, 10)
-        : null,
-    };
+  const handleGoToAvailability = async () => {
+    if (!availabilityDate || !interviewType || !candidate?.id) return;
 
-    onOpenChange(false);
-    navigate(
-      `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
-      { state: { filterData: filteredData } },
-    );
+    if (!needsInterviewer) {
+      await handleRecordAssessment();
+      return;
+    }
+
+    try {
+      const resolved = await interviewTypeAPI.resolveFilters(interviewType, candidate.id);
+      const filteredData = {
+        startDateTime: availabilityDate,
+        departmentId: resolved.departmentIds?.[0] ?? null,
+        departmentIds: resolved.departmentIds ?? null,
+        minTierOrder: resolved.minTierId ?? null,
+        minLevelOrder: resolved.minDesignationLevelInDepartment ?? null,
+        minYearsOfExperience: resolved.minYearsOfExperience ?? null,
+        technologyIds: resolved.technologyIds?.length ? resolved.technologyIds : null,
+        domainIds: resolved.domainIds?.length ? resolved.domainIds : null,
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        interviewType,
+        interviewCoordinatorId: coordinatorUserId ? parseInt(coordinatorUserId, 10) : null,
+        interviewCoordinatorDepartmentId: coordinatorDepartmentId
+          ? parseInt(coordinatorDepartmentId, 10)
+          : null,
+      };
+
+      onOpenChange(false);
+      navigate(
+        `/hr/availability?candidateId=${candidate.id}&interviewType=${encodeURIComponent(interviewType)}`,
+        { state: { filterData: filteredData } },
+      );
+    } catch (error) {
+      console.error('Failed to resolve interviewer filters:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to resolve interviewer filters for this interview type',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -151,9 +242,13 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               <CalendarClock className="w-6 h-6" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Schedule Interview</DialogTitle>
+              <DialogTitle className="text-xl">
+                {needsInterviewer ? 'Schedule Interview' : 'Schedule Assessment'}
+              </DialogTitle>
               <DialogDescription className="mt-1.5">
-                Select a date and interview type to find matching interviewers.
+                {needsInterviewer
+                  ? 'Select a date and interview type to find matching interviewers.'
+                  : 'Record an assessment due date without booking an interviewer. Schedule a review type later if needed.'}
               </DialogDescription>
             </div>
           </div>
@@ -241,7 +336,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
               {/* Date Selection */}
               <div className="space-y-2">
                 <Label htmlFor="availability" className="text-sm font-semibold text-slate-800">
-                  Availability Date
+                  {needsInterviewer ? 'Availability Date' : 'Due Date'}
                 </Label>
                 <Input
                   id="availability"
@@ -258,27 +353,58 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                 <Label htmlFor="interview-type" className="text-sm font-semibold text-slate-800">
                   Interview Type
                 </Label>
-                <Select value={interviewType} onValueChange={setInterviewType}>
+                <Select value={interviewType} onValueChange={setInterviewType} hideSelectedFromMenu={false}>
                   <SelectTrigger className="h-11 text-sm border-slate-200 focus:ring-blue-500 bg-white">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="HR">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-emerald-500" />
-                        HR Interview
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="TECHNICAL">
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-blue-500" />
-                        Technical Interview
-                      </div>
-                    </SelectItem>
+                  <SelectContent hideSelectedFromMenu={false} position="popper">
+                    {availableInterviewTypes.length > 0 ? (
+                      availableInterviewTypes.map((t) => (
+                        <SelectItem key={t.code} value={t.code}>
+                          {t.label}
+                          {!typeRequiresInterviewer(t) ? ' · Assessment' : ''}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="HR">HR Interview</SelectItem>
+                        <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {!needsInterviewer && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="due-time" className="text-sm font-semibold text-slate-800">
+                    Due Time
+                  </Label>
+                  <Input
+                    id="due-time"
+                    type="time"
+                    value={dueTime}
+                    onChange={(e) => setDueTime(e.target.value)}
+                    className="h-11 text-sm border-slate-200 focus-visible:ring-blue-500 px-3"
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="assessment-notes" className="text-sm font-semibold text-slate-800">
+                    Notes / instructions <span className="font-normal text-slate-500">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="assessment-notes"
+                    value={assessmentNotes}
+                    onChange={(e) => setAssessmentNotes(e.target.value)}
+                    placeholder="e.g. Complete coding assessment on HackerRank and share results"
+                    rows={3}
+                    className="resize-none text-sm border-slate-200"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -318,7 +444,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                       ? 'Select department first'
                       : coordinatorUsersLoading
                         ? 'Loading users...'
-                        : undefined
+                        : 'Select Coordinator'
                   }
                   searchPlaceholder="Search coordinators..."
                   emptyMessage={
@@ -326,6 +452,14 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
                       ? 'No user found for selected department'
                       : 'No matching users found'
                   }
+                  emptyOption={{
+                    value: 'NONE',
+                    label: !coordinatorDepartmentId
+                      ? 'Select department first'
+                      : coordinatorUsersLoading
+                        ? 'Loading users...'
+                        : 'Select Coordinator',
+                  }}
                   options={coordinatorUsers.map((user) => ({
                     value: user.id.toString(),
                     label: `${user.fullName} (${user.email})`,
@@ -339,13 +473,28 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
             </div>
 
             {/* Warning / Rule Banner */}
-            <div className="flex items-start gap-3 text-sm text-blue-700 bg-blue-50/80 p-4 rounded-xl border border-blue-100">
-              <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
+            <div className={`flex items-start gap-3 text-sm p-4 rounded-xl border ${
+              needsInterviewer
+                ? 'text-blue-700 bg-blue-50/80 border-blue-100'
+                : 'text-amber-800 bg-amber-50/80 border-amber-100'
+            }`}>
+              {needsInterviewer ? (
+                <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-blue-500" />
+              ) : (
+                <ClipboardList className="w-5 h-5 mt-0.5 shrink-0 text-amber-600" />
+              )}
               <p className="leading-relaxed">
-                {interviewType === InterviewType.HR ? (
-                  <>Matching interviewers will be from the <strong className="font-semibold">Human Resources</strong> department.</>
+                {needsInterviewer ? (
+                  isHrInterviewType(interviewType) ? (
+                    <>Matching interviewers will be from the <strong className="font-semibold">Human Resources</strong> department.</>
+                  ) : (
+                    <>Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.</>
+                  )
                 ) : (
-                  <>Matching interviewers must be from <strong className="font-semibold">{candidate.departmentName || 'the same department'}</strong> and hold a <strong className="font-semibold">Tier {candidate.tierOrder}</strong> seniority or higher.</>
+                  <>
+                    This type does <strong className="font-semibold">not require an interviewer</strong>.
+                    It will be recorded with the due date and notes only. After results arrive, schedule a review interview type that requires an interviewer.
+                  </>
                 )}
               </p>
             </div>
@@ -358,15 +507,20 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
             variant="outline"
             onClick={() => onOpenChange(false)}
             className="text-sm font-medium border-slate-200 hover:bg-slate-100 h-10 px-5"
+            disabled={savingAssessment}
           >
             Cancel
           </Button>
           <Button
             onClick={handleGoToAvailability}
-            disabled={!availabilityDate || !interviewType}
+            disabled={!availabilityDate || !interviewType || savingAssessment || (!needsInterviewer && !dueTime)}
             className="h-10 px-5 text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all active:scale-95"
           >
-            Find Matching Interviewers
+            {savingAssessment
+              ? 'Saving…'
+              : needsInterviewer
+                ? 'Find Matching Interviewers'
+                : 'Record Assessment'}
           </Button>
         </DialogFooter>
       </DialogContent>

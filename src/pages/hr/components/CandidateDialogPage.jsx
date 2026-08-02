@@ -485,8 +485,15 @@ function CandidateDialogPage({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}> 
-      <DialogContent className="w-[95vw] max-w-4xl max-h-[92vh] p-0 border-0 bg-gradient-to-br from-white to-slate-50">
+      <DialogContent
+        className={`w-[95vw] max-w-4xl max-h-[92vh] p-0 border-0 bg-gradient-to-br from-white to-slate-50 transition-[filter,opacity] duration-200 ${
+          (isDocumentModalOpen || isLinkModalOpen)
+            ? 'pointer-events-none select-none opacity-60 blur-[6px]'
+            : ''
+        }`}
+      >
         <DialogHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
           <DialogTitle className="text-blue-900">
             {isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}
@@ -1097,8 +1104,9 @@ function CandidateDialogPage({
           )}
         </DialogFooter>
       </DialogContent>
+    </Dialog>
 
-      {/* Resource Link Extracted Dialog Component Binding */}
+      {/* Nested overlays rendered outside the parent Dialog so blur covers it */}
       <ResourceLinkDialog
         open={isLinkModalOpen}
         onClose={handleCloseLinkModal}
@@ -1124,7 +1132,7 @@ function CandidateDialogPage({
           />
         </DialogContent>
       </Dialog>
-    </Dialog>
+    </>
   );
 }
 

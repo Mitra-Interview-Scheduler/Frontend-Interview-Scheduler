@@ -191,12 +191,12 @@ function CandidateSkillsPanel({
         }
 
         toast({
-          title: isCore ? 'Marked as core technology' : 'Moved to can do',
+          title: isCore ? 'Marked as core technology' : 'Moved to sub technology',
         });
       } else if (isPendingMode) {
         addPendingSkill(technology, isCore);
         toast({
-          title: isCore ? 'Core technology added' : 'Can do technology added',
+          title: isCore ? 'Core technology added' : 'Sub technology added',
         });
       } else {
         const created = normalizeSkillAssignment(
@@ -205,7 +205,7 @@ function CandidateSkillsPanel({
         setCandidateTechs((prev) => [...prev, created]);
         onSkillsUpdated?.();
         toast({
-          title: isCore ? 'Core technology added' : 'Can do technology added',
+          title: isCore ? 'Core technology added' : 'Sub technology added',
         });
       }
 
@@ -400,7 +400,7 @@ function CandidateSkillsPanel({
                             {getTechnologyCategoryLabel(tech)}
                             {existingEntry && (
                               <Badge variant="secondary" className="text-[10px]">
-                                {getSkillIsCore(existingEntry) ? 'Core' : 'Can Do'}
+                                {getSkillIsCore(existingEntry) ? 'Core' : 'Sub'}
                               </Badge>
                             )}
                           </span>
@@ -424,7 +424,7 @@ function CandidateSkillsPanel({
 
         <p className="text-xs text-muted-foreground">
           Select a category, then click the search field to browse technologies.
-          Type to filter, or pick one to set Core Technology or Can Do.
+          Type to filter, or pick one to set Core Technology or Sub Technology.
         </p>
       </div>
     </div>
@@ -446,9 +446,9 @@ function CandidateSkillsPanel({
             'No core technologies marked yet.',
           )}
           {renderTechnologyGroup(
-            'Can Do',
+            'Sub Technologies',
             otherTechnologies,
-            'No can do technologies added.',
+            'No sub technologies added.',
           )}
         </div>
       )}

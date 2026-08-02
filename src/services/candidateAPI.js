@@ -47,6 +47,7 @@ const candidateAPI = {
       departmentId: filters.departmentId,
       status: filters.status,
       search: filters.search,
+      coordinatedHrId: filters.coordinatedHrId,
       page: pagination?.page,
       size: pagination?.size,
     }));

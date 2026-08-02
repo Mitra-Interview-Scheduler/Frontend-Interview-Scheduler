@@ -21,7 +21,7 @@ const DomainsPage = () => {
   const [editingDomain, setEditingDomain] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
-  const [formData, setFormData] = useState({ name: '', code: '' });
+  const [formData, setFormData] = useState({ name: '' });
 
   useEffect(() => {
     loadData();
@@ -45,7 +45,7 @@ const DomainsPage = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', code: '' });
+    setFormData({ name: '' });
     setEditingDomain(null);
   };
 
@@ -58,7 +58,7 @@ const DomainsPage = () => {
     try {
       await domainAPI.createDomain({
         name: formData.name.trim(),
-        code: formData.code?.trim() || toLookupCode(formData.name),
+        code: toLookupCode(formData.name),
       });
       toast({ title: 'Success', description: 'Domain created successfully' });
       setIsAddDialogOpen(false);
@@ -77,7 +77,7 @@ const DomainsPage = () => {
 
   const openEdit = (domain) => {
     setEditingDomain(domain);
-    setFormData({ name: domain.name || '', code: domain.code || '' });
+    setFormData({ name: domain.name || '' });
     setIsEditDialogOpen(true);
   };
 
@@ -87,7 +87,7 @@ const DomainsPage = () => {
     try {
       await domainAPI.updateDomain(editingDomain.id, {
         name: formData.name.trim(),
-        code: formData.code?.trim() || undefined,
+        code: editingDomain.code || undefined,
         isActive: editingDomain.isActive !== false,
       });
       toast({ title: 'Success', description: 'Domain updated successfully' });
@@ -163,13 +163,10 @@ const DomainsPage = () => {
                 {activeDomains.map((domain) => (
                   <div
                     key={domain.id}
-                    className="border rounded-lg p-4 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow"
+                    className="border rounded-lg p-2 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow"
                   >
                     <div>
                       <p className="font-semibold">{domain.name}</p>
-                      {domain.code && (
-                        <Badge variant="outline" className="mt-1 text-xs">{domain.code}</Badge>
-                      )}
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(domain)} disabled={isMutating}>
@@ -224,15 +221,6 @@ const DomainsPage = () => {
                 disabled={isMutating}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Code (optional)</Label>
-              <Input
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="Auto-generated from name if empty"
-                disabled={isMutating}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isMutating}>Cancel</Button>
@@ -255,14 +243,6 @@ const DomainsPage = () => {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                disabled={isMutating}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Code</Label>
-              <Input
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 disabled={isMutating}
               />
             </div>

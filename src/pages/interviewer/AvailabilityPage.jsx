@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar } from 'react-big-calendar';
 import {
   format,
-  addMinutes, isSameDay, startOfDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay,
+  addMinutes, startOfDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, endOfDay,
 } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import '@/styles/AvailabilityCalendar.css';
@@ -11,14 +11,15 @@ import {
   Card, CardContent,
 } from '@/components/ui/card';
 import { Button }   from '@/components/ui/button';
-import {
-  ChevronLeft, ChevronRight,
-} from 'lucide-react';
-import Layout   from '@/components/layout/Layout';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw, CalendarClock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import Layout from '@/components/layout/Layout';
+import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast }                  from '@/hooks/use-toast';
 import { availabilityAPI }        from '@/services/availabilityAPI';
+import { googleCalendarAPI }      from '@/services/api';
 import { InterviewScheduleStatus, SlotStatus } from '@/lib/statusConstants';
 import UpcomingCard from './components/UpcomingCard';
 import AddSlotDialog from './components/AddSlotDialog';
@@ -27,40 +28,71 @@ import DeleteSlotDialog from './components/DeleteSlotDialog';
 import InterviewStartDialog from './components/InterviewStartDialog';
 import { calendarLocalizer, computeSlotDurationHours } from '@/lib/calendarUtils';
 import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, parseTimeOnDate, checkInterviewerPrivilege, checkPanelPrivilege, formatSlots } from './../hr/utils/AvailabilityViewPageHelperUtils';
+import {
+  CALENDAR_STATUS_PALETTES,
+  PANEL_PALETTE,
+  POSTPONE_REQUEST_PALETTE,
+} from './../hr/utils/AvailabilityViewPageUiUtils';
 
-
-// ── Status colours ────────────────────────────────────────────────────────────
-const STATUS_COLORS = {
-  available: {
-    bg: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    border: '#312e81',
-    solid: '#6366f1',
-    label: 'Available',
-  },
-  booked: {
-    bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border: '#065f46',
-    solid: '#10b981',
-    label: 'Booked',
-  },
-  completed: {
-    bg: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-    border: '#064e3b',
-    solid: '#059669',
-    label: 'Completed',
-  },
-  blocked: {
-    bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: '#92400e',
-    solid: '#f59e0b',
-    label: 'Blocked',
-  },
-};
+const POSTPONE_PROPOSAL_LABEL = 'Postpone proposal';
+const STATUS_COLORS = CALENDAR_STATUS_PALETTES;
 
 const CALENDAR_PAGE_SIZES = {
   month: 500,
   week: 200,
   day: 100,
+};
+
+const CALENDAR_LEGEND_ITEMS = [
+  { key: 'available', label: STATUS_COLORS.available.label, swatch: STATUS_COLORS.available.solid },
+  { key: 'booked', label: STATUS_COLORS.booked.label, swatch: STATUS_COLORS.booked.solid },
+  { key: 'panel_booked', label: STATUS_COLORS.panel_booked.label, swatch: STATUS_COLORS.panel_booked.solid },
+  { key: 'postpone_request', label: STATUS_COLORS.postpone_request.label, swatch: STATUS_COLORS.postpone_request.solid },
+  { key: 'overdue', label: STATUS_COLORS.overdue.label, swatch: STATUS_COLORS.overdue.solid },
+  { key: 'completed', label: STATUS_COLORS.completed.label, swatch: STATUS_COLORS.completed.solid },
+];
+
+const BookedCalendarEvent = ({ event }) => {
+  const isOverdue = event.status === 'overdue' || event.isOverdue;
+  const isPostponeProposal = !isOverdue && (
+    event.status === 'postpone_request'
+    || event.hasPendingPostponeRequest
+    || event.isProposedTime
+  );
+
+  const isBookedLike = event.status === 'booked'
+    || event.status === 'panel_booked'
+    || event.status === 'completed'
+    || event.status === 'overdue'
+    || isPostponeProposal;
+  if (!isBookedLike) {
+    return <span className="truncate">{event.title}</span>;
+  }
+
+  return (
+    <div className="booked-event-content">
+      <div className="booked-event-header">
+        {isPostponeProposal && (
+          <CalendarClock className="booked-event-lock postpone-event-icon" aria-hidden="true" />
+        )}
+        <span className="booked-event-candidate truncate">{event.title}</span>
+      </div>
+      {event.panelId && !isPostponeProposal && !isOverdue && (
+        <span className="calendar-event-panel-badge">Panel</span>
+      )}
+      {isOverdue && (
+        <span className="booked-event-overdue-badge">Overdue</span>
+      )}
+      {isPostponeProposal && (
+        <span className="booked-event-postpone-badge">
+          {POSTPONE_PROPOSAL_LABEL}
+          {event.pendingPostponeRequestedByName
+            ? ` by ${event.pendingPostponeRequestedByName}`
+            : ''}
+        </span>
+      )}
+    </div>
+  );
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,34 +102,56 @@ const isPastDay = (date) => {
   const today = startOfDay(new Date());
   return startOfDay(date) < today;
 };
+
+const SLOT_LOOKBACK_MINUTES = 15;
+
+/** Earliest allowed slot start: up to 15 minutes before now (e.g. at 2:10, 2:00 is allowed). */
+const minimumAllowedStart = () => addMinutes(new Date(), -SLOT_LOOKBACK_MINUTES);
+
 const getSlotStartError = (start) => {
   if (!start) return null;
   if (isPastDay(start)) return 'Cannot add slots for past dates.';
-  if (isSameDay(start, new Date()) && isBefore(start, minimumAllowedStart())) {
-    const earliest = format(minimumAllowedStart(), 'HH:mm');
-    return `Same-day slots must start at least 30 Minutes from now (earliest: ${earliest}).`;
+  const earliest = minimumAllowedStart();
+  if (isBefore(start, earliest)) {
+    const earliestLabel = format(earliest, 'HH:mm');
+    return `Start time cannot be more than ${SLOT_LOOKBACK_MINUTES} minutes before now (earliest: ${earliestLabel}).`;
   }
   return null;
 };
 
-/** Minimum allowed start time for same-day slots: 30 minutes from now. */
-const minimumAllowedStart = () => {
-  return addMinutes(new Date(), 30);
+const getSlotEndError = (end) => {
+  if (!end) return null;
+  if (!isBefore(new Date(), end)) {
+    return 'End time must be after the current time.';
+  }
+  return null;
 };
 
-const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingSlots, onToggleUpcomingSlots, loading }) => {
+const CalendarToolbar = ({
+  label,
+  onNavigate,
+  onView,
+  view,
+  views,
+  showUpcomingSlots,
+  onToggleUpcomingSlots,
+  loading,
+  calendarConnected,
+  onSyncCalendar,
+  syncingCalendar,
+}) => {
   const viewList = Array.isArray(views) ? views : Object.keys(views || {});
 
   return (
     <div className="rbc-toolbar flex flex-col gap-3 px-2 py-2 md:flex-row md:items-center md:justify-between">
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => onNavigate('PREV')} className="h-9 w-9 p-0">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('PREV')} className="calendar-toolbar-btn h-9 w-9 p-0">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')} className="h-9 px-3 text-sm font-medium">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')} className="calendar-toolbar-btn h-9 px-3 text-sm font-medium">
           Today
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onNavigate('NEXT')} className="h-9 w-9 p-0">
+        <Button variant="outline" size="sm" onClick={() => onNavigate('NEXT')} className="calendar-toolbar-btn h-9 w-9 p-0">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -116,16 +170,29 @@ const CalendarToolbar = ({ label, onNavigate, onView, view, views, showUpcomingS
             variant={view === availableView ? 'default' : 'outline'}
             size="sm"
             onClick={() => onView(availableView)}
-            className="h-9 px-3 capitalize"
+            className="calendar-toolbar-btn h-9 px-3 capitalize"
           >
             {availableView}
           </Button>
         ))}
+        {calendarConnected && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSyncCalendar}
+            disabled={syncingCalendar}
+            className="calendar-toolbar-btn h-9 px-3"
+            title="Sync availability slots to Google Calendar"
+          >
+            <RefreshCw className={`h-4 w-4 shrink-0 ${syncingCalendar ? 'animate-spin' : ''}`} />
+            <span>{syncingCalendar ? 'Syncing...' : 'Sync now'}</span>
+          </Button>
+        )}
         <Button
           variant={showUpcomingSlots ? 'default' : 'outline'}
           size="sm"
           onClick={onToggleUpcomingSlots}
-          className="h-9 gap-2 px-3"
+          className="calendar-toolbar-btn h-9 px-3"
         >
           {showUpcomingSlots ? 'Hide Upcoming' : 'Show Upcoming'}
         </Button>
@@ -141,10 +208,14 @@ const AvailabilityPage = () => {
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState('week');
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const navTimerRef = useRef(null);
-  const viewTimerRef = useRef(null);
   const [stats, setStats]     = useState({ availableSlots: 0, bookedSlots: 0 });
   const [showUpcomingSlots, setShowUpcomingSlots] = useState(true);
+  const [calendarStatus, setCalendarStatus] = useState({ connected: false, googleAccountEmail: null });
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [loadingGoogleEvents, setLoadingGoogleEvents] = useState(false);
+  const calendarInitializedRef = useRef(false);
+  const loadAvailabilityRequestRef = useRef(0);
+  const isCalendarSyncing = syncingCalendar || loadingGoogleEvents;
 
   // Add-slot state
   const [selectedDate, setSelectedDate]   = useState(null);
@@ -163,19 +234,35 @@ const AvailabilityPage = () => {
   // Interview start dialog state
   const [isInterviewStartDialogOpen, setIsInterviewStartDialogOpen] = useState(false);
   const [selectedInterviewScheduleId, setSelectedInterviewScheduleId] = useState(null);
-  // ── Data loading 
-  const mapSlotsToEvents = (data) => data.map((slot) => {
+  const mapSlotsToEvents = (data) => (data || []).flatMap((slot) => {
     const isCompleted = slot.interviewStatus === InterviewScheduleStatus.COMPLETED;
+    const isCancelled = slot.interviewStatus === InterviewScheduleStatus.CANCELLED;
+    const endMs = new Date(slot.endDateTime).getTime();
+    const isOverdue = slot.status === SlotStatus.BOOKED
+      && !isCompleted
+      && !isCancelled
+      && Number.isFinite(endMs)
+      && endMs < Date.now();
+    const hasPendingPostponeRequest = Boolean(slot.hasPendingPostponeRequest) && !isCompleted && !isOverdue;
+    const isPanel = Boolean(slot.panelId);
     const statusKey = slot.status === SlotStatus.BOOKED
-      ? (isCompleted ? 'completed' : 'booked')
+      ? (isCompleted
+        ? 'completed'
+        : (isOverdue
+          ? 'overdue'
+          : (hasPendingPostponeRequest
+            ? 'postpone_request'
+            : (isPanel ? 'panel_booked' : 'booked'))))
       : slot.status.toLowerCase();
 
-    return {
+    const baseEvent = {
       id: slot.id,
       title: slot.status === SlotStatus.BOOKED
         ? (isCompleted
           ? `✓ ${slot.candidateName || 'Interview Completed'}`
-          : `🔒 ${slot.candidateName || 'Interview Scheduled'}`)
+          : (isOverdue
+            ? `⚠ ${slot.candidateName || 'Interview Overdue'}`
+            : `🔒 ${slot.candidateName || 'Interview Scheduled'}`))
         : slot.description || 'Available',
       start: new Date(slot.startDateTime),
       end: new Date(slot.endDateTime),
@@ -187,14 +274,79 @@ const AvailabilityPage = () => {
       durationHours: computeSlotDurationHours(slot.startDateTime, slot.endDateTime, slot.durationHours),
       recurrenceGroupId: slot.recurrenceGroupId,
       isRecurring: slot.isRecurring,
+      googleCalendarSynced: Boolean(slot.googleCalendarSynced),
+      meetingLink: slot.status === SlotStatus.BOOKED
+        && slot.interviewStatus === InterviewScheduleStatus.SCHEDULED
+        ? (slot.meetingLink || null)
+        : null,
+      panelId: slot.panelId ?? null,
+      isOverdue,
+      hasPendingPostponeRequest,
+      pendingPostponeRequestId: slot.pendingPostponeRequestId ?? null,
+      pendingPostponeReason: slot.pendingPostponeReason ?? null,
+      pendingPostponePreferredStart: slot.pendingPostponePreferredStart ?? null,
+      pendingPostponePreferredEnd: slot.pendingPostponePreferredEnd ?? null,
+      pendingPostponeRequestedByName: slot.pendingPostponeRequestedByName ?? null,
     };
+
+    const events = [baseEvent];
+
+    if (
+      hasPendingPostponeRequest
+      && slot.pendingPostponePreferredStart
+      && slot.pendingPostponePreferredEnd
+      && slot.status === SlotStatus.BOOKED
+    ) {
+      events.push({
+        id: `proposed-${slot.id}`,
+        title: slot.candidateName
+          ? `⏳ ${slot.candidateName}`
+          : `⏳ ${POSTPONE_PROPOSAL_LABEL}`,
+        start: new Date(slot.pendingPostponePreferredStart),
+        end: new Date(slot.pendingPostponePreferredEnd),
+        status: 'postpone_request',
+        isProposedTime: true,
+        hasPendingPostponeRequest: true,
+        candidateName: slot.candidateName,
+        interviewScheduleId: slot.interviewScheduleId,
+        interviewStatus: slot.interviewStatus,
+        panelId: slot.panelId ?? null,
+        linkedSlotId: slot.id,
+        pendingPostponeRequestId: slot.pendingPostponeRequestId ?? null,
+        pendingPostponeRequestedByName: slot.pendingPostponeRequestedByName ?? null,
+      });
+    }
+
+    return events;
   });
 
+  const mapGoogleEventsToCalendar = (items) => (items || []).map((event) => ({
+    id: `google-${event.googleEventId}`,
+    googleEventId: event.googleEventId,
+    title: event.title || 'Google Calendar event',
+    calendarName: event.calendarName || null,
+    start: new Date(event.startDateTime),
+    end: new Date(event.endDateTime),
+    status: 'google_external',
+    readOnly: true,
+    source: 'google',
+    allDay: Boolean(event.allDay),
+  }));
+
+  // ── Data loading
+  // Drives both Mitra availability slots and Google Calendar read-only events.
   const computeRangeForView = (view, date) => {
     const d = date ? new Date(date) : new Date();
     switch ((view || 'week')) {
-      case 'month':
-        return { start: startOfMonth(d), end: endOfMonth(d) };
+      case 'month': {
+        const monthStart = startOfMonth(d);
+        const monthEnd = endOfMonth(d);
+        // Match react-big-calendar month grid (includes leading/trailing week days).
+        return {
+          start: startOfWeek(monthStart, { weekStartsOn: 0 }),
+          end: endOfWeek(monthEnd, { weekStartsOn: 0 }),
+        };
+      }
       case 'day':
         return { start: startOfDay(d), end: endOfDay(d) };
       case 'week':
@@ -206,27 +358,63 @@ const AvailabilityPage = () => {
   const getCalendarPageSize = (view) => CALENDAR_PAGE_SIZES[view] || CALENDAR_PAGE_SIZES.week;
 
   const loadAvailability = useCallback(async (opts = {}) => {
+    const requestId = ++loadAvailabilityRequestRef.current;
+    const view = opts.view || currentView;
+    const { start, end } = opts.start && opts.end
+      ? opts
+      : computeRangeForView(view, opts.date || calendarDate);
+    const pageSize = getCalendarPageSize(view);
+    const googleConnected = Boolean(opts.googleConnected ?? calendarStatus.connected);
+
     try {
       setLoading(true);
-      const view = opts.view || currentView;
-      const { start, end } = opts.start && opts.end
-        ? opts
-        : computeRangeForView(view, opts.date || calendarDate);
-      const pageSize = getCalendarPageSize(view);
-      console.log('[Availability] Loading paged range:', { view, start, end, pageSize });
-      const data = await availabilityAPI.getAvailabilityByDateRange(start, end, 0, pageSize);
-      console.log(`[Availability] Range result count: ${(data || []).length}`);
+      if (googleConnected) {
+        setLoadingGoogleEvents(true);
+      }
 
-      const mapped = mapSlotsToEvents(data || []);
-        console.log('[Availability] Mapped events (sample):', mapped.slice(0, 8));
-        // Log weekday distribution to help debug missing Sunday events
-        const weekdayCounts = mapped.reduce((acc, ev) => {
-          const wd = new Date(ev.start).getDay();
-          acc[wd] = (acc[wd] || 0) + 1;
-          return acc;
-        }, {});
-        console.log('[Availability] Weekday counts (0=Sun..6=Sat):', weekdayCounts);
-      setEvents(mapped);
+      const { items } = await availabilityAPI.getAvailabilityByDateRange(
+        start,
+        end,
+        0,
+        pageSize,
+        false,
+      );
+
+      if (requestId !== loadAvailabilityRequestRef.current) {
+        return;
+      }
+
+      setEvents(mapSlotsToEvents(items || []));
+
+      if (googleConnected) {
+        try {
+          const googleExternalEvents = await googleCalendarAPI.getExternalEvents(start, end);
+          if (requestId !== loadAvailabilityRequestRef.current) {
+            return;
+          }
+
+          setEvents((prev) => {
+            const mitraEvents = prev.filter((event) => event.status !== 'google_external');
+            return [...mitraEvents, ...mapGoogleEventsToCalendar(googleExternalEvents)];
+          });
+        } catch (error) {
+          console.error('Failed to load Google Calendar events', error);
+          const status = error?.response?.status;
+          const apiMsg = error?.response?.data?.message || error.message;
+          const reconnectHint = 'Disconnect and reconnect Google Calendar in Settings to continue showing Google events.';
+
+          const shouldReconnect =
+            status === 400 || status === 401 || status === 403 || status === 502;
+
+          if (shouldReconnect) {
+            toast({
+              title: 'Google Calendar auth issue',
+              description: apiMsg ? `${apiMsg} ${reconnectHint}` : reconnectHint,
+              variant: 'destructive',
+            });
+          }
+        }
+      }
     } catch (error) {
       toast({
         title: 'Error loading availability',
@@ -234,9 +422,12 @@ const AvailabilityPage = () => {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      if (requestId === loadAvailabilityRequestRef.current) {
+        setLoading(false);
+        setLoadingGoogleEvents(false);
+      }
     }
-  }, [calendarDate, currentView]);
+  }, [calendarDate, calendarStatus.connected, currentView]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -285,55 +476,146 @@ const AvailabilityPage = () => {
     await loadAvailability({ start, end, view: currentView });
   }, [calendarDate, currentView, loadAvailability]);
 
-  useEffect(() => {
-    const { start, end } = computeRangeForView(currentView, calendarDate);
-    loadAvailability({ start, end, view: currentView });
-  }, [loadAvailability, currentView, calendarDate]);
+  const syncGoogleCalendarAvailability = useCallback(async ({ showToast = true } = {}) => {
+    try {
+      setSyncingCalendar(true);
+      const result = await googleCalendarAPI.syncAvailability();
+      await refreshCalendarAvailability();
+      await refreshUpcomingEvents();
+
+      if (showToast && result.syncedCount > 0) {
+        toast({
+          title: 'Google Calendar synced',
+          description: `${result.syncedCount} availability slot${result.syncedCount === 1 ? '' : 's'} synced to your Google Calendar.`,
+        });
+      }
+      return result;
+    } catch (error) {
+      if (showToast) {
+        toast({
+          title: 'Google Calendar sync failed',
+          description: error.response?.data?.message || error.message,
+          variant: 'destructive',
+        });
+      }
+      return null;
+    } finally {
+      setSyncingCalendar(false);
+    }
+  }, [refreshCalendarAvailability, refreshUpcomingEvents]);
+
+  const loadCalendarStatus = useCallback(async () => {
+    try {
+      const status = await googleCalendarAPI.getStatus();
+      setCalendarStatus(status);
+      return status;
+    } catch (error) {
+      console.error('Failed to load Google Calendar status', error);
+      return { connected: false, googleAccountEmail: null };
+    }
+  }, []);
 
   useEffect(() => {
-    loadStats();
-    refreshUpcomingEvents();
+    if (calendarInitializedRef.current) {
+      const { start, end } = computeRangeForView(currentView, calendarDate);
+      loadAvailability({ start, end, view: currentView });
+      return;
+    }
+
+    calendarInitializedRef.current = true;
+
+    const initializeCalendarPage = async () => {
+      handleGoogleCalendarOAuthResult({
+        toast,
+        dashboardPath: null,
+        onConnected: async () => {
+          const status = await loadCalendarStatus();
+          if (status.connected) {
+            await syncGoogleCalendarAvailability({ showToast: true });
+          }
+        },
+      });
+
+      const status = await loadCalendarStatus();
+      if (status.connected) {
+        setLoadingGoogleEvents(true);
+      }
+
+      const { start, end } = computeRangeForView(currentView, calendarDate);
+      await loadAvailability({
+        start,
+        end,
+        view: currentView,
+        googleConnected: status.connected,
+      });
+    };
+
+    initializeCalendarPage();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, calendarDate]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadStats();
+      refreshUpcomingEvents();
+    }, 150);
+    return () => clearTimeout(timer);
   }, [loadStats, refreshUpcomingEvents]);
 
 
 
   
 const handleSelectSlot = ({ start, end }) => {
-  const now = new Date();
   if (isPastDay(start)) {
-    toast({ title: 'Past date', variant: 'destructive' });
+    toast({ title: 'Past date', description: 'Cannot add availability for past dates.', variant: 'destructive' });
     return;
   }
 
-  let startDate = new Date(start);
-  let endDate = new Date(end);
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const earliest = minimumAllowedStart();
 
-  // // Month view/Midnight fix
-  // if (startDate.getHours() === 0 && startDate.getMinutes() === 0 && view === 'month') {
-  //   startDate.setHours(0, 0, 0, 0);
-  //   endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-  // }
+  if (isBefore(startDate, earliest)) {
+    toast({
+      title: 'Start time too early',
+      description: `You can start up to ${SLOT_LOOKBACK_MINUTES} minutes before now.`,
+      variant: 'destructive',
+    });
+    return;
+  }
 
-  // Same-day buffer
-  if (isSameDay(startDate, now)) {
-    const earliest = minimumAllowedStart();
-    if (isBefore(startDate, earliest)) {
-      startDate = new Date(earliest);
-      startDate.setMinutes(0, 0, 0);
-      if (isBefore(startDate, earliest)) startDate.setHours(startDate.getHours() + 1);
-      endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-    }
+  if (!isBefore(new Date(), endDate)) {
+    toast({
+      title: 'End time in the past',
+      description: 'End time must be after the current time.',
+      variant: 'destructive',
+    });
+    return;
   }
 
   setSelectedDate(startDate);
   setStartTime(format(startDate, 'HH:mm'));
   setEndTime(format(endDate, 'HH:mm'));
-  setAddDialogOpen(true); 
+  setAddDialogOpen(true);
 };
 
 /** Clicking an existing event. */
   const handleEventClick = (event) => {
-    if (event.status === 'booked' || event.status === 'completed') {
+    if (event.readOnly || event.status === 'google_external') {
+      toast({
+        title: 'Google Calendar event',
+        description: 'This event is from Google Calendar and can only be edited or deleted in Google Calendar.',
+      });
+      return;
+    }
+
+    if (event.status === 'booked'
+      || event.status === 'panel_booked'
+      || event.status === 'completed'
+      || event.status === 'overdue'
+      || event.status === 'postpone_request'
+      || event.hasPendingPostponeRequest
+      || event.isProposedTime) {
       if (!event.interviewScheduleId) return;
       setSelectedInterviewScheduleId(event.interviewScheduleId);
       setIsInterviewStartDialogOpen(true);
@@ -364,6 +646,13 @@ const handleSelectSlot = ({ start, end }) => {
 
   const openDeleteDialog = async (event, e) => {
     if (e) e.stopPropagation();
+    if (event?.readOnly || event?.status === 'google_external') {
+      toast({
+        title: 'Google Calendar event',
+        description: 'This event cannot be deleted from Mitra.',
+      });
+      return;
+    }
     setDeleteTarget(event);
     setDeleteDialogOpen(true);
   };
@@ -432,25 +721,64 @@ const handleSelectSlot = ({ start, end }) => {
 
   // ── RBC style helpers ─────────────────────────────────────────────────────
   const eventStyleGetter = (event) => {
-    const colors = STATUS_COLORS[event.status] || STATUS_COLORS.available;
-    const isBookedLike = event.status === 'booked' || event.status === 'completed';
+    const isOverdue = event.status === 'overdue' || event.isOverdue;
+    const isPostponeRequest = !isOverdue && (
+      event.status === 'postpone_request'
+      || event.hasPendingPostponeRequest
+      || event.isProposedTime
+    );
+    const colors = isOverdue
+      ? STATUS_COLORS.overdue
+      : (isPostponeRequest
+        ? STATUS_COLORS.postpone_request
+        : (STATUS_COLORS[event.status] || STATUS_COLORS.available));
+    const isGoogleExternal = event.status === 'google_external';
+    const isPanelBooked = !isPostponeRequest && !isOverdue && (
+      event.status === 'panel_booked' || Boolean(event.panelId)
+    );
+    const isBookedLike = event.status === 'booked'
+      || event.status === 'panel_booked'
+      || event.status === 'completed'
+      || event.status === 'overdue'
+      || isPostponeRequest;
     return {
-      className: event.status === 'completed'
-        ? 'booked-event completed-event'
-        : (event.status === 'booked' ? 'booked-event' : 'available-event'),
+      className: isGoogleExternal
+        ? 'google-external-event'
+        : (event.status === 'completed'
+          ? 'booked-event completed-event'
+          : (isOverdue
+            ? 'booked-event overdue-event'
+            : (isPostponeRequest
+              ? 'booked-event postpone-request-event'
+              : (isPanelBooked
+                ? 'booked-event panel-booked-event'
+                : (event.status === 'booked' ? 'booked-event' : 'available-event'))))),
       style: {
         background:   colors.bg,
         borderRadius: '5px',
-        opacity:      isBookedLike ? 0.88 : 0.96,
-        color:        'white',
-        borderLeft:   `3px solid ${colors.border}`,
+        opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
+        color:        isGoogleExternal ? '#ffffff' : 'white',
+        borderLeft:   `${isPanelBooked || isPostponeRequest || isOverdue ? 4 : 3}px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
         padding:      '4px 8px',
         fontSize:     '12px',
-        fontWeight:   '500',
-        boxShadow:    `0 2px 6px ${colors.solid}40`,
-        cursor:       'pointer',
+        fontWeight:   isGoogleExternal ? '600' : '500',
+        boxShadow:    isGoogleExternal
+          ? '0 2px 6px rgba(0, 0, 0, 0.2)'
+          : (isOverdue
+            ? `0 2px 10px ${STATUS_COLORS.overdue.solid}55, 0 0 0 1px ${STATUS_COLORS.overdue.border}66`
+            : (isPostponeRequest
+              ? `0 2px 10px ${POSTPONE_REQUEST_PALETTE.solid}55, 0 0 0 1px ${POSTPONE_REQUEST_PALETTE.border}66`
+              : (isPanelBooked
+                ? `0 2px 10px ${PANEL_PALETTE.solid}50, 0 0 0 1px #c4b5fd66`
+                : `0 2px 6px ${colors.solid}40`))),
+        cursor:       isGoogleExternal ? 'not-allowed' : 'pointer',
         overflow:     'hidden',
+        backgroundImage: isGoogleExternal
+          ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 6px, transparent 6px, transparent 12px)'
+          : (isPostponeRequest
+            ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 5px, transparent 5px, transparent 10px)'
+            : undefined),
       },
     };
   };
@@ -458,17 +786,17 @@ const handleSelectSlot = ({ start, end }) => {
   /**
    * Grey-out / block interactions for:
    *   - Any time slot on a past day
-   *   - Same-day time slots that are within the 2-hour buffer window
+   *   - Same-day slots within the minimum lead-time buffer
    */
   const slotPropGetter = (date) => {
-    const now = new Date();
+    const earliest = minimumAllowedStart();
     if (isPastDay(date)) {
       return {
         className: 'past-time-slot',
         style: { backgroundColor: 'rgba(0,0,0,0.03)', cursor: 'not-allowed', pointerEvents: 'none' },
       };
     }
-    if (isSameDay(date, now) && isBefore(date, minimumAllowedStart())) {
+    if (isBefore(date, earliest)) {
       return {
         className: 'past-time-slot',
         style: {
@@ -504,12 +832,12 @@ const handleSelectSlot = ({ start, end }) => {
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
             <p className="text-muted-foreground text-lg">
-              Manage your interview availability · click an{' '}
-              <span className="text-indigo-600 font-semibold"></span> event to edit it
+              Manage your interview availability · slots sync to Google Calendar when connected
             </p>
           </div>
-         
         </motion.div>
+
+        
 
         {/* Calendar + Sidebar */}
         <div className="flex flex-col lg:flex-row gap-3 ">
@@ -519,8 +847,20 @@ const handleSelectSlot = ({ start, end }) => {
             className="flex-1">
             <Card className="shadow-xl border-t-4">
               <CardContent className="p-1">
+                <div className="interviewer-calendar-legend" aria-label="Calendar color legend">
+                  {CALENDAR_LEGEND_ITEMS.map((item) => (
+                    <span key={item.key} className="interviewer-calendar-legend-chip">
+                      <span
+                        className="interviewer-calendar-legend-swatch"
+                        style={{ background: item.swatch }}
+                        aria-hidden="true"
+                      />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
                 <AnimatePresence mode="wait">
-                  {loading ? (
+                  {loading && !isCalendarSyncing ? (
                     <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="h-[700px] flex items-center justify-center">
                       <div className="text-center">
@@ -533,59 +873,103 @@ const handleSelectSlot = ({ start, end }) => {
                     </motion.div>
                   ) : (
                     <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container" style={{ width: '100%', height : '75vh' }}>
-                      <Calendar
-                        localizer={localizer}
-                        events={events}
-                        startAccessor="start"
-                        endAccessor="end"
-                        onSelectSlot={handleSelectSlot}
-                        onSelectEvent={handleEventClick}
-                        onNavigate={(nextDate) => {
-                          if (navTimerRef.current) clearTimeout(navTimerRef.current);
-                          navTimerRef.current = setTimeout(() => {
-                            setCalendarDate(nextDate);
-                          }, 200);
-                        }}
-                        onView={(view) => {
-                          if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
-                          viewTimerRef.current = setTimeout(() => {
-                            setCurrentView(view);
-                          }, 200);
-                        }}
-                        selectable
-                        eventPropGetter={eventStyleGetter}
-                        slotPropGetter={slotPropGetter}
-                        dayPropGetter={dayPropGetter}
-                        style={{ height: '100%' }}
-                        views={['month', 'week', 'day']}
-                        defaultView="week"
-                        step={60}
-                        timeslots={1}
-                        min={new Date(1970, 0, 1, 0, 0, 0)}
-                        max={new Date(1970, 0, 1, 23, 59, 59)}
-                        scrollToTime={new Date(1970, 0, 1, 8, 0)}
-                        popup
-                        showMultiDayTimes
-                        components={{
-                          toolbar: (toolbarProps) => (
-                            <CalendarToolbar
-                              {...toolbarProps}
-                              showUpcomingSlots={showUpcomingSlots}
-                              onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
-                            />
-                          ),
-                        }}
-                        tooltipAccessor={(event) => {
-                          if (event.status === 'booked')
-                            return `🔒 Booked${event.candidateName ? ': ' + event.candidateName : ''}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
-                          return `✏️ Click to edit\n${event.title}\n${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
-                        }}
-                        formats={{
-                      timeGutterFormat: calendarFormats.timeGutterFormat,
-                      eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
-                    }}
-                      />
+                      className="availability-calendar-container relative" style={{ width: '100%', height : '75vh' }}>
+                      <div
+                        className={`h-full transition-[filter] duration-200 ${isCalendarSyncing ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
+                      >
+                        <Calendar
+                          localizer={localizer}
+                          events={events}
+                          date={calendarDate}
+                          view={currentView}
+                          startAccessor="start"
+                          endAccessor="end"
+                          onSelectSlot={handleSelectSlot}
+                          onSelectEvent={handleEventClick}
+                          onNavigate={setCalendarDate}
+                          onView={setCurrentView}
+                          selectable={!isCalendarSyncing}
+                          eventPropGetter={eventStyleGetter}
+                          slotPropGetter={slotPropGetter}
+                          dayPropGetter={dayPropGetter}
+                          style={{ height: '100%' }}
+                          views={['month', 'week', 'day']}
+                          defaultView="week"
+                          step={60}
+                          timeslots={1}
+                          min={new Date(1970, 0, 1, 0, 0, 0)}
+                          max={new Date(1970, 0, 1, 23, 59, 59)}
+                          scrollToTime={new Date(1970, 0, 1, 8, 0)}
+                          popup
+                          showMultiDayTimes
+                          components={{
+                            toolbar: (toolbarProps) => (
+                              <CalendarToolbar
+                                {...toolbarProps}
+                                loading={loading}
+                                showUpcomingSlots={showUpcomingSlots}
+                                onToggleUpcomingSlots={() => setShowUpcomingSlots((value) => !value)}
+                                calendarConnected={calendarStatus.connected}
+                                onSyncCalendar={() => syncGoogleCalendarAvailability({ showToast: true })}
+                                syncingCalendar={isCalendarSyncing}
+                              />
+                            ),
+                            event: BookedCalendarEvent,
+                          }}
+                          tooltipAccessor={(event) => {
+                            const timeRange = `${format(event.start, calendarFormats.timeGutterFormat)} – ${format(event.end, calendarFormats.timeGutterFormat)}`;
+                            if (event.status === 'google_external') {
+                              const calLine = event.calendarName ? `\nCalendar: ${event.calendarName}` : '';
+                              return `📅 Google Calendar (read-only)\n${event.title}${calLine}\n${timeRange}`;
+                            }
+                            const meetLine = event.meetingLink ? `\n📹 ${event.meetingLink}` : '';
+                            const syncLine = event.status === 'available'
+                              ? (event.googleCalendarSynced ? '\n📅 Synced to Google Calendar' : '\n⚠ Not synced to Google Calendar')
+                              : '';
+                            if (event.status === 'postpone_request' || event.hasPendingPostponeRequest || event.isProposedTime) {
+                              const byLine = event.pendingPostponeRequestedByName
+                                ? `\nRequested by: ${event.pendingPostponeRequestedByName}`
+                                : '';
+                              const proposedLine = event.isProposedTime
+                                ? '\nProposed alternative time (pending HR approval)'
+                                : (event.pendingPostponePreferredStart && event.pendingPostponePreferredEnd
+                                  ? '\nIncludes a proposed alternative time'
+                                  : '\nNo alternative time proposed yet');
+                              return `⏳ ${POSTPONE_PROPOSAL_LABEL}${event.candidateName ? ': ' + event.candidateName : ''}${byLine}${proposedLine}\n${timeRange}${meetLine}`;
+                            }
+                            if (event.status === 'overdue' || event.isOverdue) {
+                              return `⚠ Overdue interview${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}\nPast interview not completed`;
+                            }
+                            if (event.status === 'panel_booked' || event.panelId) {
+                              return `👥 Panel Interview${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}`;
+                            }
+                            if (event.status === 'booked' || event.status === 'completed') {
+                              return `🔒 ${event.status === 'completed' ? 'Completed' : 'Booked'}${event.candidateName ? ': ' + event.candidateName : ''}\n${timeRange}${meetLine}${syncLine}`;
+                            }
+                            return `✏️ Click to edit\n${event.title}\n${timeRange}${syncLine}`;
+                          }}
+                          formats={{
+                            timeGutterFormat: calendarFormats.timeGutterFormat,
+                            eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
+                          }}
+                        />
+                      </div>
+                      {isCalendarSyncing && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
+                          <div className="rounded-lg border bg-background/95 px-6 py-5 shadow-lg text-center">
+                            <div className="relative w-12 h-12 mx-auto mb-3">
+                              <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
+                              <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
+                            </div>
+                            <p className="text-sm font-medium text-foreground">
+                              {syncingCalendar ? 'Syncing with Google Calendar…' : 'Loading Google Calendar events…'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {syncingCalendar ? 'Updating availability results' : 'Fetching connected calendars'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -624,6 +1008,7 @@ const handleSelectSlot = ({ start, end }) => {
         defaultEndTime={endTime}
         onSuccess={handleAddSuccess}
         getSlotStartError={getSlotStartError}
+        getSlotEndError={getSlotEndError}
       />
 
       <EditSlotDialog
@@ -642,6 +1027,7 @@ const handleSelectSlot = ({ start, end }) => {
           setDeleteDialogOpen(true);
         }}
         getSlotStartError={getSlotStartError}
+        getSlotEndError={getSlotEndError}
       />
 
       <DeleteSlotDialog

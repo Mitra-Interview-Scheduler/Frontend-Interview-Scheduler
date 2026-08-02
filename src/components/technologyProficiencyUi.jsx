@@ -83,8 +83,8 @@ export function CoreTechnologyPrompt({
           <h3 className="mt-1 text-lg font-semibold text-slate-900">{technology.name}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {isUpdate
-              ? 'Choose whether this is a core technology or can do.'
-              : 'Is this a core technology, or can do?'}
+              ? 'Choose whether this is a core technology or sub technology.'
+              : 'Is this a core technology, or sub technology?'}
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -104,7 +104,7 @@ export function CoreTechnologyPrompt({
               disabled={saving}
               onClick={() => onConfirm(false)}
             >
-              Can Do
+              Sub Technology
             </Button>
           </div>
 
