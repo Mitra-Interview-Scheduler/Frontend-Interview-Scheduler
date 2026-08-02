@@ -35,7 +35,7 @@ const toBool = (value, defaultValue = true) => {
 const typeRequiresInterviewer = (type) =>
   toBool(type?.requiresInterviewer ?? type?.requires_interviewer, true);
 
-function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
+function CandidateInterviewSchedulePage({ open, candidate, onOpenChange, onScheduled }) {
   const navigate = useNavigate();
   const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
   const getTodayDate = () => {
@@ -177,6 +177,7 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange }) {
         title: 'Assessment scheduled',
         description: `${selectedTypeMeta?.label || interviewType} recorded without an interviewer.`,
       });
+      onScheduled?.();
       onOpenChange(false);
     } catch (error) {
       toast({

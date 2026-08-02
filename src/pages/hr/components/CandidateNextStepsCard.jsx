@@ -307,6 +307,7 @@ function CandidateNextStepsCard({
         open={isInterviewSchedulePageOpen}
         candidate={candidate}
         onOpenChange={setIsInterviewSchedulePageOpen}
+        onScheduled={onUpdated}
       />
     </>
   );

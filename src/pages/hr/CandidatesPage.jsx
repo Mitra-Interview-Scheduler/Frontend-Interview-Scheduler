@@ -528,6 +528,7 @@ const CandidatesPage = () => {
           open={isInterviewSchedulePageOpen}
           candidate={selectedCandidate}
           onOpenChange={setIsInterviewSchedulePageOpen}
+          onScheduled={applyFilters}
         />
       </div>
     </Layout>
