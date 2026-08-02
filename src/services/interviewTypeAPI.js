@@ -18,8 +18,19 @@ export const interviewTypeAPI = {
     return response.data;
   },
 
+  reactivate: async (id) => {
+    const response = await api.patch(`/interview-types/${id}/reactivate`);
+    return response.data;
+  },
+
   delete: async (id) => {
-    await api.delete(`/interview-types/${id}`);
+    const response = await api.delete(`/interview-types/${id}`);
+    return response.data;
+  },
+
+  getDeletePreview: async (id) => {
+    const response = await api.get(`/interview-types/${id}/delete-preview`);
+    return response.data;
   },
 
   /** Resolve interviewer filters for a candidate + interview type. */

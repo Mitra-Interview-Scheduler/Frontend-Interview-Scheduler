@@ -30,7 +30,27 @@ export const defaultFilterRules = () => ({
   fixedTechnologyIds: [],
 });
 
+/** Assessments do not match interviewers — all filters disabled. */
+export const noInterviewerFilterRules = () => ({
+  departmentFilterMode: FILTER_MODE.NONE,
+  fixedDepartmentId: null,
+  minYearsExperience: null,
+  tierFilterMode: FILTER_MODE.NONE,
+  fixedMinTierId: null,
+  designationFilterMode: FILTER_MODE.NONE,
+  fixedMinDesignationId: null,
+  domainFilterMode: FILTER_MODE.NONE,
+  fixedDomainIds: [],
+  categoryFilterMode: FILTER_MODE.NONE,
+  fixedCategoryIds: [],
+  technologyFilterMode: FILTER_MODE.NONE,
+  fixedTechnologyIds: [],
+});
+
 export const filterRulesFromType = (type) => {
+  const requiresInterviewer = type?.requiresInterviewer ?? type?.requires_interviewer;
+  if (requiresInterviewer === false) return noInterviewerFilterRules();
+
   const rules = type?.filterRules;
   if (!rules) return defaultFilterRules();
   return {

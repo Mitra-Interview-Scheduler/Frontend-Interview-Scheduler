@@ -11,19 +11,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import {
-  Plus, Edit, Trash2, ListChecks, Loader2, Lock, FileText, GitBranch, CalendarClock,
+  Plus, Edit, Trash2, ListChecks, Loader2, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
+  Users, ClipboardList,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -35,8 +26,10 @@ import { technologyAPI } from '@/services/technologyAPI';
 import InterviewTypeFilterRulesFields, {
   defaultFilterRules,
   filterRulesFromType,
+  noInterviewerFilterRules,
   FILTER_MODE,
 } from './InterviewTypeFilterRulesFields';
+import DeleteInterviewTypeDialog from './components/DeleteInterviewTypeDialog';
 
 const NONE_VALUE = '__none__';
 
@@ -94,6 +87,7 @@ const InterviewTypesPage = () => {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [reactivatingId, setReactivatingId] = useState(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -184,7 +178,8 @@ const InterviewTypesPage = () => {
       });
       return;
     }
-    const filterError = validateFilterRules(form.filterRules);
+    const requiresInterviewer = readRequiresInterviewer(form);
+    const filterError = requiresInterviewer ? validateFilterRules(form.filterRules) : null;
     if (filterError) {
       toast({ title: 'Validation', description: filterError, variant: 'destructive' });
       return;
@@ -192,16 +187,15 @@ const InterviewTypesPage = () => {
     setIsMutating(true);
     try {
       const createCalendarMeeting = readCreateCalendarMeeting(form);
-      const requiresInterviewer = readRequiresInterviewer(form);
       const payload = {
         label: form.label.trim(),
         description: form.description?.trim() || null,
-        active: true,
+        active: editing ? form.active !== false : true,
         displayOrder: Number(form.displayOrder) || 0,
         cancelRestoreStatusKey: form.cancelRestoreStatusKey || null,
         createCalendarMeeting: requiresInterviewer ? createCalendarMeeting : false,
         requiresInterviewer,
-        filterRules: form.filterRules,
+        filterRules: requiresInterviewer ? form.filterRules : noInterviewerFilterRules(),
       };
       let saved;
       if (editing) {
@@ -245,23 +239,24 @@ const InterviewTypesPage = () => {
     setDeleteTarget(type);
   };
 
-  const confirmDelete = async () => {
-    if (!deleteTarget || deleteTarget.isSystem) return;
-    const type = deleteTarget;
-    setIsMutating(true);
+  const handleReactivate = async (type) => {
+    if (!type?.id || type.active !== false) return;
+    setReactivatingId(type.id);
     try {
-      await interviewTypeAPI.delete(type.id);
-      toast({ title: 'Deleted', description: `${type.label} removed` });
-      setDeleteTarget(null);
+      await interviewTypeAPI.reactivate(type.id);
+      toast({
+        title: 'Interview type reactivated',
+        description: `${type.label} is available for scheduling again.`,
+      });
       await loadData();
     } catch (error) {
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to delete interview type',
+        description: error.response?.data?.message || 'Failed to reactivate interview type',
         variant: 'destructive',
       });
     } finally {
-      setIsMutating(false);
+      setReactivatingId(null);
     }
   };
 
@@ -342,20 +337,36 @@ const InterviewTypesPage = () => {
                       <p className="text-[11px] text-muted-foreground mt-1.5">
                         Pipeline: {stepLabel(type.roundStatusKey)}
                         {' · '}
-                        {readRequiresInterviewer(type) ? 'Needs interviewer' : 'No interviewer'}
+                        {readRequiresInterviewer(type) ? 'Live interview' : 'Assessment'}
                         {' · '}
                         {readCreateCalendarMeeting(type) ? 'Meeting on' : 'Meeting off'}
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(type)} disabled={isMutating}>
+                      {type.active === false && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleReactivate(type)}
+                          disabled={isMutating || reactivatingId === type.id}
+                          title="Reactivate"
+                          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                        >
+                          {reactivatingId === type.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(type)} disabled={isMutating || reactivatingId === type.id}>
                         <Edit className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => requestDelete(type)}
-                        disabled={isMutating || type.isSystem}
+                        disabled={isMutating || reactivatingId === type.id || type.isSystem}
                         title={type.isSystem ? 'System types cannot be deleted' : 'Delete'}
                         className="text-destructive hover:text-destructive disabled:text-muted-foreground"
                       >
@@ -429,52 +440,84 @@ const InterviewTypesPage = () => {
                     className="resize-none"
                   />
                 </div>
-                <div className="space-y-1.5">
+                {readRequiresInterviewer(form) && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Display order
+                    </Label>
+                    <Input
+                      type="number"
+                      value={form.displayOrder}
+                      onChange={(e) => setForm((prev) => ({ ...prev, displayOrder: e.target.value }))}
+                      disabled={isMutating}
+                      className="h-10 max-w-xs"
+                    />
+                    {!editing && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Pre-filled after existing types.
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-2">
                   <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Display order
+                    What does HR book for this round?
                   </Label>
-                  <Input
-                    type="number"
-                    value={form.displayOrder}
-                    onChange={(e) => setForm((prev) => ({ ...prev, displayOrder: e.target.value }))}
-                    disabled={isMutating}
-                    className="h-10 max-w-xs"
-                  />
-                  {!editing && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Pre-filled after existing types.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Requires interviewer
-                  </Label>
-                  <Select
-                    value={readRequiresInterviewer(form) ? 'true' : 'false'}
-                    onValueChange={(value) => {
-                      const requires = value === 'true';
-                      setForm((prev) => ({
-                        ...prev,
-                        requiresInterviewer: requires,
-                        // Assessments default to no Meet unless user turns it back on
-                        createCalendarMeeting: requires ? prev.createCalendarMeeting : false,
-                      }));
-                    }}
-                    disabled={isMutating}
-                    hideSelectedFromMenu={false}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent hideSelectedFromMenu={false} position="popper">
-                      <SelectItem value="true">True — book interviewer slots</SelectItem>
-                      <SelectItem value="false">False — assessment (no interviewer)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    False is for assessments: schedule with a due date/notes only, then book a review type later if needed.
-                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      {
+                        value: 'interview',
+                        title: 'Live interview',
+                        description: 'Match an interviewer and book a slot',
+                        icon: Users,
+                      },
+                      {
+                        value: 'assessment',
+                        title: 'Assessment',
+                        description: 'Due date and notes — no interviewer slot',
+                        icon: ClipboardList,
+                      },
+                    ].map((option) => {
+                      const selected = readRequiresInterviewer(form)
+                        ? option.value === 'interview'
+                        : option.value === 'assessment';
+                      const Icon = option.icon;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          disabled={isMutating}
+                          onClick={() => {
+                            const requires = option.value === 'interview';
+                            setForm((prev) => ({
+                              ...prev,
+                              requiresInterviewer: requires,
+                              createCalendarMeeting: requires ? prev.createCalendarMeeting : false,
+                            }));
+                          }}
+                          className={`rounded-xl border p-3 text-left transition-all ${
+                            selected
+                              ? 'border-sky-500 bg-sky-50/80 ring-1 ring-sky-200 shadow-sm'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                              selected ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{option.title}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                                {option.description}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -498,8 +541,8 @@ const InterviewTypesPage = () => {
                   </Select>
                   <p className="text-[11px] text-muted-foreground">
                     {readRequiresInterviewer(form)
-                      ? 'True creates a Google Meet on booking. False skips meeting creation.'
-                      : 'Disabled for assessment types (no interviewer booking / Meet).'}
+                      ? 'Creates a Google Meet when an interviewer slot is booked. Turn off to skip meeting creation.'
+                      : 'Not applicable for assessments — no interviewer or calendar meeting is booked.'}
                   </p>
                 </div>
               </section>
@@ -537,15 +580,17 @@ const InterviewTypesPage = () => {
               </section>
             </div>
 
-            <InterviewTypeFilterRulesFields
-              rules={form.filterRules}
-              onChange={(filterRules) => setForm((prev) => ({ ...prev, filterRules }))}
-              disabled={isMutating}
-              departments={departments}
-              domains={domains}
-              categories={categories}
-              technologies={technologies}
-            />
+            {readRequiresInterviewer(form) && (
+              <InterviewTypeFilterRulesFields
+                rules={form.filterRules}
+                onChange={(filterRules) => setForm((prev) => ({ ...prev, filterRules }))}
+                disabled={isMutating}
+                departments={departments}
+                domains={domains}
+                categories={categories}
+                technologies={technologies}
+              />
+            )}
           </DialogBody>
 
           <DialogFooter className="px-6 py-4 bg-slate-50/80">
@@ -563,40 +608,14 @@ const InterviewTypesPage = () => {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
+      <DeleteInterviewTypeDialog
+        type={deleteTarget}
         open={!!deleteTarget}
         onOpenChange={(open) => {
-          if (!open && !isMutating) setDeleteTarget(null);
+          if (!open) setDeleteTarget(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete interview type?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget
-                ? `Delete "${deleteTarget.label}"? If it's already used in schedules it will be deactivated instead of removed.`
-                : 'This action cannot be undone for unused types.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isMutating}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                confirmDelete();
-              }}
-              disabled={isMutating}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isMutating ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting…</>
-              ) : (
-                'Delete'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onSuccess={loadData}
+      />
     </Layout>
   );
 };
