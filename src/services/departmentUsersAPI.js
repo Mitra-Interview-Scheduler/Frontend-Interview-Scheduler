@@ -5,10 +5,11 @@ export const departmentUsersAPI = {
    * List active users for HR pickers.
    * @param {{ role?: string, departmentId?: number|string }} options
    */
-  getUsers: async ({ role, departmentId } = {}) => {
+  getUsers: async ({ role, departmentId, minTierOrder } = {}) => {
     const params = {};
     if (role) params.role = role;
     if (departmentId) params.departmentId = departmentId;
+    if (minTierOrder != null && minTierOrder !== '') params.minTierOrder = minTierOrder;
     const response = await api.get('/hr/department-users', {
       params,
       // Optional picker call: on 401, reject locally instead of global logout + /login redirect (see api.js interceptor).

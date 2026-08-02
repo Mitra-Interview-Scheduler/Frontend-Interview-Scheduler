@@ -14,6 +14,7 @@ import {
   ACTIVITY_STATUS_META,
   INTERVIEW_STATUS_META,
   formatInterviewTypeLabel,
+  ROUND_KEY_BY_INTERVIEW_TYPE,
 } from '@/lib/statusConstants';
 
 export { formatInterviewTypeLabel };
@@ -24,9 +25,92 @@ const baseLabelForStatusKey = (statusKey, fallbackLabel) => {
   if (statusKey === MasterStatus.ON_HOLD) return 'On Hold';
   if (statusKey === MasterStatus.OFFER_PENDING) return 'Awaiting Offer';
   if (isInterviewRoundStatusKey(statusKey)) {
+    // Legacy "{CODE}_RECEIVED" keys — prefer the interview-type label without a second node.
+    if (String(statusKey).toUpperCase().endsWith('_RECEIVED')) {
+      const code = String(statusKey).toUpperCase().slice(0, -'_RECEIVED'.length);
+      return formatInterviewTypeLabel(code);
+    }
     return formatInterviewTypeLabel(interviewTypeCodeFromRoundKey(statusKey));
   }
   return fallbackLabel;
+};
+
+/** Map legacy "{CODE}_RECEIVED" status keys back to the type's round key. */
+export const resolveRoundKeyFromReceivedStatus = (statusKey) => {
+  const key = String(statusKey || '').trim().toUpperCase();
+  if (!key.endsWith('_RECEIVED')) return statusKey;
+  const code = key.slice(0, -'_RECEIVED'.length);
+  if (!code) return statusKey;
+  if (ROUND_KEY_BY_INTERVIEW_TYPE[code]) return ROUND_KEY_BY_INTERVIEW_TYPE[code];
+  return code.endsWith('_ROUND') ? code : `${code}_ROUND`;
+};
+
+const assessmentPhaseOf = (round) => String(
+  round?.assessmentPhase
+  || round?.interview?.assessmentPhase
+  || '',
+).toUpperCase();
+
+const isAssessmentReceivedPhase = (phase) => (
+  phase === 'RECEIVED' || phase === 'UNDER_REVIEW' || phase === 'COMPLETED'
+);
+
+/**
+ * Relabel the existing interview round step using assessmentPhase (no new pipeline node).
+ * Also hides legacy "{CODE}_RECEIVED" steps that were inserted by an earlier workflow.
+ */
+export const applyAssessmentReceivedDisplay = (
+  steps,
+  interviewRequests = [],
+  currentStatus = null,
+) => {
+  if (!Array.isArray(steps) || steps.length === 0) return steps;
+
+  const effectiveCurrent = resolveRoundKeyFromReceivedStatus(currentStatus) || currentStatus;
+  const uniqueRounds = dedupeInterviewRounds(interviewRequests);
+  const receivedByRoundKey = {};
+
+  uniqueRounds.forEach((round) => {
+    const phase = assessmentPhaseOf(round);
+    if (!isAssessmentReceivedPhase(phase)) return;
+    const roundKey = resolveRoundKeyForInterview(round);
+    if (!roundKey) return;
+    // Prefer the latest matching round for the key
+    receivedByRoundKey[roundKey] = phase;
+  });
+
+  let receivedWasCurrent = false;
+  const withoutLegacyReceived = steps.filter((step) => {
+    const key = String(step?.key || '').toUpperCase();
+    if (!key.endsWith('_RECEIVED')) return true;
+    if (step.stepStatus === PipelineStepStatus.CURRENT) {
+      receivedWasCurrent = true;
+    }
+    return false;
+  });
+
+  const withLabels = withoutLegacyReceived.map((step) => {
+    const key = String(step.key || '');
+    if (!isInterviewRoundStatusKey(key) || String(key).toUpperCase().endsWith('_RECEIVED')) {
+      return step;
+    }
+    const phase = receivedByRoundKey[key];
+    if (!phase) return step;
+
+    const base = baseLabelForStatusKey(key, step.masterLabel || step.label);
+    let suffix = 'Received';
+    if (phase === 'UNDER_REVIEW') suffix = 'Under review';
+    if (phase === 'COMPLETED') suffix = 'Completed';
+    return {
+      ...step,
+      label: `${base} ${suffix}`.replace(/\s+/g, ' ').trim(),
+    };
+  });
+
+  if (receivedWasCurrent || String(currentStatus || '').toUpperCase().endsWith('_RECEIVED')) {
+    return syncPipelineWithMacroStatus(withLabels, effectiveCurrent);
+  }
+  return withLabels;
 };
 
 const buildPipelineStepLabel = (masterLabel, roundIndex, totalRoundsForKey) => {
@@ -519,7 +603,9 @@ const createInterviewPreludeEntry = (request) => {
     statusBadgeClass: meta.badgeClass,
     interviewType,
     interviewRequest: request,
-    detail: formatInterviewerDetail(request),
+    detail: formatInterviewerDetail(request)
+      || (request?.notes?.trim() ? request.notes.trim() : null)
+      || (!request?.assignedInterviewerId ? 'Assessment due date assigned' : null),
   }, sortTimestamp, INTERVIEW_GROUP_ORDER.PRELUDE);
 };
 
