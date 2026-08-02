@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
   UserCheck, BarChart3, Clock, FileText, 
-  Shield, Briefcase, Bell, ChevronDown, MessageSquare, Globe2, ListChecks
+  Shield, Briefcase, Bell, ChevronDown, MessageSquare, Globe2, ListChecks, ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +35,7 @@ const hrLinks = [
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
+  { icon: ClipboardList, label: 'Assessments', path: '/interviewer/assessments' },
 ];
 
 const Sidebar = ({ isOpen, onNavigate }) => {

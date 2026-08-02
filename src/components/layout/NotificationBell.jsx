@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Bell, CheckCheck, ChevronDown, Loader2 } from 'lucide-react';
@@ -30,6 +31,7 @@ const TYPE_LABELS = {
   INTERVIEW_POSTPONE_REQUESTED: 'Time Proposed',
   INTERVIEW_POSTPONE_REJECTED: 'Time Declined',
   INTERVIEW_POSTPONE_APPROVED: 'Time Accepted',
+  ASSESSMENT_REVIEW_ASSIGNED: 'Assessment',
 };
 
 const formatNotificationType = (type) => {
@@ -214,6 +216,7 @@ const NotificationSection = ({
 );
 
 const NotificationBell = () => {
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -245,6 +248,16 @@ const NotificationBell = () => {
 
   const handleNotificationClick = (notification) => {
     setExpandedId((current) => (current === notification.id ? null : notification.id));
+    if (
+      notification?.type === 'ASSESSMENT_REVIEW_ASSIGNED'
+      && notification?.relatedEntityId
+    ) {
+      if (!notification.read) {
+        markAsRead(notification.id);
+      }
+      setPanelOpen(false);
+      navigate(`/interviewer/feedback/${notification.relatedEntityId}`);
+    }
   };
 
   const handleMarkAsRead = (notificationId) => {
