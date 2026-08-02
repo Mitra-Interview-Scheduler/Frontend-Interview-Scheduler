@@ -1,10 +1,19 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { documentTypeAPI } from '@/services/catalogTypeAPI';
+
+const FALLBACK_DOCUMENT_TYPES = [
+  { code: 'CV', label: 'CV' },
+  { code: 'PROFILE', label: 'Profile Picture' },
+  { code: 'CERTIFICATE', label: 'Certificate' },
+  { code: 'PORTFOLIO', label: 'Portfolio' },
+  { code: 'OTHER', label: 'Other' },
+];
 
 export function DocumentDropzone({
   file,
@@ -17,7 +26,31 @@ export function DocumentDropzone({
   onImmediateUpload,
 }) {
   const [isDragging, setIsDragging] = useState(false);
+  const [typeOptions, setTypeOptions] = useState(FALLBACK_DOCUMENT_TYPES);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    documentTypeAPI.getActive()
+      .then((data) => {
+        if (cancelled) return;
+        const options = (Array.isArray(data) ? data : [])
+          .filter((item) => item?.code && item?.label)
+          .map((item) => ({ code: item.code, label: item.label }));
+        if (options.length > 0) {
+          setTypeOptions(options);
+          if (onTypeChange && !options.some((opt) => opt.code === type)) {
+            onTypeChange(options[0].code);
+          }
+        }
+      })
+      .catch(() => {
+        // Keep fallback options if catalog API is unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetPicker = () => {
     if (fileInputRef.current) {
@@ -105,11 +138,9 @@ export function DocumentDropzone({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="CV">CV</SelectItem>
-          <SelectItem value="PROFILE">Profile Picture</SelectItem>
-          <SelectItem value="CERTIFICATE">Certificate</SelectItem>
-          <SelectItem value="PORTFOLIO">Portfolio</SelectItem>
-          <SelectItem value="OTHER">Other</SelectItem>
+          {typeOptions.map((opt) => (
+            <SelectItem key={opt.code} value={opt.code}>{opt.label}</SelectItem>
+          ))}
         </SelectContent>
       </Select>
 

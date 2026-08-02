@@ -1,34 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Mail, Phone, User, CalendarClock, Video, ExternalLink } from 'lucide-react';
+import { CandidateAvatar } from '@/components/CandidateAvatar';
+import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Phone, User, UserCheck, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import  candidateAPI from '@/services/candidateAPI';
+import { feedbackAPI } from '@/services/feedbackAPI';
 
 import { availabilityAPI } from '@/services/availabilityAPI';
-import { feedbackAPI } from '@/services/feedbackAPI';
-import { getInitial } from '@/lib/personUtils';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 import ProposeTimeDialog from './ProposeTimeDialog';
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { formatDate, formatTimeRange, formatFriendlyDateTimeRange } = useFormattedDateTime();
   const [loading, setLoading] = useState(true);
   const [candidate, setCandidate] = useState(null);
@@ -65,6 +61,18 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
 
   const isCompleted = interviewDetails?.interviewStatus === InterviewScheduleStatus.COMPLETED
     || hasSubmittedFeedback;
+  const isPanelInterview = !!interviewDetails?.panelId;
+  const panelMembers = interviewDetails?.panelMembers || [];
+  const interviewCoordinatorName = interviewDetails?.interviewCoordinatorName || null;
+  const candidateCoordinatorName = candidate?.coordinatedHrName
+    || interviewDetails?.coordinatedHrName
+    || null;
+  const showPeopleSection = panelMembers.length > 0
+    || interviewCoordinatorName
+    || candidateCoordinatorName;
+  const canWithdrawPostpone = !!pendingPostpone
+    && (!pendingPostpone.requestedById || pendingPostpone.requestedById === user?.id);
+  const hasProposedTime = !!(pendingPostpone?.preferredStartDateTime && pendingPostpone?.preferredEndDateTime);
 
   const loadInterviewData = async () => {
     try {
@@ -102,7 +110,14 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
   };
 
   const handleWithdrawPostpone = async () => {
-    if (!pendingPostpone?.id) return;
+    if (!pendingPostpone?.id) {
+      toast({
+        title: 'Could not withdraw request',
+        description: 'Missing postpone request id. Refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setWithdrawingPostpone(true);
     try {
       await availabilityAPI.withdrawPostponeRequest(pendingPostpone.id);
@@ -111,12 +126,12 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
       setIsProposeDialogOpen(false);
       onOpenChange(false);
       toast({
-        title: 'Proposal declined',
-        description: 'Your time-change request was withdrawn. The original interview remains scheduled.',
+        title: hasProposedTime ? 'Proposal declined' : 'Request withdrawn',
+        description: 'Your postpone request was withdrawn. The original interview remains scheduled.',
       });
     } catch (err) {
       toast({
-        title: 'Could not decline proposal',
+        title: hasProposedTime ? 'Could not decline proposal' : 'Could not withdraw request',
         description: err.response?.data?.message || err.message,
         variant: 'destructive',
       });
@@ -136,13 +151,30 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
     : 'Review candidate information before starting the interview';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        // Keep session open while propose dialog is showing.
+        if (!nextOpen && (isProposeDialogOpen || withdrawingPostpone)) return;
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent
-        className={`max-w-2xl gap-0 p-0 m-4 overflow-hidden ${
-          isProposeDialogOpen || declineConfirmOpen
+        className={`max-w-5xl gap-0 p-0 m-4 overflow-hidden ${
+          isProposeDialogOpen
             ? 'pointer-events-none select-none opacity-60 blur-[6px]'
             : ''
         }`}
+        onPointerDownOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
+        onFocusOutside={(event) => {
+          if (isProposeDialogOpen) event.preventDefault();
+        }}
       >
         <DialogHeader className="px-5 py-4 shrink-0">
           <DialogTitle className="text-2xl">{dialogTitle}</DialogTitle>
@@ -170,10 +202,20 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                   <div className="flex items-start gap-2">
                     <CalendarClock className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
                     <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-semibold text-amber-900">Time change proposal pending</p>
+                      <p className="text-sm font-semibold text-amber-900">
+                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime
+                          ? 'Time change proposal pending'
+                          : 'Postpone request pending'}
+                      </p>
                       <p className="text-xs text-amber-800">
-                        Waiting for HR to accept or decline. You can withdraw this proposal anytime.
-                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime && (
+                        Waiting for HR to review.
+                        {pendingPostpone.requestedByName
+                          && pendingPostpone.requestedById !== user?.id && (
+                          <>
+                            {' '}Requested by <strong>{pendingPostpone.requestedByName}</strong>.
+                          </>
+                        )}
+                        {pendingPostpone.preferredStartDateTime && pendingPostpone.preferredEndDateTime ? (
                           <>
                             {' '}Proposed:{' '}
                             <strong>
@@ -183,6 +225,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                               )}
                             </strong>
                           </>
+                        ) : (
+                          <> No alternative time was proposed.</>
                         )}
                       </p>
                       {pendingPostpone.reason && (
@@ -190,27 +234,62 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       )}
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDeclineConfirmOpen(true)}
-                    disabled={withdrawingPostpone}
-                    className="border-amber-300 text-amber-900 hover:bg-amber-100"
-                  >
-                    Decline proposal
-                  </Button>
+                  {canWithdrawPostpone && (
+                    declineConfirmOpen ? (
+                      <div className="rounded-lg border border-amber-300 bg-white/80 p-3 space-y-3">
+                        <p className="text-sm font-medium text-amber-950">
+                          {hasProposedTime
+                            ? 'Decline this time proposal? The original interview stays scheduled.'
+                            : 'Withdraw this postpone request? The original interview stays scheduled.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeclineConfirmOpen(false)}
+                            disabled={withdrawingPostpone}
+                            className="border-amber-300 text-amber-900 hover:bg-amber-50"
+                          >
+                            No, keep it
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleWithdrawPostpone}
+                            disabled={withdrawingPostpone}
+                            className="bg-amber-600 text-white hover:bg-amber-700"
+                          >
+                            {withdrawingPostpone ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {hasProposedTime ? 'Declining…' : 'Withdrawing…'}</>
+                            ) : (
+                              hasProposedTime ? 'Yes, decline' : 'Yes, withdraw'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeclineConfirmOpen(true)}
+                        disabled={withdrawingPostpone}
+                        className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                      >
+                        {hasProposedTime ? 'Decline proposal' : 'Withdraw request'}
+                      </Button>
+                    )
+                  )}
                 </div>
               )}
 
-              {/* Candidate Profile Section */}
               {candidate || interviewDetails?.candidateName ? (
                 <div className="space-y-4 p-4">
                   <div className="flex items-start gap-4 pb-4 border-b">
-                    <Avatar className="h-16 w-16 border-2 border-primary">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold">
-                        {getInitial(displayCandidateName)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <CandidateAvatar
+                      candidate={candidate}
+                      name={displayCandidateName}
+                      className="h-16 w-16 border-2 border-primary"
+                      fallbackClassName="bg-gradient-to-br from-primary to-primary/70 text-white text-lg font-bold"
+                    />
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-bold text-gray-900">{displayCandidateName}</h3>
                       {candidate?.email ? (
@@ -226,6 +305,87 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                       )}
                     </div>
                   </div>
+
+                  {showPeopleSection && (
+                    <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 to-slate-50 p-4 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-sky-100 p-2 rounded-lg">
+                          <Users className="w-4 h-4 text-sky-700" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-sky-900">
+                            {isPanelInterview ? 'Panel interview' : 'People'}
+                          </h3>
+                          {isPanelInterview && panelMembers.length > 0 && (
+                            <p className="text-xs text-sky-700/80">
+                              {panelMembers.length} interviewer{panelMembers.length === 1 ? '' : 's'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {isPanelInterview && panelMembers.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700/70 mb-3">
+                            Panel members
+                          </p>
+                          <ul className="space-y-2">
+                            {panelMembers.map((member) => (
+                              <li
+                                key={member.interviewerId || member.interviewerName}
+                                className="flex items-center gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5"
+                              >
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(145deg,#0369a1,#0c4a6e)] text-[11px] font-semibold text-white">
+                                  {getInitials(member.interviewerName)}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-900 truncate">
+                                    {member.interviewerName}
+                                  </p>
+                                  {member.designationName && (
+                                    <p className="text-xs text-slate-500 truncate">
+                                      {member.designationName}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {(interviewCoordinatorName || candidateCoordinatorName) && (
+                        <div className={`grid gap-3 ${interviewCoordinatorName && candidateCoordinatorName ? 'sm:grid-cols-2' : ''}`}>
+                          {interviewCoordinatorName && (
+                            <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5">
+                              <div className="bg-sky-100 p-2 rounded-lg shrink-0">
+                                <UserCheck className="w-4 h-4 text-sky-700" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-sky-700">Interview Coordinator</p>
+                                <p className="text-sm font-semibold text-slate-900 truncate">
+                                  {interviewCoordinatorName}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {candidateCoordinatorName && (
+                            <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-white px-3 py-2.5">
+                              <div className="bg-sky-100 p-2 rounded-lg shrink-0">
+                                <User className="w-4 h-4 text-sky-700" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-sky-700">Candidate Coordinator</p>
+                                <p className="text-sm font-semibold text-slate-900 truncate">
+                                  {candidateCoordinatorName}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {interviewDetails && (
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-4">
@@ -368,7 +528,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               className="gap-2"
             >
               <CalendarClock className="w-4 h-4" />
-              Propose a time
+              {isPanelInterview ? 'Propose / Postpone' : 'Propose a time'}
             </Button>
           )}
           <Button onClick={handleStartInterview} disabled={loading || !interviewScheduleId} className="gap-2">
@@ -377,53 +537,18 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
           </Button>
         </DialogFooter>
       </DialogContent>
+    </Dialog>
 
       <ProposeTimeDialog
         open={isProposeDialogOpen}
         onOpenChange={setIsProposeDialogOpen}
         onSuccess={() => {
-          setIsProposeDialogOpen(false);
-          loadInterviewData();
+          onOpenChange(false);
         }}
         interviewScheduleId={interviewScheduleId}
         currentInterview={interviewDetails}
       />
-
-      <AlertDialog
-        open={declineConfirmOpen}
-        onOpenChange={(nextOpen) => {
-          if (withdrawingPostpone) return;
-          setDeclineConfirmOpen(nextOpen);
-        }}
-      >
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Decline time proposal?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This withdraws your proposed time. The original interview stays scheduled.
-              HR will no longer see a pending time-change request.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={withdrawingPostpone}>No</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={withdrawingPostpone}
-              onClick={(event) => {
-                event.preventDefault();
-                handleWithdrawPostpone();
-              }}
-              className="bg-amber-600 text-white hover:bg-amber-700"
-            >
-              {withdrawingPostpone ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Declining…</>
-              ) : (
-                'Yes, decline'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Dialog>
+    </>
   );
 }
 

@@ -109,6 +109,37 @@ export const INTERVIEW_TYPE_BY_ROUND_KEY = Object.freeze({
   [MasterStatus.HR_ROUND]: InterviewType.HR,
 });
 
+/** True for system and Admin-created interview round stages (e.g. MANAGER_INTERVIEW_ROUND). */
+export const isInterviewRoundStatusKey = (statusKey) => {
+  const key = String(statusKey || '').trim().toUpperCase();
+  if (!key) return false;
+  if (REPEATABLE_ROUND_KEYS.has(key)) return true;
+  return key.endsWith('_ROUND');
+};
+
+export const isAppendablePipelineStepKey = (statusKey) => {
+  const key = String(statusKey || '').trim().toUpperCase();
+  if (!key) return false;
+  if (APPENDABLE_PIPELINE_STEP_KEYS.has(key)) return true;
+  return key.endsWith('_ROUND');
+};
+
+export const isInterviewStageStatusKey = (statusKey) => {
+  const key = String(statusKey || '').trim().toUpperCase();
+  if (!key) return false;
+  if (INTERVIEW_STAGE_KEYS.has(key)) return true;
+  return key.endsWith('_ROUND');
+};
+
+/** Map a pipeline round key back to an interview type code. */
+export const interviewTypeCodeFromRoundKey = (roundKey) => {
+  const key = String(roundKey || '').trim().toUpperCase();
+  if (!key) return null;
+  if (INTERVIEW_TYPE_BY_ROUND_KEY[key]) return INTERVIEW_TYPE_BY_ROUND_KEY[key];
+  if (key.endsWith('_ROUND')) return key.slice(0, -'_ROUND'.length);
+  return null;
+};
+
 export const ACTIVE_PANEL_REQUEST_STATUSES = new Set([
   InterviewScheduleStatus.SCHEDULED,
   InterviewRequestStatus.ACCEPTED,
@@ -189,17 +220,34 @@ export const getInterviewStatusMeta = (status) => (
 
 export const normalizeInterviewType = (value) => {
   const normalized = String(value || '').trim().toUpperCase();
-  return normalized === InterviewType.HR ? InterviewType.HR : InterviewType.TECHNICAL;
+  if (!normalized) return InterviewType.TECHNICAL;
+  return normalized;
 };
 
-export const resolveRoundKeyForInterview = (request) => (
-  ROUND_KEY_BY_INTERVIEW_TYPE[normalizeInterviewType(request?.interviewType)]
+export const isHrInterviewType = (interviewType) => (
+  normalizeInterviewType(interviewType) === InterviewType.HR
 );
 
+export const resolveRoundKeyForInterview = (request) => {
+  const code = normalizeInterviewType(request?.interviewType);
+  if (!code) return undefined;
+  if (ROUND_KEY_BY_INTERVIEW_TYPE[code]) return ROUND_KEY_BY_INTERVIEW_TYPE[code];
+  // Matches backend InterviewTypeService.createRoundMasterStep: CODE → CODE_ROUND
+  return code.endsWith('_ROUND') ? code : `${code}_ROUND`;
+};
+
 export const formatInterviewTypeLabel = (interviewType) => {
-  if (normalizeInterviewType(interviewType) === InterviewType.HR) return 'HR Interview';
-  if (normalizeInterviewType(interviewType) === InterviewType.TECHNICAL) return 'Technical Interview';
-  return 'Interview';
+  const code = String(interviewType || '').trim().toUpperCase();
+  if (!code) return 'Interview';
+  if (code === InterviewType.HR) return 'HR Interview';
+  if (code === InterviewType.TECHNICAL) return 'Technical Interview';
+  // Custom Admin-defined types: title-case the code (e.g. MANAGER -> Manager,
+  // ASSESSMENT_ROUND -> Assessment Round) so it renders sensibly everywhere.
+  return code
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
 };
 
 export const FEEDBACK_INTERVIEW_TYPE_OPTIONS = [

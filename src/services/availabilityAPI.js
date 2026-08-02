@@ -73,14 +73,27 @@ export const availabilityAPI = {
     proposedEndDateTime,
     reason,
   }) => {
+    const payload = {
+      reason: reason?.trim()
+        || undefined,
+    };
+    if (proposedStartDateTime && proposedEndDateTime) {
+      payload.preferredStartDateTime = formatLocalDateTime(proposedStartDateTime);
+      payload.preferredEndDateTime = formatLocalDateTime(proposedEndDateTime);
+      if (!payload.reason) {
+        payload.reason = 'Interviewer proposed an alternative time for this scheduled interview.';
+      }
+    }
     const response = await api.post(
       `/interviewer/interviews/schedules/${interviewScheduleId}/postpone-requests`,
-      {
-        reason: reason?.trim()
-          || 'Interviewer proposed an alternative time for this scheduled interview.',
-        preferredStartDateTime: formatLocalDateTime(proposedStartDateTime),
-        preferredEndDateTime: formatLocalDateTime(proposedEndDateTime),
-      },
+      payload,
+    );
+    return response.data;
+  },
+
+  getPanelCommonFreeWindows: async (interviewScheduleId) => {
+    const response = await api.get(
+      `/interviewer/interviews/schedules/${interviewScheduleId}/panel-common-windows`,
     );
     return response.data;
   },

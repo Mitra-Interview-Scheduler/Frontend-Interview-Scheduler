@@ -1,13 +1,18 @@
 import React from 'react';
 import { Check, X, Minus } from 'lucide-react';
-import { normalizeCandidateSteps, applyCancelledInterviewOverrides, sortPipelineStepsByInterviewChronology } from '@/lib/candidateSteps';
+import { normalizeCandidateSteps, applyCancelledInterviewOverrides, applyAssessmentReceivedDisplay, resolveRoundKeyFromReceivedStatus, sortPipelineStepsByInterviewChronology } from '@/lib/candidateSteps';
 import { PipelineStepStatus } from '@/lib/statusConstants';
 import '@/styles/StepProgressIndicator.css';
 
 const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] }) => {
+  const displayStatus = resolveRoundKeyFromReceivedStatus(currentStatus) || currentStatus;
   const statusSteps = sortPipelineStepsByInterviewChronology(
-    applyCancelledInterviewOverrides(
-      normalizeCandidateSteps(steps),
+    applyAssessmentReceivedDisplay(
+      applyCancelledInterviewOverrides(
+        normalizeCandidateSteps(steps),
+        interviewRequests,
+        displayStatus,
+      ),
       interviewRequests,
       currentStatus,
     ),
@@ -17,13 +22,13 @@ const StepProgressIndicator = ({ currentStatus, steps, interviewRequests = [] })
     (step) => step.stepStatus === PipelineStepStatus.CURRENT && !step.cancelledInterview,
   );
   const currentStatusObj = currentPipelineStep
-    || statusSteps.find((s) => s.key === currentStatus);
+    || statusSteps.find((s) => s.key === displayStatus);
 
   const displaySteps = statusSteps;
 
   const currentIndex = currentPipelineStep
     ? displaySteps.findIndex((s) => s.id === currentPipelineStep.id)
-    : displaySteps.findIndex((s) => s.key === currentStatus);
+    : displaySteps.findIndex((s) => s.key === displayStatus);
 
   if (displaySteps.length === 0) {
     return null;

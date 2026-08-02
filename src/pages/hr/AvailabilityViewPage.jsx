@@ -48,6 +48,7 @@ import { localizer, formatLocalDateTime, formatInputDate, generateTimeOptions, p
 import MatchingInterviewerDetailDialog, { EMPTY_MATCHING_INTERVIEWERS } from './components/MatchingInterviewerDetailDialog';
 import MatchingPanelDetailDialog from './components/MatchingPanelDetailDialog';
 import ScheduleConflictDialog from './components/ScheduleConflictDialog';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
 import { InterviewScheduleStatus, InterviewType, SlotStatus, isSchedulableCandidate } from '@/lib/statusConstants';
 import { env } from '@/config/env';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -66,7 +67,9 @@ const CALENDAR_PAGE_SIZES = {
 const normalizeTechName = (name) => (name ?? '').trim().toLowerCase();
 
 const resolveInterviewType = (...values) => {
-  const match = values.find((value) => value === InterviewType.HR || value === InterviewType.TECHNICAL);
+  // Accept any non-blank interview type code (system TECHNICAL/HR or Admin-defined
+  // custom types like MANAGER/ASSESSMENT); fall back to TECHNICAL when none set.
+  const match = values.find((value) => typeof value === 'string' && value.trim() !== '');
   return match || InterviewType.TECHNICAL;
 };
 
@@ -121,6 +124,7 @@ const AvailabilityViewPage = () => {
   const [designationsForSelectedTier, setDesignationsForSelectedTier] = useState([]);
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
+  const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
   const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
   const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
@@ -368,6 +372,9 @@ const AvailabilityViewPage = () => {
       if (incomingFilter.departmentId) {
         setFilterDept([incomingFilter.departmentId]);
         setSelectedDeptForDesignation(incomingFilter.departmentId.toString());
+      } else if (incomingFilter.departmentIds?.length) {
+        setFilterDept(incomingFilter.departmentIds);
+        setSelectedDeptForDesignation(String(incomingFilter.departmentIds[0]));
       }
 
       if (incomingFilter.technologyIds?.length) {
@@ -376,6 +383,10 @@ const AvailabilityViewPage = () => {
 
       if (incomingFilter.domainIds?.length) {
         setFilterDomain(incomingFilter.domainIds);
+      }
+
+      if (incomingFilter.minYearsOfExperience != null) {
+        setMinExperience(String(incomingFilter.minYearsOfExperience));
       }
     }
 
@@ -868,7 +879,7 @@ const AvailabilityViewPage = () => {
             : 'All panel interviewer slots restored. Interviewers notified.',
         });
       } else {
-        if (!requestId) throw new Error('No request ID on this slot — cannot cancel from calendar.');
+        if (!requestId) throw new Error('No request ID on this slot. Cannot cancel from calendar.');
         await hrAvailabilityAPI.cancelInterviewRequest(requestId);
         toast({
           title: '✓ Interview cancelled',
@@ -888,19 +899,27 @@ const AvailabilityViewPage = () => {
   const handleApprovePostpone = async () => {
     const postponeRequestId = cancelTarget?.resource?.pendingPostponeRequestId;
     if (!postponeRequestId) return;
+    const hasProposedTime = !!(
+      cancelTarget?.resource?.pendingPostponePreferredStart
+      && cancelTarget?.resource?.pendingPostponePreferredEnd
+    );
     setPostponeActionLoading(true);
     try {
       await hrAvailabilityAPI.approvePostponeRequest(postponeRequestId);
       toast({
-        title: 'Proposed time accepted',
-        description: 'The previous interview was cancelled and the new time was scheduled.',
+        title: hasProposedTime ? 'Proposed time accepted' : 'Postpone request acknowledged',
+        description: hasProposedTime
+          ? (cancelTarget?.resource?.panelId
+            ? 'The panel was cancelled and rescheduled at the proposed time.'
+            : 'The previous interview was cancelled and the new time was scheduled.')
+          : 'The interviewer was notified. The current booking stays until you reschedule.',
       });
       setCancelDialogOpen(false);
       setCancelTarget(null);
       await refreshCalendar();
     } catch (err) {
       toast({
-        title: 'Could not accept proposed time',
+        title: hasProposedTime ? 'Could not accept proposed time' : 'Could not acknowledge request',
         description: err.response?.data?.message || err.message,
         variant: 'destructive',
       });
@@ -1206,6 +1225,16 @@ const AvailabilityViewPage = () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
+    const resolvedType = resolveInterviewType(requestForm.interviewType, interviewType);
+    const typeMeta = (availableInterviewTypes || []).find((t) => t.code === resolvedType);
+    if (typeMeta && typeMeta.requiresInterviewer === false) {
+      toast({
+        title: 'Assessment type',
+        description: 'This type does not use interviewer slots. Record it from Schedule Interview on the candidate page.',
+        variant: 'destructive',
+      });
+      return;
+    }
     // Privilege gate
     if (singlePrivilegeError) {
       toast({ title: '⛔ Insufficient interviewer privilege', description: singlePrivilegeError, variant: 'destructive' }); return;
@@ -1275,13 +1304,23 @@ const AvailabilityViewPage = () => {
     if (!requestForm.candidateId) {
       toast({ title: 'Select a candidate', variant: 'destructive' }); return;
     }
+    const resolvedPanelType = resolveInterviewType(requestForm.interviewType, interviewType);
+    const panelTypeMeta = (availableInterviewTypes || []).find((t) => t.code === resolvedPanelType);
+    if (panelTypeMeta && panelTypeMeta.requiresInterviewer === false) {
+      toast({
+        title: 'Assessment type',
+        description: 'Panel booking is not used for assessment types. Record the assessment from the candidate Schedule dialog.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (panelSlots.length < 1) {
       toast({ title: 'Select at least 1 interviewer', variant: 'destructive' }); return;
     }
     if (panelTimeOptions.length === 0) {
       toast({ title: 'No overlapping time', variant: 'destructive' }); return;
     }
-    // Privilege gate — block if any panel interviewer is under-qualified
+    // Privilege gate: block if any panel interviewer is under-qualified
     if (panelPrivilegeErrors.length > 0) {
       toast({
         title: '⛔ Insufficient interviewer privilege',
@@ -1321,6 +1360,10 @@ const AvailabilityViewPage = () => {
         });
         closeConflictDialog();
         setPanelDialogOpen(false);
+        setPanelMode(false);
+        setMatchingPanelMode(false);
+        setSelectedMatchPanelIds([]);
+        setMatchingPanelDetailOpen(false);
         setPanelSlots([]);
         setPanelBookStartOverride('');
         setPanelBookEndOverride('');
@@ -1525,7 +1568,31 @@ const calendarSlotPropGetter = useCallback((date) => {
     c.name.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(candidateSearchTerm.toLowerCase()));
 
-  const countableEvents = events.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
+  const hasActiveInterviewerFilters = useMemo(() => (
+    filterDept.length > 0
+    || filterTech.length > 0
+    || filterDomain.length > 0
+    || Boolean(minExperience)
+    || Boolean(selectedDeptForDesignation)
+    || Boolean(selectedTierInDept)
+    || Boolean(minDesignationLevel)
+  ), [
+    filterDept,
+    filterTech,
+    filterDomain,
+    minExperience,
+    selectedDeptForDesignation,
+    selectedTierInDept,
+    minDesignationLevel,
+  ]);
+
+  // When interviewer filters are active, hide booked slots so HR only sees free matches.
+  const calendarEvents = useMemo(() => {
+    if (!hasActiveInterviewerFilters) return events;
+    return events.filter((e) => e.resource?.status !== SlotStatus.BOOKED);
+  }, [events, hasActiveInterviewerFilters]);
+
+  const countableEvents = calendarEvents.filter((e) => !isEventBeforeDateFilter(e, calendarLockStart));
   const availableCount = countableEvents.filter((e) => e.resource?.status === SlotStatus.AVAILABLE).length;
   const postponeCount = countableEvents.filter(
     (e) => e.resource?.status === SlotStatus.BOOKED
@@ -1606,7 +1673,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   : hasFreeTime ? 'text-emerald-700' : 'text-muted-foreground'
               }`}
               >
-                {[match.designation, match.department].filter(Boolean).join(' · ') || 'Interviewer'}
+                {[match.designation, match.department].filter(Boolean).join(', ') || 'Interviewer'}
               </p>
               {match.email && (
                 <p className={`text-[10px] truncate mt-0.5 ${
@@ -1625,7 +1692,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               }`}
               >
                 {hasFreeTime ? 'Free within a week' : 'No free time this week'}
-                {' · '}
+                {', '}
                 {match.totalMatches} match{match.totalMatches === 1 ? '' : 'es'}
               </p>
             </div>
@@ -1678,8 +1745,16 @@ const calendarSlotPropGetter = useCallback((date) => {
             <SelectValue placeholder="Select interview type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
-            <SelectItem value="HR">HR Interview</SelectItem>
+            {availableInterviewTypes.length > 0 ? (
+              availableInterviewTypes.map((t) => (
+                <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
+              ))
+            ) : (
+              <>
+                <SelectItem value="TECHNICAL">Technical Interview</SelectItem>
+                <SelectItem value="HR">HR Interview</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
         
@@ -1879,7 +1954,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">Interviewer Availability</h1>
             {/* <p className="text-muted-foreground text-lg">
-              View and book interviewer availability · each color = one interviewer
+              View and book interviewer availability. Each color is one interviewer.
             </p> */}
           </div>
          
@@ -2088,7 +2163,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <SelectTrigger><SelectValue placeholder={selectedDeptForDesignation ? 'Select Tier' : 'Select Department First'} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ANY">Any Tier</SelectItem>
-                    {tiersForSelectedDept.map((t) => <SelectItem key={t.id} value={t.id.toString()}>Tier {t.tierOrder} – {t.name}</SelectItem>)}
+                    {tiersForSelectedDept.map((t) => <SelectItem key={t.id} value={t.id.toString()}>Tier {t.tierOrder}: {t.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -2101,7 +2176,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <SelectTrigger><SelectValue placeholder={selectedTierInDept ? 'Select Level' : 'Select Tier First'} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ANY">Any Level</SelectItem>
-                    {designationsForSelectedTier.map((d) => <SelectItem key={d.id} value={d.levelOrder.toString()}>Level {d.levelOrder} – {d.name}</SelectItem>)}
+                    {designationsForSelectedTier.map((d) => <SelectItem key={d.id} value={d.levelOrder.toString()}>Level {d.levelOrder}: {d.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -2130,22 +2205,22 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <span className="text-sm font-semibold text-muted-foreground">Slots Shown </span>
                 <div className="flex gap-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-indigo-500" />
-                    <span className="text-sm"><span className="font-bold text-indigo-600">{availableCount}</span><span className="text-muted-foreground ml-1">available</span></span>
+                    <div className="w-3 h-3 rounded-full bg-sky-600" />
+                    <span className="text-sm"><span className="font-bold text-sky-700">{availableCount}</span><span className="text-muted-foreground ml-1">available</span></span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-sm"><span className="font-bold text-emerald-600">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
+                    <div className="w-3 h-3 rounded-full bg-indigo-600" />
+                    <span className="text-sm"><span className="font-bold text-indigo-700">{bookedCount}</span><span className="text-muted-foreground ml-1">booked</span></span>
                   </div>
                   {postponeCount > 0 && (
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-500" />
-                      <span className="text-sm"><span className="font-bold text-amber-600">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
+                      <div className="w-3 h-3 rounded-full bg-orange-600" />
+                      <span className="text-sm"><span className="font-bold text-orange-700">{postponeCount}</span><span className="text-muted-foreground ml-1">time change</span></span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-700" />
-                    <span className="text-sm"><span className="font-bold text-emerald-800">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
+                    <div className="w-3 h-3 rounded-full bg-slate-500" />
+                    <span className="text-sm"><span className="font-bold text-slate-600">{completedCount}</span><span className="text-muted-foreground ml-1">completed</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-slate-400" />
@@ -2326,8 +2401,10 @@ const calendarSlotPropGetter = useCallback((date) => {
               </CardTitle>
               <CardDescription>
                 {panelMode
-                  ? 'Click AVAILABLE slots to build a panel — selected slots show a ✓ badge. Overlap window is calculated automatically.'
-                  : 'Each color = a different interviewer. Click AVAILABLE to schedule · Click BOOKED (green) to cancel & restore.'}
+                  ? 'Click AVAILABLE slots to build a panel. Selected slots show a check badge. Overlap window is calculated automatically.'
+                  : hasActiveInterviewerFilters
+                    ? 'Filters active. Showing available slots only. Clear filters to see booked interviews.'
+                    : 'Each color is a different interviewer. Click AVAILABLE to schedule. Click BOOKED (green) to cancel and restore.'}
               </CardDescription>
             </div>
 
@@ -2422,7 +2499,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                   <Calendar
                     localizer={localizer}
                     components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
-                    events={events}
+                    events={calendarEvents}
                     date={calendarDate}
                     onNavigate={(nextDate) => {
                       const nextDay = startOfDay(nextDate);
@@ -2490,10 +2567,21 @@ const calendarSlotPropGetter = useCallback((date) => {
             </DialogTitle>
             <DialogDescription>
               {cancelTarget?.resource?.hasPendingPostponeRequest ? (
-                <>
-                  Accepting will <strong>cancel the current interview</strong> and schedule the
-                  interviewer&apos;s proposed time. Declining keeps the original booking.
-                </>
+                cancelTarget.resource.pendingPostponePreferredStart
+                && cancelTarget.resource.pendingPostponePreferredEnd ? (
+                  <>
+                    Accepting will <strong>cancel the current interview</strong> and schedule the
+                    proposed time
+                    {cancelTarget.resource.panelId ? ' for the whole panel' : ''}.
+                    Declining keeps the original booking.
+                  </>
+                ) : (
+                  <>
+                    This is a postpone request <strong>without a proposed time</strong>.
+                    Acknowledge to clear the request (booking stays), or cancel the interview
+                    and schedule a new time manually.
+                  </>
+                )
               ) : cancelTarget?.resource?.panelId ? (
                 <>
                   This is a <strong>panel interview</strong>. Cancelling will restore slots for{' '}
@@ -2513,14 +2601,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
                   <p className="font-semibold text-sm text-amber-900 flex items-center gap-2">
                     <CalendarClock className="w-4 h-4 shrink-0" />
-                    Time change requested
+                    {cancelTarget.resource.pendingPostponePreferredStart
+                      && cancelTarget.resource.pendingPostponePreferredEnd
+                      ? 'Time change requested'
+                      : 'Postpone requested (no new time)'}
                   </p>
                   <p className="text-xs text-amber-800">
                     Current:{' '}
                     <strong>{formatDateTimeRange(cancelTarget.start, cancelTarget.end)}</strong>
                   </p>
                   {cancelTarget.resource.pendingPostponePreferredStart
-                    && cancelTarget.resource.pendingPostponePreferredEnd && (
+                    && cancelTarget.resource.pendingPostponePreferredEnd ? (
                     <p className="text-xs text-amber-800">
                       Proposed:{' '}
                       <strong>
@@ -2529,6 +2620,17 @@ const calendarSlotPropGetter = useCallback((date) => {
                           new Date(cancelTarget.resource.pendingPostponePreferredEnd),
                         )}
                       </strong>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-800">
+                      No alternative time was proposed. Reschedule manually after acknowledging or cancelling.
+                    </p>
+                  )}
+                  {cancelTarget.resource.panelId
+                    && cancelTarget.resource.pendingPostponeRequestedByName && (
+                    <p className="text-xs text-amber-800">
+                      Requested by:{' '}
+                      <strong>{cancelTarget.resource.pendingPostponeRequestedByName}</strong>
                     </p>
                   )}
                   {cancelTarget.resource.pendingPostponeReason && (
@@ -2546,22 +2648,27 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <p className="font-semibold text-sm">
                   {cancelTarget.resource.panelId ? 'Panel Interview' : 'Booked Interview'}
                 </p>
-                <p className="text-sm">Interviewer: <strong>{cancelTarget.resource.interviewer}</strong></p>
-                {cancelTarget.resource.panelId && (
-                  <p className="text-sm text-red-700">
-                    Also cancelling:{' '}
+                {cancelTarget.resource.panelId ? (
+                  <p className="text-sm">
+                    Panel Members:{' '}
                     <strong>
-                      {events
-                        .filter(
-                          (e) =>
-                            e.resource?.panelId === cancelTarget.resource.panelId
-                            && e.resource?.status === SlotStatus.BOOKED
-                            && e.id !== cancelTarget.id,
-                        )
-                        .map((e) => e.resource.interviewer)
-                        .filter(Boolean)
-                        .join(', ') || 'other panel interviewers'}
+                      {[
+                        ...new Set(
+                          events
+                            .filter(
+                              (e) =>
+                                e.resource?.panelId === cancelTarget.resource.panelId
+                                && e.resource?.status === SlotStatus.BOOKED,
+                            )
+                            .map((e) => e.resource.interviewer)
+                            .filter(Boolean),
+                        ),
+                      ].join(', ') || cancelTarget.resource.interviewer}
                     </strong>
+                  </p>
+                ) : (
+                  <p className="text-sm">
+                    Interviewer: <strong>{cancelTarget.resource.interviewer}</strong>
                   </p>
                 )}
                 {cancelTarget.resource.candidateName && (
@@ -2612,7 +2719,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                     disabled={cancelling || postponeActionLoading}
                     className="w-full border-amber-300 text-amber-900 hover:bg-amber-50"
                   >
-                    {postponeActionLoading ? 'Working…' : 'Decline Proposal'}
+                    {postponeActionLoading
+                      ? 'Working…'
+                      : (cancelTarget.resource.pendingPostponePreferredStart
+                        && cancelTarget.resource.pendingPostponePreferredEnd
+                        ? 'Decline Proposal'
+                        : 'Decline Request')}
                   </Button>
                   <Button
                     onClick={handleApprovePostpone}
@@ -2620,9 +2732,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                     className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
                   >
                     {postponeActionLoading ? (
-                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Accepting…</>
-                    ) : (
+                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Working…</>
+                    ) : cancelTarget.resource.pendingPostponePreferredStart
+                      && cancelTarget.resource.pendingPostponePreferredEnd ? (
                       <><CheckCircle2 className="w-4 h-4 shrink-0" /> Accept Proposed Time</>
+                    ) : (
+                      <><CheckCircle2 className="w-4 h-4 shrink-0" /> Acknowledge Request</>
                     )}
                   </Button>
                 </div>
@@ -2679,8 +2794,8 @@ const calendarSlotPropGetter = useCallback((date) => {
           setRequestDialogOpen(open);
         }}
       >
-        <DialogContent >
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] gap-0 p-0 m-4 overflow-hidden">
+          <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Send className="w-6 h-6 text-primary" /> Schedule Interview
             </DialogTitle>
@@ -2688,7 +2803,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               Schedule an interview with {selectedSlot?.resource.interviewer}
             </DialogDescription> */}
           </DialogHeader>
-          <DialogBody>
+          <DialogBody className="px-6 py-4">
           {selectedSlot && (
             <div className="space-y-2">
               {/* Interviewer info */}
@@ -2766,7 +2881,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     <div>
                       <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">Choose Interview Window</p>
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                        Book part of the slot — unused time stays available. Slots are automatically merged when cancelled.
+                        Book part of the slot. Unused time stays available. Slots are automatically merged when cancelled.
                       </p>
                     </div>
                   </div>
@@ -2830,7 +2945,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                         <div className="space-y-1 pt-1 border-t border-red-200/80">
                           <p className="font-semibold flex items-center gap-1 text-red-800">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            Calendar conflict detected — review before scheduling
+                            Calendar conflict detected. Review before scheduling
                           </p>
                           {previewConflictEvents.map((event) => (
                             <p
@@ -2840,7 +2955,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                               <strong>{event.title}</strong>
                               {': '}
                               {formatTimeRange(event.startDateTime, event.endDateTime)}
-                              {event.calendarName ? ` · ${event.calendarName}` : ''}
+                              {event.calendarName ? `, ${event.calendarName}` : ''}
                             </p>
                           ))}
                         </div>
@@ -2860,7 +2975,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           )}
           </DialogBody>
 
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4">
             <Button variant="outline" onClick={() => setRequestDialogOpen(false)} disabled={scheduling}>
               Cancel
             </Button>
@@ -2870,7 +2985,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               className={`gap-2${hasSlotWindowConflict ? ' bg-red-600 hover:bg-red-700 text-white' : ''}`}
               title={
                 hasSlotWindowConflict
-                  ? 'Calendar conflict detected — click to review and proceed'
+                  ? 'Calendar conflict detected. Click to review and proceed'
                   : singlePrivilegeError
                     ? 'Interviewer privilege too low for this candidate'
                     : undefined
@@ -2894,16 +3009,16 @@ const calendarSlotPropGetter = useCallback((date) => {
           setPanelDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] gap-0 p-0 m-4 overflow-hidden">
+          <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Users className="w-6 h-6 text-sky-600" /> Schedule Panel Interview
             </DialogTitle>
             <DialogDescription>
-              One candidate — {panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''} simultaneously
+              One candidate with {panelSlots.length} interviewer{panelSlots.length !== 1 ? 's' : ''} simultaneously
             </DialogDescription>
           </DialogHeader>
-        <DialogBody>
+        <DialogBody className="px-6 py-4">
           <div className="space-y-2">
             {/* Panel interviewers */}
             <Card className="border-sky-200 bg-sky-50 dark:bg-sky-950/20">
@@ -2928,7 +3043,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                               {privErr && <ShieldAlert className="w-3.5 h-3.5 text-red-500" />}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {ps.slot.resource.department} · Slot: {formatTimeRange(ps.slot.start, ps.slot.end)}
+                              {ps.slot.resource.department}, Slot: {formatTimeRange(ps.slot.start, ps.slot.end)}
                               {ps.slot.resource.interviewerTierOrder != null && (
                                 <span className="ml-1 text-indigo-600">(Tier {ps.slot.resource.interviewerTierOrder})</span>
                               )}
@@ -3018,7 +3133,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                           <div className="space-y-1 pt-1 border-t border-red-200/80">
                             <p className="font-semibold flex items-center gap-1 text-red-800">
                               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                              Calendar conflict detected — review before scheduling
+                              Calendar conflict detected. Review before scheduling
                             </p>
                             {previewConflictEvents.map((event) => (
                               <p
@@ -3028,7 +3143,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                                 <strong>{event.interviewerName}:</strong> {event.title}
                                 {': '}
                                 {formatTimeRange(event.startDateTime, event.endDateTime)}
-                                {event.calendarName ? ` · ${event.calendarName}` : ''}
+                                {event.calendarName ? `, ${event.calendarName}` : ''}
                               </p>
                             ))}
                           </div>
@@ -3048,7 +3163,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             {renderCandidateSection(panelPrivilegeErrors.length > 0 ? panelPrivilegeErrors : null)}
           </div>
         </DialogBody>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4">
             <Button variant="outline" onClick={() => setPanelDialogOpen(false)} disabled={scheduling}>
               Cancel
             </Button>
@@ -3067,7 +3182,7 @@ const calendarSlotPropGetter = useCallback((date) => {
               }
               title={
                 hasSlotWindowConflict
-                  ? 'Calendar conflict detected — click to review and proceed'
+                  ? 'Calendar conflict detected. Click to review and proceed'
                   : panelPrivilegeErrors.length > 0
                     ? 'One or more interviewers have insufficient privilege'
                     : undefined

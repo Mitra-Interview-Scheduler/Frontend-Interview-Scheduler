@@ -4,7 +4,14 @@ import {
   getInterviewStatusMeta,
 } from '@/lib/statusConstants';
 
-const hasCandidateInterviewRecord = (request) => Boolean(request?.interviewScheduleId);
+const hasCandidateInterviewRecord = (request) => {
+  if (!request) return false;
+  if (request.interviewScheduleId || request.interviewStatus || request.scheduledStartDateTime) {
+    return true;
+  }
+  // Assessment-style requests may be accepted with a due window but no interviewer slot.
+  return request.status === InterviewRequestStatus.ACCEPTED && Boolean(request.preferredStartDateTime);
+};
 
 const getInterviewSortTime = (request) => {
   if (request?.createdAt) {

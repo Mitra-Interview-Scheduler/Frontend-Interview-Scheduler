@@ -19,6 +19,7 @@ import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
+import { useInterviewTypes } from '@/hooks/useInterviewTypes';
 import { isObligatoryFormQuestion } from '@/lib/feedbackResponseKeys';
 
 const QUESTION_TYPES = [
@@ -95,6 +96,10 @@ const FeedbackQuestionsPage = () => {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
   const [selectedDesignationIds, setSelectedDesignationIds] = useState([]);
   const [selectedInterviewType, setSelectedInterviewType] = useState('');
+  const { interviewTypes: dynamicInterviewTypes } = useInterviewTypes(true);
+  const interviewTypeOptions = dynamicInterviewTypes.length > 0
+    ? dynamicInterviewTypes.map((t) => ({ value: t.code, label: t.label }))
+    : FEEDBACK_INTERVIEW_TYPE_OPTIONS;
   const [departmentDesignations, setDepartmentDesignations] = useState([]);
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -503,7 +508,7 @@ const FeedbackQuestionsPage = () => {
                           <SelectValue placeholder="Select interview type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {FEEDBACK_INTERVIEW_TYPE_OPTIONS.map((option) => (
+                          {interviewTypeOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>
@@ -593,7 +598,7 @@ const FeedbackQuestionsPage = () => {
                       <div className="flex flex-wrap gap-2">
                         {selectedInterviewType && (
                           <Badge variant="outline">
-                            {FEEDBACK_INTERVIEW_TYPE_OPTIONS.find((option) => option.value === selectedInterviewType)?.label || selectedInterviewType}
+                            {interviewTypeOptions.find((option) => option.value === selectedInterviewType)?.label || selectedInterviewType}
                           </Badge>
                         )}
                         {selectedDepartmentId && (

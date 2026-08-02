@@ -15,6 +15,9 @@ const CompleteInterviewDialog = ({
   onOpenChange,
   onConfirm,
   loading = false,
+  title = 'Complete Interview',
+  description = 'Confirm that this interview is finished. Submitted feedback will be locked and shown on the candidate profile. This action cannot be undone.',
+  confirmLabel = 'Confirm Complete',
 }) => {
   const handleOpenChange = (nextOpen) => {
     if (loading) return;
@@ -27,11 +30,10 @@ const CompleteInterviewDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-emerald-700">
             <CheckCircle2 className="w-5 h-5" />
-            Complete Interview
+            {title}
           </DialogTitle>
           <DialogDescription>
-            Confirm that this interview is finished. Submitted feedback will be locked and shown on the
-            candidate profile. This action cannot be undone.
+            {description}
           </DialogDescription>
         </DialogHeader>
 
@@ -56,7 +58,7 @@ const CompleteInterviewDialog = ({
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4" />
-                Confirm Complete
+                {confirmLabel}
               </>
             )}
           </Button>

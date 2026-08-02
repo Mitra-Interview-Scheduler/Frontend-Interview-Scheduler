@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 import { 
   LayoutDashboard, Users, Calendar, Settings, 
   UserCheck, BarChart3, Clock, FileText, 
-  Shield, Briefcase, Bell, ChevronDown, MessageSquare, Globe2
+  Shield, Briefcase, Bell, ChevronDown, MessageSquare, Globe2, ListChecks, ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,6 +17,8 @@ const adminLinks = [
   { icon: Shield, label: 'Designations', path: '/admin/designations' },
   { icon: Briefcase, label: 'Technologies', path: '/admin/technologies' },
   { icon: Globe2, label: 'Domains', path: '/admin/domains' },
+  { icon: ListChecks, label: 'Interview Types', path: '/admin/interview-types' },
+  { icon: FileText, label: 'Document & Resource Types', path: '/admin/catalog-types' },
   // { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
   // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
@@ -33,6 +35,7 @@ const hrLinks = [
 const interviewerLinks = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/interviewer/dashboard' },
   { icon: Calendar, label: 'My Availability', path: '/interviewer/availability' },
+  { icon: ClipboardList, label: 'Assessments', path: '/interviewer/assessments' },
 ];
 
 const Sidebar = ({ isOpen, onNavigate }) => {

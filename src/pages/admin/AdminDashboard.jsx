@@ -188,6 +188,7 @@ const AdminDashboard = () => {
                   { label: 'Technologies', icon: Shield, path: '/admin/technologies' },
                   { label: 'Domains', icon: Shield, path: '/admin/domains' },
                   { label: 'Designations', icon: Calendar, path: '/admin/designations' },
+                  { label: 'Interview Types', icon: Calendar, path: '/admin/interview-types' },
                   { label: 'Departments', icon: Clock, path: '/admin/departments' },
                 ].map((action) => {
                   const Icon = action.icon;

@@ -99,6 +99,7 @@ export const formatSlots = (data, colorMap) =>
         pendingPostponeRequestedAt: slot.pendingPostponeRequestedAt ?? null,
         pendingPostponePreferredStart: slot.pendingPostponePreferredStart ?? null,
         pendingPostponePreferredEnd: slot.pendingPostponePreferredEnd ?? null,
+        pendingPostponeRequestedByName: slot.pendingPostponeRequestedByName ?? null,
         palette,
         interviewerTierOrder: slot.interviewerTierOrder ?? null,
         interviewerLevelOrder: slot.interviewerLevelOrder ?? null,

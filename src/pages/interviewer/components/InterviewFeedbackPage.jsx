@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Badge } from '@/components/ui/badge';
 import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,11 +17,11 @@ import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import  candidateAPI from '@/services/candidateAPI';
 
 import { availabilityAPI } from '@/services/availabilityAPI';
+import { assessmentAPI } from '@/services/assessmentAPI';
 import { InterviewScheduleStatus, InterviewType } from '@/lib/statusConstants';
 import InterviewDocumentPreviewDialog from './InterviewDocumentPreviewDialog';
 import CompleteInterviewDialog from '@/components/CompleteInterviewDialog';
 import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '@/lib/documentUtils';
-import { getInitial } from '@/lib/personUtils';
 import {
   getQuestionCommentKey,
   getQuestionResponseKey,
@@ -64,6 +64,8 @@ function InterviewFeedbackPage() {
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [panelPeerFeedback, setPanelPeerFeedback] = useState(false);
+  const [assessmentMeta, setAssessmentMeta] = useState(null);
+  const [downloadingAssessment, setDownloadingAssessment] = useState(false);
 
   // Derive the selected form from the backend-filtered list
   const selectedForm = useMemo(
@@ -134,12 +136,61 @@ function InterviewFeedbackPage() {
     try {
       setLoading(true);
       setError('');
+      setAssessmentMeta(null);
 
-      // 1. Fetch Interview Details
-      const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
-      const interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
+      // 1. Fetch Interview Details (live booking) or assessment assignment
+      let interview = null;
+      let loadedAssessment = null;
+      try {
+        const interviewData = await availabilityAPI.getInterviewDetails(interviewScheduleId);
+        interview = Array.isArray(interviewData) ? interviewData[0] : interviewData;
+      } catch (bookedError) {
+        console.warn('Booked interview lookup failed, trying assessment assignment:', bookedError);
+      }
+
+      if (!interview) {
+        loadedAssessment = await assessmentAPI.listMine().then((list) => (
+          (Array.isArray(list) ? list : []).find(
+            (item) => String(item.interviewScheduleId) === String(interviewScheduleId),
+          )
+        ));
+        if (!loadedAssessment) {
+          throw new Error('Interview or assessment not found');
+        }
+        setAssessmentMeta(loadedAssessment);
+        const assessmentDone = String(loadedAssessment.assessmentPhase || '').toUpperCase() === 'COMPLETED';
+        interview = {
+          interviewScheduleId: loadedAssessment.interviewScheduleId,
+          candidateId: loadedAssessment.candidateId,
+          candidateName: loadedAssessment.candidateName,
+          interviewType: loadedAssessment.interviewType,
+          preferredStartDateTime: loadedAssessment.dueStartDateTime,
+          preferredEndDateTime: loadedAssessment.dueEndDateTime,
+          notes: loadedAssessment.notes,
+          interviewStatus: assessmentDone
+            ? InterviewScheduleStatus.COMPLETED
+            : InterviewScheduleStatus.SCHEDULED,
+          assessmentPhase: loadedAssessment.assessmentPhase,
+          isAssessmentReview: true,
+        };
+      } else {
+        try {
+          const mine = await assessmentAPI.listMine();
+          loadedAssessment = (Array.isArray(mine) ? mine : []).find(
+            (item) => String(item.interviewScheduleId) === String(interviewScheduleId),
+          );
+          if (loadedAssessment) setAssessmentMeta(loadedAssessment);
+        } catch {
+          /* not an assessment assignment */
+        }
+      }
+
       setInterviewDetails(interview);
-      setInterviewCompleted(interview?.interviewStatus === InterviewScheduleStatus.COMPLETED);
+      setInterviewCompleted(
+        interview?.interviewStatus === InterviewScheduleStatus.COMPLETED
+        || String(interview?.assessmentPhase || '').toUpperCase() === 'COMPLETED'
+        || String(loadedAssessment?.assessmentPhase || '').toUpperCase() === 'COMPLETED',
+      );
 
       // 2. Fetch Candidate Details
       let currentCandidate = null;
@@ -158,7 +209,12 @@ function InterviewFeedbackPage() {
       const interviewType = interview?.interviewType || InterviewType.TECHNICAL;
 
       // Load any existing feedback first so panel peers can view the submitted form.
-      const existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
+      let existingFeedback = null;
+      try {
+        existingFeedback = await feedbackAPI.getFeedbackForInterview(interviewScheduleId);
+      } catch {
+        existingFeedback = null;
+      }
       let formList = [];
       let initialSelectedFormId = null;
 
@@ -232,6 +288,31 @@ function InterviewFeedbackPage() {
     }
   };
 
+  const handleDownloadAssessment = async () => {
+    if (!interviewScheduleId) return;
+    setDownloadingAssessment(true);
+    try {
+      const response = await assessmentAPI.downloadAsReviewer(interviewScheduleId);
+      const blob = new Blob([response.data], {
+        type: response.headers['content-type'] || 'application/octet-stream',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = assessmentMeta?.assessmentFileName || 'assessment';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: 'Download failed',
+        description: err.response?.data?.message || 'Could not download assessment file',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloadingAssessment(false);
+    }
+  };
+
   const handleFormChange = (responseKey, value) => {
     setFormResponses((prev) => ({
       ...prev,
@@ -280,13 +361,39 @@ function InterviewFeedbackPage() {
     setSubmitting(true);
     setError('');
     try {
-      await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
+      const result = await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
       setFeedbackSubmitted(true);
       setLoadedResponses({ ...formResponses });
-      toast({
-        title: 'Success',
-        description: feedbackSubmitted ? 'Feedback updated successfully' : 'Feedback submitted successfully',
-      });
+
+      const completed = Boolean(result?.assessmentCompleted)
+        || String(result?.assessmentPhase || '').toUpperCase() === 'COMPLETED';
+      if (assessmentMeta || completed) {
+        if (completed) {
+          setInterviewCompleted(true);
+          setAssessmentMeta((prev) => (prev
+            ? { ...prev, assessmentPhase: 'COMPLETED' }
+            : prev));
+          setInterviewDetails((prev) => (prev
+            ? { ...prev, interviewStatus: InterviewScheduleStatus.COMPLETED }
+            : prev));
+          toast({
+            title: 'Assessment completed',
+            description: 'Your feedback was submitted and the assessment is marked completed.',
+          });
+        } else {
+          toast({
+            title: 'Feedback submitted',
+            description: feedbackSubmitted
+              ? 'Feedback updated successfully'
+              : 'Feedback submitted. Waiting for other reviewers to finish.',
+          });
+        }
+      } else {
+        toast({
+          title: 'Success',
+          description: feedbackSubmitted ? 'Feedback updated successfully' : 'Feedback submitted successfully',
+        });
+      }
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to submit feedback');
     } finally {
@@ -298,22 +405,45 @@ function InterviewFeedbackPage() {
     setCompleting(true);
     setError('');
     try {
-      await availabilityAPI.completeInterview(interviewScheduleId);
-      setInterviewCompleted(true);
-      setCompleteDialogOpen(false);
-      toast({
-        title: 'Interview completed',
-        description: 'Feedback is now locked and visible on the candidate profile.',
-      });
+      if (assessmentMeta) {
+        const data = await assessmentAPI.completeAsReviewer(interviewScheduleId);
+        setInterviewCompleted(true);
+        setAssessmentMeta((prev) => (prev
+          ? { ...prev, assessmentPhase: data?.assessmentPhase || 'COMPLETED' }
+          : { assessmentPhase: 'COMPLETED' }));
+        setInterviewDetails((prev) => (prev
+          ? { ...prev, interviewStatus: InterviewScheduleStatus.COMPLETED }
+          : prev));
+        setCompleteDialogOpen(false);
+        toast({
+          title: 'Assessment completed',
+          description: 'Feedback is locked and the assessment status is updated.',
+        });
+      } else {
+        await availabilityAPI.completeInterview(interviewScheduleId);
+        setInterviewCompleted(true);
+        setCompleteDialogOpen(false);
+        toast({
+          title: 'Interview completed',
+          description: 'Feedback is now locked and visible on the candidate profile.',
+        });
+      }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to complete interview');
+      setError(err.response?.data?.message || err.message || (assessmentMeta
+        ? 'Failed to complete assessment'
+        : 'Failed to complete interview'));
     } finally {
       setCompleting(false);
     }
   };
 
   const isFormLocked = submitting || interviewCompleted || panelPeerFeedback;
-  const canCompleteInterview = !interviewCompleted && (feedbackSubmitted || panelPeerFeedback);
+  const canCompleteInterview = !assessmentMeta
+    && !interviewCompleted
+    && (feedbackSubmitted || panelPeerFeedback);
+  const canCompleteAssessment = Boolean(assessmentMeta)
+    && !interviewCompleted
+    && feedbackSubmitted;
 
   const handleDownloadDocument = async (document) => {
     if (!candidate?.id || !document?.id) return;
@@ -491,8 +621,14 @@ function InterviewFeedbackPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div>
-                <h1 className="text-4xl font-bold text-foreground mb-2">Interview Feedback</h1>
-                <p className="text-muted-foreground text-sm mt-1">Evaluate candidate's interview performance</p>
+                <h1 className="text-4xl font-bold text-foreground mb-2">
+                  {assessmentMeta ? 'Assessment Feedback' : 'Interview Feedback'}
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">
+                  {assessmentMeta
+                    ? 'Download the assessment submission and submit your review'
+                    : "Evaluate candidate's interview performance"}
+                </p>
               </div>
             </div>
             {loading && <Loader2 className="w-6 h-6 animate-spin text-blue-600" />}
@@ -522,11 +658,12 @@ function InterviewFeedbackPage() {
                   <div className="space-y-2">
                     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4  border border-blue-200">
                       <div className="flex items-center gap-3 mb-4">
-                        <Avatar className="h-16 w-16 border-4 border-white shadow-md">
-                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xl font-bold">
-                            {getInitial(candidate.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <CandidateAvatar
+                          candidate={candidate}
+                          documents={documents}
+                          className="h-16 w-16 border-4 border-white shadow-md"
+                          fallbackClassName="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xl font-bold"
+                        />
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-lg text-gray-900 truncate">{candidate.name}</h3>
                           <p className="text-xs text-gray-600 truncate">{candidate.email}</p>
@@ -598,6 +735,32 @@ function InterviewFeedbackPage() {
                         )}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Assessment submission download */}
+                {assessmentMeta?.hasAssessmentFile && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                      Assessment file
+                    </p>
+                    <p className="text-sm text-emerald-950 truncate">
+                      {assessmentMeta.assessmentFileName || 'Submitted assessment'}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                      onClick={handleDownloadAssessment}
+                      disabled={downloadingAssessment}
+                    >
+                      {downloadingAssessment ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Download assessment
+                    </Button>
                   </div>
                 )}
 
@@ -685,7 +848,7 @@ function InterviewFeedbackPage() {
                     )}
                     {interviewCompleted && (
                       <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-                        Interview completed
+                        {assessmentMeta ? 'Assessment completed' : 'Interview completed'}
                       </Badge>
                     )}
                   </div>
@@ -896,6 +1059,15 @@ function InterviewFeedbackPage() {
                     Complete Interview
                   </Button>
                 )}
+                {canCompleteAssessment && (
+                  <Button
+                    onClick={() => setCompleteDialogOpen(true)}
+                    disabled={submitting || completing}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-h-[48px] text-base font-semibold"
+                  >
+                    Complete Assessment
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -916,6 +1088,11 @@ function InterviewFeedbackPage() {
         onOpenChange={setCompleteDialogOpen}
         onConfirm={handleCompleteInterview}
         loading={completing}
+        title={assessmentMeta ? 'Complete Assessment' : 'Complete Interview'}
+        description={assessmentMeta
+          ? 'Confirm that this assessment review is finished. Feedback will be locked and the assessment will be marked completed on the candidate profile. This action cannot be undone.'
+          : 'Confirm that this interview is finished. Submitted feedback will be locked and shown on the candidate profile. This action cannot be undone.'}
+        confirmLabel={assessmentMeta ? 'Complete Assessment' : 'Confirm Complete'}
       />
     </Layout>
   );
