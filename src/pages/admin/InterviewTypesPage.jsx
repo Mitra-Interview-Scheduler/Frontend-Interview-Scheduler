@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Plus, Edit, Trash2, ListChecks, Loader2, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
   Users, ClipboardList,
@@ -521,28 +522,45 @@ const InterviewTypesPage = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Create calendar meeting
+                    Google Meet
                   </Label>
-                  <Select
-                    value={readCreateCalendarMeeting(form) ? 'true' : 'false'}
+                  <RadioGroup
+                    value={readCreateCalendarMeeting(form) ? 'yes' : ''}
                     onValueChange={(value) =>
-                      setForm((prev) => ({ ...prev, createCalendarMeeting: value === 'true' }))
+                      setForm((prev) => ({ ...prev, createCalendarMeeting: value === 'yes' }))
                     }
                     disabled={isMutating || !readRequiresInterviewer(form)}
-                    hideSelectedFromMenu={false}
+                    className="flex"
                   >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent hideSelectedFromMenu={false} position="popper">
-                      <SelectItem value="true">True</SelectItem>
-                      <SelectItem value="false">False</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem
+                        value="yes"
+                        id="create-calendar-meeting"
+                        disabled={isMutating || !readRequiresInterviewer(form)}
+                        onClick={(e) => {
+                          if (!readRequiresInterviewer(form) || isMutating) return;
+                          if (readCreateCalendarMeeting(form)) {
+                            e.preventDefault();
+                            setForm((prev) => ({ ...prev, createCalendarMeeting: false }));
+                          }
+                        }}
+                      />
+                      <Label
+                        htmlFor="create-calendar-meeting"
+                        className={`text-sm font-normal cursor-pointer ${
+                          !readRequiresInterviewer(form) ? 'text-muted-foreground' : ''
+                        }`}
+                      >
+                        {readCreateCalendarMeeting(form)
+                          ? 'Meeting link will be created'
+                          : 'No meeting will be created'}
+                      </Label>
+                    </div>
+                  </RadioGroup>
                   <p className="text-[11px] text-muted-foreground">
                     {readRequiresInterviewer(form)
-                      ? 'Creates a Google Meet when an interviewer slot is booked. Turn off to skip meeting creation.'
-                      : 'Not applicable for assessments — no interviewer or calendar meeting is booked.'}
+                      ? 'Select to include a Google Meet link on the calendar invite when this round is booked.'
+                      : 'Not used for assessments — no interviewer slot or meeting is created.'}
                   </p>
                 </div>
               </section>
