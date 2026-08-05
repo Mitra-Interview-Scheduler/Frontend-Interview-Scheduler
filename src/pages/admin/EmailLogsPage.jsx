@@ -145,9 +145,13 @@ const EmailLogsPage = () => {
       setTotalElements(data?.totalElements || 0);
     } catch (error) {
       console.error('Failed to load email logs', error);
+      const status = error.response?.status;
+      const description = status === 401 || status === 403
+        ? 'You do not have access to email logs. Stay signed in and ask an admin if this persists.'
+        : (error.response?.data?.message || 'Failed to load email delivery logs');
       toast({
         title: 'Error',
-        description: 'Failed to load email delivery logs',
+        description,
         variant: 'destructive',
       });
     } finally {
