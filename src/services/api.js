@@ -12,12 +12,24 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      if (typeof config.headers?.set === 'function') {
+        config.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
     const selectedTimeZone =
       localStorage.getItem('preferredTimeZone') ||
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       'UTC';
-    config.headers['X-Timezone'] = selectedTimeZone;
+    if (typeof config.headers?.set === 'function') {
+      config.headers.set('X-Timezone', selectedTimeZone);
+    } else {
+      config.headers = config.headers || {};
+      config.headers['X-Timezone'] = selectedTimeZone;
+    }
     // Let the browser set multipart boundary; axios must not send application/json.
     if (config.data instanceof FormData) {
       if (typeof config.headers.delete === 'function') {
@@ -50,7 +62,11 @@ api.interceptors.response.use(
       // (production CORS/auth edge cases were logging users out on navigation).
       const isEmailLogsRequest = requestUrl.includes('/admin/delivery-logs')
         || requestUrl.includes('/admin/email-logs');
-      const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
+      const hadAuthHeader = Boolean(
+        error.config?.headers?.get?.('Authorization')
+        || error.config?.headers?.Authorization
+        || error.config?.headers?.authorization
+      );
       if (!isAuthRequest && !isCalendarIntegrationRequest && !isEmailLogsRequest && hadAuthHeader) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
