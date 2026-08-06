@@ -46,9 +46,10 @@ api.interceptors.response.use(
         || requestUrl.includes('/auth/register')
         || requestUrl.includes('/auth/google');
       const isCalendarIntegrationRequest = requestUrl.includes('/integrations/google-calendar');
-      // Email logs is admin-only; a 401 here must not wipe the whole session
+      // Delivery logs is admin-only; a 401 here must not wipe the whole session
       // (production CORS/auth edge cases were logging users out on navigation).
-      const isEmailLogsRequest = requestUrl.includes('/admin/email-logs');
+      const isEmailLogsRequest = requestUrl.includes('/admin/delivery-logs')
+        || requestUrl.includes('/admin/email-logs');
       const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
       if (!isAuthRequest && !isCalendarIntegrationRequest && !isEmailLogsRequest && hadAuthHeader) {
         localStorage.removeItem('token');
