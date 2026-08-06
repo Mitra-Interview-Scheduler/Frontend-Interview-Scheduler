@@ -146,9 +146,12 @@ const EmailLogsPage = () => {
     } catch (error) {
       console.error('Failed to load email logs', error);
       const status = error.response?.status;
+      const serverMessage = error.response?.data?.message;
       const description = status === 401 || status === 403
-        ? 'You do not have access to email logs. Stay signed in and ask an admin if this persists.'
-        : (error.response?.data?.message || 'Failed to load email delivery logs');
+        ? (serverMessage
+          ? `${serverMessage} (${status}). Try signing out and back in.`
+          : 'You do not have access to email logs. Stay signed in and ask an admin if this persists.')
+        : (serverMessage || 'Failed to load email delivery logs');
       toast({
         title: 'Error',
         description,

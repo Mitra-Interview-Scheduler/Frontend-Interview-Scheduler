@@ -8,6 +8,7 @@ const getUserRoles = (user) => getNormalizedRoles(user);
 
 export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   if (loading) {
     return (
@@ -17,7 +18,7 @@ export const PrivateRoute = ({ children, allowedRoles = [] }) => {
     );
   }
 
-  if (!user) {
+  if (!user || !token) {
     return <Navigate to="/login" replace />;
   }
 
