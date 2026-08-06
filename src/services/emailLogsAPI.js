@@ -1,27 +1,25 @@
 import api from './api';
 
-const withAuthGuard = { _skipAuthRedirect: true };
-
-// Use /admin/delivery-logs (not "email-logs") — many privacy/ad blockers
-// strip or block requests whose URL contains "email", which surfaces as a 401.
+// Same request shape as usersAPI — do not pass a custom config object that can
+// interfere with axios header merging for cross-origin Bearer auth.
 export const emailLogsAPI = {
   getAll: async ({ page = 0, size = 20, search, status } = {}) => {
-    const params = new URLSearchParams();
-    params.append('page', String(page));
-    params.append('size', String(size));
-    if (search) params.append('search', search);
-    if (status && status !== 'ALL') params.append('status', status);
-    const response = await api.get(`/admin/delivery-logs?${params.toString()}`, withAuthGuard);
+    const params = {};
+    params.page = page;
+    params.size = size;
+    if (search) params.search = search;
+    if (status && status !== 'ALL') params.status = status;
+    const response = await api.get('/admin/delivery-logs', { params });
     return response.data;
   },
 
   getById: async (id) => {
-    const response = await api.get(`/admin/delivery-logs/${id}`, withAuthGuard);
+    const response = await api.get(`/admin/delivery-logs/${id}`);
     return response.data;
   },
 
   getMeta: async () => {
-    const response = await api.get('/admin/delivery-logs/meta', withAuthGuard);
+    const response = await api.get('/admin/delivery-logs/meta');
     return response.data;
   },
 };
