@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Lock, Mail } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
 import { googleCalendarAPI } from '@/services/api';
@@ -123,8 +123,8 @@ const Login = () => {
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring' }}
           >
-            <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-lg">
-              <Calendar className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-lg overflow-hidden">
+              <img src="/mitra-logo.png" alt="Mitra" className="w-14 h-14 object-contain" />
             </div>
           </motion.div>
           <h1 className="text-4xl font-bold text-foreground mb-2">
