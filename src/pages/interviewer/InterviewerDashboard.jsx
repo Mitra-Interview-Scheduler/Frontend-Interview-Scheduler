@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Clock, CheckCircle, TrendingUp, Settings, Bell, ClipboardList } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
 import { toast } from '@/hooks/use-toast';
 import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { availabilityAPI } from '@/services/availabilityAPI';
@@ -236,22 +238,13 @@ const InterviewerDashboard = () => {
               </div>
             </CardHeader>
             <CardContent className="pt-6">
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2].map((i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="h-20 bg-muted rounded-lg"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : upcomingInterviews.length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground">No upcoming interviews</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Interviews will appear here when HR schedules them
-                  </p>
-                </div>
+              <LoadingSwap loading={loading} fallback={<LoadingState minHeight="sm" />}>
+              {upcomingInterviews.length === 0 ? (
+                <EmptyState
+                  icon={Calendar}
+                  title="No upcoming interviews"
+                  description="Interviews will appear here when HR schedules them"
+                />
               ) : (
                 <div className="space-y-3">
                   {upcomingInterviews.map((interview, index) => (
@@ -312,6 +305,7 @@ const InterviewerDashboard = () => {
                   )}
                 </div>
               )}
+              </LoadingSwap>
             </CardContent>
           </Card>
 

@@ -13,11 +13,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { ClipboardList, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { ClipboardList, CheckCircle2, ArrowRight } from 'lucide-react';
 import { assessmentAPI } from '@/services/assessmentAPI';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { toast } from '@/hooks/use-toast';
-
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 const PAGE_SIZE = 5;
 
 const formatPhaseLabel = (phase) => String(phase || 'ASSIGNED')
@@ -50,22 +52,31 @@ const AssessmentReviewRow = ({ item, formatDateTime, onOpen, completed }) => (
       </p>
       <p className="text-sm text-muted-foreground truncate">
         {item.candidateName}
-        {item.dueStartDateTime ? ` · Due ${formatDateTime(item.dueStartDateTime)}` : ''}
+        {!completed && item.dueStartDateTime ? (
+          <span className="text-red-600 font-medium">
+            {' · '}Due {formatDateTime(item.dueStartDateTime)}
+          </span>
+        ) : null}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         <Badge
           variant="outline"
           className={`text-[10px] ${
             completed
-              ? 'bg-slate-100 text-slate-700 border-slate-200'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
               : ''
           }`}
         >
-          {formatPhaseLabel(item.assessmentPhase)}
+          {completed ? 'Completed' : formatPhaseLabel(item.assessmentPhase)}
         </Badge>
         {!completed && item.hasAssessmentFile && (
           <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
             File ready
+          </Badge>
+        )}
+        {!completed && item.dueStartDateTime && (
+          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200">
+            Due
           </Badge>
         )}
       </div>
@@ -189,7 +200,13 @@ const AssessmentsToReviewPage = () => {
 
   const renderList = (list, pageData, onPageChange, emptyLabel, completedTab) => {
     if (list.length === 0) {
-      return <p className="text-center text-muted-foreground py-10">{emptyLabel}</p>;
+      return (
+        <EmptyState
+          icon={completedTab ? CheckCircle2 : ClipboardList}
+          title={emptyLabel}
+          compact
+        />
+      );
     }
 
     return (
@@ -218,12 +235,10 @@ const AssessmentsToReviewPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Assessments to review</h1>
-          <p className="text-muted-foreground mt-1">
-            Open an assessment to download the submission and complete the feedback form.
-          </p>
-        </div>
+        <PageHeader
+          title="Assessments to review"
+          description="Open an assessment to download the submission and complete the feedback form."
+        />
 
         <Card>
           <CardHeader>
@@ -235,11 +250,10 @@ const AssessmentsToReviewPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" /> Loading…
-              </div>
-            ) : (
+            <LoadingSwap
+              loading={loading && items.length === 0}
+              fallback={<LoadingState label="Loading…" size="sm" minHeight="sm" />}
+            >
               <Tabs
                 value={activeTab}
                 onValueChange={setActiveTab}
@@ -276,7 +290,7 @@ const AssessmentsToReviewPage = () => {
                   )}
                 </TabsContent>
               </Tabs>
-            )}
+            </LoadingSwap>
           </CardContent>
         </Card>
       </div>

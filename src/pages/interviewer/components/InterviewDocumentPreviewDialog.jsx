@@ -2,7 +2,8 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Download, Loader2, FileText, X, ExternalLink } from 'lucide-react';
+import { Download, FileText, X, ExternalLink } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 
 function InterviewDocumentPreviewDialog({
@@ -37,10 +38,7 @@ function InterviewDocumentPreviewDialog({
         <div className="flex-1 flex flex-col overflow-hidden gap-0">
           <div className="flex-1 flex items-center justify-center bg-white p-2 border-b border-gray-200">
             {previewLoading ? (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
-                <p className="text-gray-600">Loading document preview...</p>
-              </div>
+              <LoadingState label="Loading document preview..." size="xl" minHeight="md" />
             ) : previewUrl ? (
               (() => {
                 const docType = document?.documentType?.toLowerCase() || '';
