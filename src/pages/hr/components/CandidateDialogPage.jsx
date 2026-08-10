@@ -13,8 +13,9 @@ import {
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { 
-  Award, Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
+  Award, Download, FileText, Hash, Link, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
 } from 'lucide-react';
+import { InlineLoading } from '@/components/ui/loading';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import  candidateAPI from '@/services/candidateAPI';
@@ -939,7 +940,9 @@ function CandidateDialogPage({
 
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                 {documentsLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
+                  <div className="flex justify-center py-2">
+                    <InlineLoading />
+                  </div>
                 )}
                 {!documentsLoading
                   && visibleSavedDocuments.length === 0
@@ -1088,17 +1091,11 @@ function CandidateDialogPage({
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={saving || !isFormValid}
+                loading={saving}
+                disabled={!isFormValid}
                 className="min-w-[110px]"
               >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  isCreate ? 'Add Candidate' : 'Update'
-                )}
+                {saving ? 'Saving…' : isCreate ? 'Add Candidate' : 'Update'}
               </Button>
             </>
           )}

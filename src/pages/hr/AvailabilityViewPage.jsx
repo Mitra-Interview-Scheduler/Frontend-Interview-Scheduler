@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
+import { Spinner, InlineLoading, LoadingOverlay } from '@/components/ui/loading';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,DialogBody,
@@ -562,7 +563,7 @@ const AvailabilityViewPage = () => {
         </div>
         <div className="flex items-center gap-3">
           <span className="rbc-toolbar-label text-base font-semibold">{label}</span>
-          {loading && <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin ml-2" />}
+          {loading && <Spinner size="xs" className="ml-2" />}
           {viewList.map(v => (
             <button key={v} onClick={() => onView(v)} className={`btn ${v === view ? 'btn-primary' : ''}`}>{v}</button>
           ))}
@@ -2281,7 +2282,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </CardHeader>
             <CardContent className="space-y-4">
               {matchingInterviewersLoading ? (
-                <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
+                <InlineLoading label="Finding matching interviewers…" />
               ) : !hasMatchingInterviewers ? (
                 <p className="text-sm text-muted-foreground italic">
                   No matching interviewers for{' '}
@@ -2479,24 +2480,12 @@ const calendarSlotPropGetter = useCallback((date) => {
             </CardContent>
           )}
           <CardContent>
-            <AnimatePresence mode="wait">
-              {loading ? (
-                <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="h-[720px] flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="relative w-16 h-16 mx-auto mb-6">
-                      <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-                      <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
-                    </div>
-                    <p className="text-muted-foreground text-lg font-medium">Loading availability…</p>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="availability-calendar-container hr-calendar"
-                  style={{ width: '100%', height : '65vh' }}>
-
-                  <Calendar
+            <div className="relative">
+              <div
+                className="availability-calendar-container hr-calendar"
+                style={{ width: '100%', height: '65vh' }}
+              >
+                <Calendar
                     localizer={localizer}
                     components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
                     events={calendarEvents}
@@ -2542,10 +2531,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                       eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
                     }}
                   />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
+              </div>
+              <LoadingOverlay show={loading} label="Loading availability…" />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -2728,11 +2716,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </Button>
                   <Button
                     onClick={handleApprovePostpone}
-                    disabled={cancelling || postponeActionLoading}
+                    loading={postponeActionLoading}
+                    disabled={cancelling}
                     className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
                   >
                     {postponeActionLoading ? (
-                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Working…</>
+                      'Working…'
                     ) : cancelTarget.resource.pendingPostponePreferredStart
                       && cancelTarget.resource.pendingPostponePreferredEnd ? (
                       <><CheckCircle2 className="w-4 h-4 shrink-0" /> Accept Proposed Time</>
@@ -2744,11 +2733,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <Button
                   variant="destructive"
                   onClick={handleCancelBooked}
-                  disabled={cancelling || postponeActionLoading}
+                  loading={cancelling}
+                  disabled={postponeActionLoading}
                   className="w-full gap-2"
                 >
                   {cancelling ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                    'Cancelling…'
                   ) : cancelTarget?.resource?.panelId ? (
                     <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel</>
                   ) : (
@@ -2769,11 +2759,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <Button
                   variant="destructive"
                   onClick={handleCancelBooked}
-                  disabled={cancelling || postponeActionLoading}
+                  loading={cancelling}
+                  disabled={postponeActionLoading}
                   className="w-full gap-2"
                 >
                   {cancelling ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                    'Cancelling…'
                   ) : cancelTarget?.resource?.panelId ? (
                     <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel & Restore Slots</>
                   ) : (
@@ -2981,7 +2972,8 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError || scheduling || slotWindowConflicts.loading}
+              loading={scheduling}
+              disabled={!!singlePrivilegeError || slotWindowConflicts.loading}
               className={`gap-2${hasSlotWindowConflict ? ' bg-red-600 hover:bg-red-700 text-white' : ''}`}
               title={
                 hasSlotWindowConflict
@@ -2991,11 +2983,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     : undefined
               }
             >
-              {scheduling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
-              ) : (
-                <><Send className="w-4 h-4" /> Schedule Interview</>
-              )}
+              {scheduling ? 'Scheduling…' : <><Send className="w-4 h-4" /> Schedule Interview</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3169,6 +3157,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendPanelRequest}
+              loading={scheduling}
               className={`gap-2${
                 hasSlotWindowConflict
                   ? ' bg-red-600 hover:bg-red-700 text-white'
@@ -3177,7 +3166,6 @@ const calendarSlotPropGetter = useCallback((date) => {
               disabled={
                 panelTimeOptions.length === 0
                 || panelPrivilegeErrors.length > 0
-                || scheduling
                 || slotWindowConflicts.loading
               }
               title={
@@ -3188,11 +3176,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     : undefined
               }
             >
-              {scheduling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
-              ) : (
-                <><Users className="w-4 h-4" /> Schedule Panel Interview</>
-              )}
+              {scheduling ? 'Scheduling…' : <><Users className="w-4 h-4" /> Schedule Panel Interview</>}
             </Button>
           </DialogFooter>
         </DialogContent>

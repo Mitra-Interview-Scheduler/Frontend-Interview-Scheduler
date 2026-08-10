@@ -5,6 +5,8 @@ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { LoadingState } from '@/components/ui/loading';
+import { StatCardsSkeleton } from '@/components/ui/page-skeletons';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,DialogBody
@@ -14,7 +16,7 @@ import {
   AlertCircle, ArrowRight, Briefcase, UserCheck, Building2, RefreshCw,
   Trash2, X, User, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import  candidateAPI from '@/services/candidateAPI';
@@ -451,22 +453,30 @@ const HRDashboard = () => {
     },
   ];
 
-  const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
-  const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
+  const reduceMotion = useReducedMotion();
+  const containerVariants = reduceMotion
+    ? { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+    : { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
+  const itemVariants = reduceMotion
+    ? { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+    : { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 
   // ── Loading ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-[60vh]">
-          <div className="text-center space-y-4">
-            <div className="relative w-16 h-16 mx-auto">
-              <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-              <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
+        <div className="space-y-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-foreground mb-2">HR Dashboard</h1>
+              <p className="text-muted-foreground text-lg">
+                Manage candidates, schedule interviews, and track your pipeline
+              </p>
             </div>
-            <p className="text-muted-foreground text-lg font-medium">Loading dashboard…</p>
           </div>
+          <StatCardsSkeleton count={4} />
+          <LoadingState label="Loading dashboard…" minHeight="sm" />
         </div>
       </Layout>
     );
@@ -921,10 +931,13 @@ const HRDashboard = () => {
             <Button variant="outline" onClick={closeCancelDialog} disabled={cancelling}>
               Keep Interview
             </Button>
-            <Button variant="destructive" onClick={handleCancelConfirm} disabled={cancelling} className="gap-2">
-              {cancelling
-                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Cancelling…</>
-                : <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>}
+            <Button
+              variant="destructive"
+              onClick={handleCancelConfirm}
+              loading={cancelling}
+              className="gap-2"
+            >
+              {cancelling ? 'Cancelling…' : <><Trash2 className="w-4 h-4" /> Cancel & Restore Slot</>}
             </Button>
           </DialogFooter>
         </DialogContent>

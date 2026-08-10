@@ -3,6 +3,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
 import { Clock, ArrowRight } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { hrAvailabilityAPI } from '@/services/hrAvailabilityAPI';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
 import { SlotStatus } from '@/lib/statusConstants';
@@ -227,17 +228,7 @@ export function MatchingInterviewerDetailDialog({
               </div>
 
               {loading && (
-                <div className="space-y-3 animate-pulse">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="h-3 w-24 rounded bg-slate-200/80" />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="h-11 rounded-lg bg-white border border-slate-200" />
-                        <div className="h-11 rounded-lg bg-white border border-slate-200" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <LoadingState label="Loading availability…" minHeight="sm" />
               )}
 
               {!loading && error && (

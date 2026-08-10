@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Activity, LayoutList, ListTree, Loader2, Table2 } from 'lucide-react';
+import { Activity, LayoutList, ListTree, Table2 } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { buildCandidateActivityHistory, getCandidateStatusLabel } from '@/lib/candidateSteps';
 import { InterviewScheduleStatus, PipelineStepStatus } from '@/lib/statusConstants';
@@ -366,9 +367,7 @@ const ProfileActivityTab = ({ candidate, steps = [], stepsLoading = false, isAct
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingState minHeight="sm" size="sm" />
           )}
 
           {!loading && activities.length === 0 && <ActivityEmpty />}
