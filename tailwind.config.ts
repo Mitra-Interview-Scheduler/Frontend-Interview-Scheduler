@@ -14,6 +14,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        "login-display": ['"Outfit"', "system-ui", "sans-serif"],
+        "login-body": ['"Source Sans 3"', "system-ui", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
