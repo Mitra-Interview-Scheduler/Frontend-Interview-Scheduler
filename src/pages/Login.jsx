@@ -198,7 +198,7 @@ const Login = () => {
                 </motion.div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" loading={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Clock, Check, Globe, Calendar, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { InlineLoading } from '@/components/ui/loading';
 
 
 
@@ -531,7 +532,7 @@ const SettingsPage = () => {
                   </div>
 
                   {calendarsLoading && googleCalendars.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Loading calendars…</p>
+                    <InlineLoading label="Loading calendars…" />
                   ) : googleCalendars.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No calendars found for this account.</p>
                   ) : (

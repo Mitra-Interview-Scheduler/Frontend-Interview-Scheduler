@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Bell, CheckCheck, ChevronDown, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -365,9 +366,7 @@ const NotificationBell = () => {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-10 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
+          <LoadingState minHeight="sm" size="sm" />
         ) : notifications.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
             No notifications yet.

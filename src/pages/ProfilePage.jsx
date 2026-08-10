@@ -8,8 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Mail, Phone, Briefcase, Award, Edit2, Save, Loader2, TrendingUp } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, Award, Edit2, Save, TrendingUp } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { PageHeader } from '@/components/ui/page-header';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import profileAPI from '@/services/profileService';
@@ -230,17 +232,7 @@ const ProfilePage = () => {
       null
   );
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
-  }
-
-  if (!profile) {
+  if (!loading && !profile) {
     return (
       <Layout>
         <div className="text-center text-muted-foreground">Failed to load profile</div>
@@ -248,42 +240,41 @@ const ProfilePage = () => {
     );
   }
 
-  const showInterviewerSkills = shouldLoadInterviewerTechnologies(profile, user);
+  const showInterviewerSkills = profile
+    ? shouldLoadInterviewerTechnologies(profile, user)
+    : false;
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">My Profile</h1>
-            <p className="text-muted-foreground">
-              Manage your personal information and interview preferences
-            </p>
-          </div>
-          <Button
-            onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
-            disabled={saving}
-            className="gap-2"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : isEditing ? (
-              <>
-                <Save className="w-4 h-4" />
-                Save Changes
-              </>
-            ) : (
-              <>
-                <Edit2 className="w-4 h-4" />
-                Edit Profile
-              </>
-            )}
-          </Button>
-        </div>
+        <PageHeader
+          title="My Profile"
+          description="Manage your personal information and interview preferences"
+          actions={
+            !loading && profile ? (
+              <Button
+                onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
+                loading={saving}
+                className="gap-2"
+              >
+                {isEditing ? (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Changes
+                  </>
+                ) : (
+                  <>
+                    <Edit2 className="w-4 h-4" />
+                    Edit Profile
+                  </>
+                )}
+              </Button>
+            ) : null
+          }
+        />
 
+        <LoadingSwap loading={loading} fallback={<LoadingState label="Loading profile…" />}>
+        {profile && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Sidebar */}
           <Card className="shadow-elegant">
@@ -578,6 +569,8 @@ const ProfilePage = () => {
 
           </div>
         </div>
+        )}
+        </LoadingSwap>
       </div>
     </Layout>
   );
