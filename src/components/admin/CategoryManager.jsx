@@ -12,11 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import { toLookupCode } from '@/lib/technologyHelpers';
+import { LoadingState } from '@/components/ui/loading';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const emptyForm = {
   label: '',
@@ -53,6 +55,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
   const [formData, setFormData] = useState(emptyForm);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [confirmTarget, setConfirmTarget] = useState(null);
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -161,7 +164,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
     }
   };
 
-  const handleDelete = async (item) => {
+  const requestDelete = (item) => {
     if (item.isSystem) {
       toast({
         title: 'Not deletable',
@@ -170,11 +173,15 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
       });
       return;
     }
-    if (!window.confirm(`Deactivate category "${item.label}"?`)) return;
+    setConfirmTarget(item);
+  };
 
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
     setIsMutating(true);
     try {
-      await config.remove(item.id);
+      await config.remove(confirmTarget.id);
+      setConfirmTarget(null);
       await loadItems();
       toast({ title: 'Removed', description: 'Category deactivated successfully.' });
     } catch (error) {
@@ -190,9 +197,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
 
   if (loading) {
     return (
-      <div className="flex h-48 items-center justify-center rounded-xl border bg-card">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <LoadingState className="min-h-48 rounded-xl border bg-card" minHeight="none" />
     );
   }
 
@@ -253,7 +258,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(item)}
+                        onClick={() => requestDelete(item)}
                         disabled={isMutating || item.isSystem}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -334,13 +339,22 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isMutating}>
-              {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleSave} loading={isMutating}>
               Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
+        title="Deactivate category?"
+        description={confirmTarget ? `Deactivate category "${confirmTarget.label}"?` : undefined}
+        confirmLabel="Deactivate"
+        onConfirm={handleDelete}
+        loading={isMutating}
+      />
     </>
   );
 };

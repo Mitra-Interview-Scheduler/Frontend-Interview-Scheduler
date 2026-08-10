@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import {
   Plus, Search, Trash2, UserX, UserCheck, Pencil,
-  Loader2, RefreshCw, ShieldAlert, User, Mail, Lock,
+  RefreshCw, ShieldAlert, User, Mail, Lock, Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -22,6 +22,10 @@ import { authAPI, usersAPI } from '@/services/api';
 import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Spinner, LoadingSwap } from '@/components/ui/loading';
+import { TableSkeleton } from '@/components/ui/page-skeletons';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { getInitial } from '@/lib/personUtils';
 import { sortRoles } from '@/lib/roleHelpers';
 import { env } from '@/config/env';
@@ -286,10 +290,8 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
           <Button variant="outline" size="sm" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={submitting} className="min-w-[120px]">
-            {submitting
-              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Registering…</>
-              : 'Register User'}
+          <Button size="sm" onClick={handleSubmit} loading={submitting} className="min-w-[120px]">
+            Register User
           </Button>
         </div>
       </DialogContent>
@@ -457,23 +459,20 @@ export default function UsersPage() {
     <Layout>
       <div  className="space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">User Management</h1>
-            <p className="text-muted-foreground">
-              Manage and track all users with access to the system, including their roles and activity status.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={fetchUsers} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button className="gap-1.5" onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4" /> Add User
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title="User Management"
+          description="Manage and track all users with access to the system, including their roles and activity status."
+          actions={
+            <>
+              <Button variant="outline" size="icon" onClick={fetchUsers} disabled={loading}>
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button className="gap-1.5" onClick={() => setDialogOpen(true)}>
+                <Plus className="w-4 h-4" /> Add User
+              </Button>
+            </>
+          }
+        />
 
         {/* Filter pills + search row */}
         {/* Filters Card */}
@@ -523,15 +522,25 @@ export default function UsersPage() {
           </Card>
 
           <div className="space-y-2 mt-2">
+            <LoadingSwap
+              loading={loading && users.length === 0}
+              fallback={<TableSkeleton rows={6} columns={5} />}
+            >
+            {displayedUsers.length === 0 ? (
+              <div className="rounded-lg border bg-card">
+                <EmptyState icon={Users} title="No users found" compact />
+              </div>
+            ) : (
+            <>
             <div className="hidden lg:block rounded-lg border bg-card">
               <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto">
-                <TableHeader>
+                <TableHeader sticky>
                   <TableRow>
-                    <TableHead className="sticky top-0 z-20 w-[30%] cursor-pointer bg-card" onClick={() => toggleSort('name')}>Name {sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                    <TableHead className="sticky top-0 z-20 w-[30%] cursor-pointer bg-card" onClick={() => toggleSort('email')}>Email {sortKey === 'email' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                    <TableHead className="sticky top-0 z-20 w-[15%] cursor-pointer bg-card" onClick={() => toggleSort('status')}>Status {sortKey === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                    <TableHead className="sticky top-0 z-20 w-[15%] cursor-pointer bg-card" onClick={() => toggleSort('roles')}>Roles {sortKey === 'roles' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                    <TableHead className="sticky top-0 z-20 w-[10%] text-right bg-card">Actions</TableHead>
+                    <TableHead className="w-[30%] cursor-pointer" onClick={() => toggleSort('name')}>Name {sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="w-[30%] cursor-pointer" onClick={() => toggleSort('email')}>Email {sortKey === 'email' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="w-[15%] cursor-pointer" onClick={() => toggleSort('status')}>Status {sortKey === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="w-[15%] cursor-pointer" onClick={() => toggleSort('roles')}>Roles {sortKey === 'roles' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                    <TableHead className="w-[10%] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -595,7 +604,7 @@ export default function UsersPage() {
                             title={user.active !== false ? 'Deactivate' : 'Activate'}
                           >
                             {actionId === user.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Spinner size="xs" />
                             ) : user.active !== false ? (
                               <UserX className="w-4 h-4" />
                             ) : (
@@ -678,7 +687,7 @@ export default function UsersPage() {
                             title={user.active !== false ? 'Deactivate' : 'Activate'}
                           >
                             {actionId === user.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Spinner size="xs" />
                             ) : user.active !== false ? (
                               <UserX className="w-4 h-4" />
                             ) : (
@@ -702,6 +711,9 @@ export default function UsersPage() {
                 </motion.div>
               ))}
             </div>
+            </>
+            )}
+            </LoadingSwap>
           </div>
 
         {!loading && totalUsers > 0 && totalPages > 1 && (

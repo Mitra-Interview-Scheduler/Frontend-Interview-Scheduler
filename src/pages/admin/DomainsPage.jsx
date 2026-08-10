@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,11 +8,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit, Trash2, Globe2, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, Edit, Trash2, Globe2, Search, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { domainAPI } from '@/services/domainAPI';
 import { toLookupCode } from '@/lib/technologyHelpers';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const DomainsPage = () => {
   const [domains, setDomains] = useState([]);
@@ -22,6 +25,9 @@ const DomainsPage = () => {
   const [loading, setLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [formData, setFormData] = useState({ name: '' });
+  const [searchTerm, setSearchTerm] = useState('');
+  // { action: 'deactivate' | 'reactivate', domain }
+  const [confirmTarget, setConfirmTarget] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -105,17 +111,32 @@ const DomainsPage = () => {
     }
   };
 
-  const handleDelete = async (domain) => {
-    if (!window.confirm(`Deactivate domain "${domain.name}"?`)) return;
+  const handleConfirm = async () => {
+    const domain = confirmTarget?.domain;
+    if (!domain) return;
     setIsMutating(true);
     try {
-      await domainAPI.deleteDomain(domain.id);
-      toast({ title: 'Success', description: 'Domain deactivated' });
+      if (confirmTarget.action === 'reactivate') {
+        await domainAPI.updateDomain(domain.id, {
+          name: domain.name,
+          code: domain.code || undefined,
+          isActive: true,
+        });
+        toast({ title: 'Success', description: 'Domain reactivated' });
+      } else {
+        await domainAPI.deleteDomain(domain.id);
+        toast({ title: 'Success', description: 'Domain deactivated' });
+      }
+      setConfirmTarget(null);
       await loadData();
     } catch (error) {
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to deactivate domain',
+        description:
+          error.response?.data?.message
+          || (confirmTarget.action === 'reactivate'
+            ? 'Failed to reactivate domain'
+            : 'Failed to deactivate domain'),
         variant: 'destructive',
       });
     } finally {
@@ -123,86 +144,144 @@ const DomainsPage = () => {
     }
   };
 
-  const activeDomains = domains.filter((d) => d.isActive !== false);
-  const inactiveDomains = domains.filter((d) => d.isActive === false);
+  const filteredDomains = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return domains;
+    return domains.filter((domain) => (
+      domain.name?.toLowerCase().includes(term)
+      || domain.code?.toLowerCase().includes(term)
+    ));
+  }, [domains, searchTerm]);
+
+  const activeDomains = filteredDomains.filter((d) => d.isActive !== false);
+  const inactiveDomains = filteredDomains.filter((d) => d.isActive === false);
+
+  const renderRows = (list, inactive = false) => (
+    <div className="space-y-2">
+      {list.map((domain) => (
+        <div
+          key={domain.id}
+          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
+            inactive ? 'opacity-70' : 'hover:bg-muted/30'
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{domain.name}</span>
+              {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+            </div>
+            {domain.code && (
+              <p className="text-xs text-muted-foreground mt-1">Code: {domain.code}</p>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-1">
+            {inactive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmTarget({ action: 'reactivate', domain })}
+                disabled={isMutating}
+                className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                title="Reactivate"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reactivate
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => openEdit(domain)} disabled={isMutating}>
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmTarget({ action: 'deactivate', domain })}
+                  disabled={isMutating}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <Layout>
       <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Domains</h1>
-            <p className="text-muted-foreground text-lg">
-              Manage business domains for candidates and interviewers
-            </p>
-          </div>
-          <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Domain
-          </Button>
-        </motion.div>
+        <PageHeader
+          title="Domains"
+          description="Manage business domains for candidates and interviewers"
+          actions={
+            <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }} className="gap-2">
+              <Plus className="w-4 h-4" /> Add Domain
+            </Button>
+          }
+        />
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Globe2 className="w-5 h-5" /> Active Domains ({activeDomains.length})
+              <Globe2 className="w-5 h-5" /> Domains ({domains.length})
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : activeDomains.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No domains yet. Create your first domain.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activeDomains.map((domain) => (
-                  <div
-                    key={domain.id}
-                    className="border rounded-lg p-2 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow"
-                  >
-                    <div>
-                      <p className="font-semibold">{domain.name}</p>
+          <CardContent className="space-y-4">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search domains..."
+                className="pl-10"
+              />
+            </div>
+            <LoadingSwap loading={loading && domains.length === 0} fallback={<LoadingState />}>
+              {domains.length === 0 ? (
+                <EmptyState
+                  icon={Globe2}
+                  title="No domains yet"
+                  description="Create your first domain."
+                  compact
+                />
+              ) : filteredDomains.length === 0 ? (
+                <EmptyState
+                  icon={Globe2}
+                  title={`No domains match "${searchTerm.trim()}"`}
+                  compact
+                />
+              ) : (
+                <div className="space-y-6">
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">Active</h3>
+                      <Badge variant="outline" className="text-[10px]">{activeDomains.length}</Badge>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(domain)} disabled={isMutating}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(domain)}
-                        disabled={isMutating}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    {activeDomains.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">No active domains.</p>
+                    ) : (
+                      renderRows(activeDomains)
+                    )}
+                  </section>
+
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-muted-foreground">Inactive</h3>
+                      <Badge variant="secondary" className="text-[10px]">{inactiveDomains.length}</Badge>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                    {inactiveDomains.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">No inactive domains.</p>
+                    ) : (
+                      renderRows(inactiveDomains, true)
+                    )}
+                  </section>
+                </div>
+              )}
+            </LoadingSwap>
           </CardContent>
         </Card>
-
-        {inactiveDomains.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-muted-foreground">Inactive Domains ({inactiveDomains.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {inactiveDomains.map((domain) => (
-                  <Badge key={domain.id} variant="secondary">{domain.name}</Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -224,8 +303,8 @@ const DomainsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isMutating}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={isMutating}>
-              {isMutating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : 'Create'}
+            <Button onClick={handleAdd} loading={isMutating}>
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -249,12 +328,29 @@ const DomainsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isMutating}>Cancel</Button>
-            <Button onClick={handleEdit} disabled={isMutating}>
-              {isMutating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : 'Save'}
+            <Button onClick={handleEdit} loading={isMutating}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
+        title={confirmTarget?.action === 'reactivate' ? 'Reactivate domain?' : 'Deactivate domain?'}
+        description={
+          confirmTarget?.domain
+            ? confirmTarget.action === 'reactivate'
+              ? `Reactivate "${confirmTarget.domain.name}"? It will be available again.`
+              : `Deactivate "${confirmTarget.domain.name}"? It will be moved to inactive.`
+            : undefined
+        }
+        confirmLabel={confirmTarget?.action === 'reactivate' ? 'Reactivate' : 'Deactivate'}
+        destructive={confirmTarget?.action !== 'reactivate'}
+        onConfirm={handleConfirm}
+        loading={isMutating}
+      />
     </Layout>
   );
 };

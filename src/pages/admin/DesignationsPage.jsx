@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -9,13 +9,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers, Briefcase } from 'lucide-react';
+import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Layers, Briefcase, Search } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
+import { LoadingState, useTabTransition } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 
@@ -24,6 +29,7 @@ const DesignationsPage = () => {
   const userRoles = getNormalizedRoles(user);
   const isAdmin = userRoles.includes('ADMIN');
   const canCreateMasterData = userRoles.some((role) => ['ADMIN', 'HR', 'INTERVIEWER'].includes(role));
+  const tabMotion = useTabTransition();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -41,6 +47,9 @@ const DesignationsPage = () => {
   const [departments, setDepartments] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [departmentSearch, setDepartmentSearch] = useState('');
+  const [designationSearch, setDesignationSearch] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null); // { type: 'tier'|'designation', id, label }
   const [isAddDesignationOpen, setIsAddDesignationOpen] = useState(false);
   const [isEditDesignationOpen, setIsEditDesignationOpen] = useState(false);
   const [isAddTierOpen, setIsAddTierOpen] = useState(false);
@@ -290,26 +299,34 @@ const DesignationsPage = () => {
   };
 
   const handleDeleteTier = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this tier?")) return;
+    setConfirmAction({ type: 'tier', id, label: 'this tier' });
+  };
 
+  const executeConfirmDelete = async () => {
+    if (!confirmAction) return;
     setIsMutating(true);
     try {
-      await tierAPI.deleteTier(id);
+      if (confirmAction.type === 'tier') {
+        await tierAPI.deleteTier(confirmAction.id);
+        toast({ title: 'Success', description: 'Tier deleted successfully' });
+      } else {
+        await designationAPI.deleteDesignation(confirmAction.id);
+        toast({ title: 'Success', description: 'Designation deleted successfully' });
+      }
+      setConfirmAction(null);
       await refreshData();
-      toast({ title: "Success", description: "Tier deleted successfully" });
     } catch (err) {
-      console.error('Error deleting tier:', err);
+      console.error('Error deleting:', err);
       toast({
-        title: "Error",
-        description: err.response?.data?.message || "Failed to delete tier",
-        variant: "destructive"
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to delete',
+        variant: 'destructive',
       });
     } finally {
       setIsMutating(false);
     }
   };
 
-  // Designation Management
   const handleOpenAddDesignation = () => {
     setDesignationForm({ name: '', levelOrder: '', departmentId: '', tierId: '', description: '' });
     setTimeout(() => setIsAddDesignationOpen(true), 0);
@@ -399,23 +416,8 @@ const DesignationsPage = () => {
   };
 
   const handleDeleteDesignation = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this designation?")) return;
-
-    setIsMutating(true);
-    try {
-      await designationAPI.deleteDesignation(id);
-      await refreshData();
-      toast({ title: "Success", description: "Designation deleted successfully" });
-    } catch (err) {
-      console.error('Error deleting designation:', err);
-      toast({
-        title: "Error",
-        description: err.response?.data?.message || "Failed to delete designation",
-        variant: "destructive"
-      });
-    } finally {
-      setIsMutating(false);
-    }
+    const des = designations.find((d) => d.id === id);
+    setConfirmAction({ type: 'designation', id, label: des?.name || 'this designation' });
   };
 
   const handleMoveDesignation = async (tierId, index, direction) => {
@@ -479,6 +481,24 @@ const DesignationsPage = () => {
     ? tiers 
     : tiers.filter(t => t.departmentId === parseInt(selectedDepartment));
 
+  const filteredDepartments = useMemo(() => {
+    const term = departmentSearch.trim().toLowerCase();
+    if (!term) return departments;
+    return departments.filter((department) => (
+      department.name?.toLowerCase().includes(term)
+      || department.code?.toLowerCase().includes(term)
+    ));
+  }, [departments, departmentSearch]);
+
+  const filteredDesignations = useMemo(() => {
+    const term = designationSearch.trim().toLowerCase();
+    if (!term) return designations;
+    return designations.filter((des) => (
+      des.name?.toLowerCase().includes(term)
+      || des.description?.toLowerCase().includes(term)
+    ));
+  }, [designations, designationSearch]);
+
   const groupedTiers = filteredTiers.reduce((acc, tier) => {
     const id = tier.departmentId || 0;
     if (!acc[id]) acc[id] = { departmentId: id, departmentName: tier.departmentName || 'Unassigned', tiers: [] };
@@ -532,9 +552,27 @@ const DesignationsPage = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-3 text-muted-foreground">Loading...</span>
+        <div className="space-y-6 overflow-hidden">
+          <PageHeader
+            title="Designations & Tiers"
+            description={
+              canCreateMasterData && !isAdmin
+                ? 'Add departments, tiers, and designations for your profile and interviews'
+                : 'Manage organizational hierarchy with departments, tiers, and designations'
+            }
+          />
+
+          <AdminSectionTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            tabs={[
+              { value: 'departments', label: 'Departments', icon: Building2 },
+              { value: 'tiers', label: 'Tiers', icon: Layers },
+              { value: 'designations', label: 'Designations', icon: Briefcase },
+            ]}
+          />
+
+          <LoadingState label="Loading…" />
         </div>
       </Layout>
     );
@@ -543,16 +581,14 @@ const DesignationsPage = () => {
   return (
     <Layout>
       <div className="space-y-6 overflow-hidden">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Designations & Tiers</h1>
-            <p className="text-muted-foreground mt-1">
-              {canCreateMasterData && !isAdmin
-                ? 'Add departments, tiers, and designations for your profile and interviews'
-                : 'Manage organizational hierarchy with departments, tiers, and designations'}
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Designations & Tiers"
+          description={
+            canCreateMasterData && !isAdmin
+              ? 'Add departments, tiers, and designations for your profile and interviews'
+              : 'Manage organizational hierarchy with departments, tiers, and designations'
+          }
+        />
 
         <AdminSectionTabs
           activeTab={activeTab}
@@ -564,55 +600,77 @@ const DesignationsPage = () => {
           ]}
         />
 
-        {activeTab === 'departments' ? (
-          <div className="space-y-4">
-            {canCreateMasterData && (
-              <div className="flex justify-end">
-                <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Department
-                </Button>
-              </div>
-            )}
-
-            {departments.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No departments found</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {departments.map((department) => (
-                  <Card key={department.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold">{department.name}</h3>
+        <AnimatePresence mode="wait" initial={false}>
+          {activeTab === 'departments' ? (
+          <motion.div key="departments" className="space-y-4" {...tabMotion}>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Departments</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Organizational departments used for tiers and designations
+                  </p>
+                </div>
+                {canCreateMasterData && (
+                  <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Department
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative max-w-md">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={departmentSearch}
+                    onChange={(e) => setDepartmentSearch(e.target.value)}
+                    placeholder="Search departments..."
+                    className="pl-10"
+                  />
+                </div>
+                {departments.length === 0 ? (
+                  <EmptyState icon={Building2} title="No departments found" compact />
+                ) : filteredDepartments.length === 0 ? (
+                  <EmptyState
+                    icon={Building2}
+                    title={`No departments match "${departmentSearch.trim()}"`}
+                    compact
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {filteredDepartments.map((department) => (
+                      <div
+                        key={department.id}
+                        className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{department.name}</span>
+                            {department.code && (
+                              <Badge variant="outline" className="text-[10px]">{department.code}</Badge>
+                            )}
+                          </div>
                           {department.code && (
                             <p className="text-xs text-muted-foreground mt-1">Code: {department.code}</p>
                           )}
                         </div>
-                        <Badge variant="outline">{department.code || '—'}</Badge>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         ) : activeTab === 'tiers' ? (
-          <div className="space-y-4">
+          <motion.div key="tiers" className="space-y-4" {...tabMotion}>
             {departmentFilterCard}
 
             {/* Add Tier button moved into department filter card */}
 
             {filteredTiers.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Layers className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No tiers found</p>
+                <CardContent>
+                  <EmptyState icon={Layers} title="No tiers found" />
                 </CardContent>
               </Card>
             ) : (
@@ -676,25 +734,46 @@ const DesignationsPage = () => {
                 ))}
               </div>
             )}
-          </div>
+          </motion.div>
         ) : (
-          <div className="space-y-4">
+          <motion.div key="designations" className="space-y-4" {...tabMotion}>
             {departmentFilterCard}
 
-            {/* Add Designation button moved into department filter card */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={designationSearch}
+                onChange={(e) => setDesignationSearch(e.target.value)}
+                placeholder="Search designations..."
+                className="pl-10 bg-card"
+              />
+            </div>
 
             {designations.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No designations available. Please create designations first.</p>
+                <CardContent>
+                  <EmptyState
+                    icon={Briefcase}
+                    title="No designations available"
+                    description="Please create designations first."
+                  />
+                </CardContent>
+              </Card>
+            ) : filteredDesignations.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <EmptyState
+                    icon={Briefcase}
+                    title={`No designations match "${designationSearch.trim()}"`}
+                    compact
+                  />
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-4 max-h-[60vh] overflow-auto">
                 {(selectedDepartment === 'all' ? departments : departments.filter(d => d.id === parseInt(selectedDepartment))).map((dept) => {
                   const deptTiers = tiers.filter(t => t.departmentId === dept.id).sort((a, b) => a.tierOrder - b.tierOrder);
-                  const deptHasItems = deptTiers.some(t => designations.some(d => d.tierId === t.id));
+                  const deptHasItems = deptTiers.some(t => filteredDesignations.some(d => d.tierId === t.id));
                   if (!deptHasItems) return null;
                   return (
                     <Card key={dept.id}>
@@ -709,7 +788,7 @@ const DesignationsPage = () => {
                       <CardContent>
                         <div className="space-y-4">
                           {deptTiers.map((tier) => {
-                            const tierDesignations = designations.filter(d => d.tierId === tier.id).sort((a, b) => a.levelOrder - b.levelOrder);
+                            const tierDesignations = filteredDesignations.filter(d => d.tierId === tier.id).sort((a, b) => a.levelOrder - b.levelOrder);
                             if (tierDesignations.length === 0) return null;
                             return (
                               <div key={tier.id} className={`space-y-6 border-l-4 pl-4 ${getTierBorder(tier.tierOrder)}`}>
@@ -739,13 +818,27 @@ const DesignationsPage = () => {
                                               <Button variant="outline" size="icon" onClick={() => handleDeleteDesignation(des.id)} disabled={isMutating}>
                                                 <Trash2 className="h-4 w-4" />
                                               </Button>
-                                              {idx > 0 && (
-                                                <Button variant="ghost" size="icon" onClick={() => handleMoveDesignation(tier.id, idx, 'up')} disabled={isMutating}>
+                                              {idx > 0 && !designationSearch.trim() && (
+                                                <Button variant="ghost" size="icon" onClick={() => {
+                                                  const fullGroup = designations
+                                                    .filter((d) => d.tierId === tier.id)
+                                                    .sort((a, b) => a.levelOrder - b.levelOrder);
+                                                  const fullIdx = fullGroup.findIndex((d) => d.id === des.id);
+                                                  if (fullIdx > 0) handleMoveDesignation(tier.id, fullIdx, 'up');
+                                                }} disabled={isMutating}>
                                                   <ArrowUp className="h-4 w-4" />
                                                 </Button>
                                               )}
-                                              {idx < arr.length - 1 && (
-                                                <Button variant="ghost" size="icon" onClick={() => handleMoveDesignation(tier.id, idx, 'down')} disabled={isMutating}>
+                                              {idx < arr.length - 1 && !designationSearch.trim() && (
+                                                <Button variant="ghost" size="icon" onClick={() => {
+                                                  const fullGroup = designations
+                                                    .filter((d) => d.tierId === tier.id)
+                                                    .sort((a, b) => a.levelOrder - b.levelOrder);
+                                                  const fullIdx = fullGroup.findIndex((d) => d.id === des.id);
+                                                  if (fullIdx >= 0 && fullIdx < fullGroup.length - 1) {
+                                                    handleMoveDesignation(tier.id, fullIdx, 'down');
+                                                  }
+                                                }} disabled={isMutating}>
                                                   <ArrowDown className="h-4 w-4" />
                                                 </Button>
                                               )}
@@ -766,8 +859,9 @@ const DesignationsPage = () => {
                 })}
               </div>
             )}
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Add Department Dialog */}
         <Dialog open={isAddDepartmentOpen} onOpenChange={setIsAddDepartmentOpen}>
@@ -805,8 +899,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddDepartmentOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddDepartment} disabled={isMutating}>
-                {isMutating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleAddDepartment} loading={isMutating}>
                 Create Department
               </Button>
             </DialogFooter>
@@ -878,8 +971,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddTierOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddTier} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleAddTier} loading={isMutating}>
                 Create
               </Button>
             </DialogFooter>
@@ -935,8 +1027,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsEditTierOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleEditTier} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleEditTier} loading={isMutating}>
                 Update
               </Button>
             </DialogFooter>
@@ -1027,8 +1118,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddDesignationOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddDesignation} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleAddDesignation} loading={isMutating}>
                 Create
               </Button>
             </DialogFooter>
@@ -1105,14 +1195,27 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsEditDesignationOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleEditDesignation} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleEditDesignation} loading={isMutating}>
                 Update
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmAction(null); }}
+        title={confirmAction?.type === 'tier' ? 'Delete tier?' : 'Delete designation?'}
+        description={
+          confirmAction
+            ? `Are you sure you want to delete "${confirmAction.label}"? This action cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        onConfirm={executeConfirmDelete}
+        loading={isMutating}
+      />
     </Layout>
   );
 };

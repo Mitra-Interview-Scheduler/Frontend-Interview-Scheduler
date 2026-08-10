@@ -26,7 +26,6 @@ import {
   Award,
   Briefcase,
   Globe2,
-  Loader2,
   Mail,
   TrendingUp,
   User,
@@ -794,17 +793,11 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={saving || !user}
+              loading={saving}
+              disabled={!user}
               className="min-w-[110px]"
             >
-              {saving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                'Save Changes'
-              )}
+              Save Changes
             </Button>
           ) : (
             <Button

@@ -13,9 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Loader2, GripVertical } from 'lucide-react';
+import { Plus, Edit, Trash2, GripVertical } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
+import { LoadingState } from '@/components/ui/loading';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
@@ -93,6 +95,8 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [form, setForm] = useState(createEmptyQuestion());
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadQuestions = useCallback(async () => {
     try {
@@ -219,11 +223,13 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
     }
   };
 
-  const handleDelete = async (question) => {
-    if (!window.confirm(`Delete obligatory question "${question.label}"?`)) return;
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
 
     try {
-      await feedbackQuestionsAPI.deleteObligatoryQuestion(question.id);
+      setIsDeleting(true);
+      await feedbackQuestionsAPI.deleteObligatoryQuestion(confirmTarget.id);
+      setConfirmTarget(null);
       toast({ title: 'Deleted', description: 'Obligatory question removed.' });
       await loadQuestions();
     } catch (error) {
@@ -232,6 +238,8 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
         description: error.response?.data?.message || 'Unable to delete obligatory question.',
         variant: 'destructive',
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -252,9 +260,8 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
 
       {loading ? (
         <Card>
-          <CardContent className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading obligatory questions...
+          <CardContent className="py-4">
+            <LoadingState label="Loading obligatory questions..." size="sm" minHeight="sm" />
           </CardContent>
         </Card>
       ) : questions.length === 0 ? (
@@ -293,8 +300,9 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(question)}
+                    onClick={() => setConfirmTarget(question)}
                     className="gap-2 text-destructive hover:text-destructive"
+                    disabled={isDeleting}
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete
@@ -432,13 +440,22 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button onClick={handleSave} loading={saving} className="gap-2">
               {editingQuestion ? 'Save Changes' : 'Create Question'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => { if (!open && !isDeleting) setConfirmTarget(null); }}
+        title="Delete obligatory question?"
+        description={confirmTarget ? `Delete obligatory question "${confirmTarget.label}"?` : undefined}
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+      />
     </div>
   );
 };
