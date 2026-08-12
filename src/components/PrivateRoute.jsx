@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import PropTypes from 'prop-types';
 import { getNormalizedRoles, normalizeRole } from '@/lib/roleHelpers';
+import { FullScreenLoading } from '@/components/ui/loading';
 
 const getUserRoles = (user) => getNormalizedRoles(user);
 
@@ -11,11 +12,7 @@ export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
+    return <FullScreenLoading />;
   }
 
   if (!user || !token) {

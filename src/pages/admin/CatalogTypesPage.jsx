@@ -8,21 +8,26 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit, Trash2, FileText, Link2, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, Edit, Trash2, FileText, Link2, Search, RotateCcw } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import { documentTypeAPI, resourceTypeAPI } from '@/services/catalogTypeAPI';
+import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const TABS = [
   { value: 'documents', label: 'Document Types', icon: FileText },
   { value: 'resources', label: 'Resource Types', icon: Link2 },
 ];
 
-const emptyForm = { label: '', code: '', displayOrder: '' };
+const emptyForm = { label: '', code: '' };
 
 const CatalogTypesPage = () => {
   const [activeTab, setActiveTab] = useState('documents');
+  const tabMotion = useTabTransition();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
@@ -30,9 +35,13 @@ const CatalogTypesPage = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [searchTerm, setSearchTerm] = useState('');
+  // { action: 'deactivate' | 'reactivate', item }
+  const [confirmTarget, setConfirmTarget] = useState(null);
 
   const api = activeTab === 'documents' ? documentTypeAPI : resourceTypeAPI;
   const singular = activeTab === 'documents' ? 'Document type' : 'Resource type';
+  const typeNoun = activeTab === 'documents' ? 'Document' : 'Resource';
 
   const loadData = async () => {
     try {
@@ -52,6 +61,7 @@ const CatalogTypesPage = () => {
   };
 
   useEffect(() => {
+    setSearchTerm('');
     loadData();
   }, [activeTab]);
 
@@ -70,7 +80,6 @@ const CatalogTypesPage = () => {
       await api.create({
         label: formData.label.trim(),
         code: formData.code?.trim() || undefined,
-        displayOrder: formData.displayOrder ? parseInt(formData.displayOrder, 10) : undefined,
       });
       toast({ title: 'Success', description: `${singular} created` });
       setIsAddOpen(false);
@@ -92,7 +101,6 @@ const CatalogTypesPage = () => {
     setFormData({
       label: item.label || '',
       code: item.code || '',
-      displayOrder: item.displayOrder?.toString() || '',
     });
     setIsEditOpen(true);
   };
@@ -104,7 +112,6 @@ const CatalogTypesPage = () => {
       await api.update(editing.id, {
         label: formData.label.trim(),
         code: formData.code?.trim() || undefined,
-        displayOrder: formData.displayOrder ? parseInt(formData.displayOrder, 10) : undefined,
         active: editing.active !== false,
       });
       toast({ title: 'Success', description: `${singular} updated` });
@@ -122,17 +129,32 @@ const CatalogTypesPage = () => {
     }
   };
 
-  const handleDelete = async (item) => {
-    if (!window.confirm(`Deactivate "${item.label}"?`)) return;
+  const handleConfirm = async () => {
+    const item = confirmTarget?.item;
+    if (!item) return;
     setIsMutating(true);
     try {
-      await api.delete(item.id);
-      toast({ title: 'Success', description: `${singular} deactivated` });
+      if (confirmTarget.action === 'reactivate') {
+        await api.update(item.id, {
+          label: item.label,
+          code: item.code || undefined,
+          active: true,
+        });
+        toast({ title: 'Success', description: `${singular} reactivated` });
+      } else {
+        await api.delete(item.id);
+        toast({ title: 'Success', description: `${singular} deactivated` });
+      }
+      setConfirmTarget(null);
       await loadData();
     } catch (error) {
       toast({
         title: 'Error',
-        description: error.response?.data?.message || `Failed to deactivate ${singular.toLowerCase()}`,
+        description:
+          error.response?.data?.message
+          || (confirmTarget.action === 'reactivate'
+            ? `Failed to reactivate ${singular.toLowerCase()}`
+            : `Failed to deactivate ${singular.toLowerCase()}`),
         variant: 'destructive',
       });
     } finally {
@@ -140,54 +162,76 @@ const CatalogTypesPage = () => {
     }
   };
 
-  const activeItems = useMemo(() => items.filter((item) => item.active !== false), [items]);
-  const inactiveItems = useMemo(() => items.filter((item) => item.active === false), [items]);
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter((item) => (
+      item.label?.toLowerCase().includes(term)
+      || item.code?.toLowerCase().includes(term)
+    ));
+  }, [items, searchTerm]);
 
-  const renderList = (list, inactive = false) => {
-    if (list.length === 0) {
-      return (
-        <p className="text-muted-foreground text-center py-8">
-          {inactive ? 'No inactive types.' : 'No types yet. Create your first one.'}
-        </p>
-      );
-    }
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {list.map((item) => (
-          <div
-            key={item.id}
-            className={`border rounded-lg p-4 flex items-start justify-between gap-3 ${
-              inactive ? 'opacity-70' : 'hover:shadow-sm transition-shadow'
-            }`}
-          >
-            <div className="min-w-0">
-              <p className="font-semibold truncate">{item.label}</p>
-              <p className="text-xs text-muted-foreground mt-1">Code: {item.code}</p>
-              <Badge variant="outline" className="mt-2 text-[10px]">
-                Order {item.displayOrder ?? 0}
-              </Badge>
+  const filteredActiveItems = useMemo(
+    () => filteredItems.filter((item) => item.active !== false),
+    [filteredItems],
+  );
+  const filteredInactiveItems = useMemo(
+    () => filteredItems.filter((item) => item.active === false),
+    [filteredItems],
+  );
+
+  const renderRows = (list, inactive = false) => (
+    <div className="space-y-2">
+      {list.map((item) => (
+        <div
+          key={item.id}
+          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
+            inactive ? 'opacity-70' : 'hover:bg-muted/30'
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium truncate">{item.label}</span>
+              {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
             </div>
-            {!inactive && (
-              <div className="flex gap-1 shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => openEdit(item)} disabled={isMutating}>
-                  <Edit className="w-4 h-4" />
+            {item.code && (
+              <p className="text-xs text-muted-foreground mt-1">Code: {item.code}</p>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-1">
+            {inactive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmTarget({ action: 'reactivate', item })}
+                disabled={isMutating}
+                className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                title="Reactivate"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reactivate
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => openEdit(item)} disabled={isMutating}>
+                  <Edit className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(item)}
+                  size="sm"
+                  onClick={() => setConfirmTarget({ action: 'deactivate', item })}
                   disabled={isMutating}
                   className="text-destructive hover:text-destructive"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="h-4 w-4" />
                 </Button>
-              </div>
+              </>
             )}
           </div>
-        ))}
-      </div>
-    );
-  };
+        </div>
+      ))}
+    </div>
+  );
 
   const formFields = (
     <div className="space-y-4 py-2">
@@ -209,79 +253,102 @@ const CatalogTypesPage = () => {
           disabled={isMutating}
         />
       </div>
-      <div className="space-y-2">
-        <Label>Display order (optional)</Label>
-        <Input
-          type="number"
-          value={formData.displayOrder}
-          onChange={(e) => setFormData((prev) => ({ ...prev, displayOrder: e.target.value }))}
-          placeholder="Auto"
-          disabled={isMutating}
-        />
-      </div>
     </div>
   );
 
   return (
     <Layout>
       <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Document & Resource Types</h1>
-            <p className="text-muted-foreground text-lg">
-              Manage types available when uploading documents or attaching resource links
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              resetForm();
-              setIsAddOpen(true);
-            }}
-            className="gap-2 self-start"
-          >
-            <Plus className="w-4 h-4" />
-            Add {singular}
-          </Button>
-        </motion.div>
+        <PageHeader
+          title="Document & Resource Types"
+          description="Manage types available when uploading documents or attaching resource links"
+          actions={
+            <Button
+              onClick={() => {
+                resetForm();
+                setIsAddOpen(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add {singular}
+            </Button>
+          }
+        />
 
         <AdminSectionTabs
           tabs={TABS.map((tab) => ({
             ...tab,
-            count: tab.value === activeTab ? activeItems.length : undefined,
+            count: tab.value === activeTab ? items.length : undefined,
           }))}
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Active {activeTab === 'documents' ? 'Document' : 'Resource'} Types ({activeItems.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              renderList(activeItems)
-            )}
-          </CardContent>
-        </Card>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={activeTab} {...tabMotion}>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {typeNoun} Types ({items.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative max-w-md">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={`Search ${typeNoun.toLowerCase()} types...`}
+                    className="pl-10"
+                  />
+                </div>
+                <LoadingSwap loading={loading && items.length === 0} fallback={<LoadingState />}>
+                  {items.length === 0 ? (
+                    <EmptyState
+                      icon={activeTab === 'documents' ? FileText : Link2}
+                      title="No types yet"
+                      description="Create your first one."
+                      compact
+                    />
+                  ) : filteredItems.length === 0 ? (
+                    <EmptyState
+                      icon={activeTab === 'documents' ? FileText : Link2}
+                      title={`No types match "${searchTerm.trim()}"`}
+                      compact
+                    />
+                  ) : (
+                    <div className="space-y-6">
+                      <section className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-foreground">Active</h3>
+                          <Badge variant="outline" className="text-[10px]">{filteredActiveItems.length}</Badge>
+                        </div>
+                        {filteredActiveItems.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">No active types.</p>
+                        ) : (
+                          renderRows(filteredActiveItems)
+                        )}
+                      </section>
 
-        {!loading && inactiveItems.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Inactive ({inactiveItems.length})</CardTitle>
-            </CardHeader>
-            <CardContent>{renderList(inactiveItems, true)}</CardContent>
-          </Card>
-        )}
+                      <section className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-muted-foreground">Inactive</h3>
+                          <Badge variant="secondary" className="text-[10px]">{filteredInactiveItems.length}</Badge>
+                        </div>
+                        {filteredInactiveItems.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">No inactive types.</p>
+                        ) : (
+                          renderRows(filteredInactiveItems, true)
+                        )}
+                      </section>
+                    </div>
+                  )}
+                </LoadingSwap>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={(open) => !isMutating && setIsAddOpen(open)}>
@@ -297,8 +364,8 @@ const CatalogTypesPage = () => {
             <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={isMutating}>
               Cancel
             </Button>
-            <Button onClick={handleAdd} disabled={isMutating}>
-              {isMutating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+            <Button onClick={handleAdd} loading={isMutating}>
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -308,19 +375,40 @@ const CatalogTypesPage = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit {singular}</DialogTitle>
-            <DialogDescription>Update the label, code, or display order.</DialogDescription>
+            <DialogDescription>Update the label or code.</DialogDescription>
           </DialogHeader>
           {formFields}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={isMutating}>
               Cancel
             </Button>
-            <Button onClick={handleEdit} disabled={isMutating}>
-              {isMutating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            <Button onClick={handleEdit} loading={isMutating}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
+        title={
+          confirmTarget?.action === 'reactivate'
+            ? `Reactivate ${singular.toLowerCase()}?`
+            : `Deactivate ${singular.toLowerCase()}?`
+        }
+        description={
+          confirmTarget?.item
+            ? confirmTarget.action === 'reactivate'
+              ? `Reactivate "${confirmTarget.item.label}"? It will be available again.`
+              : `Deactivate "${confirmTarget.item.label}"? It will be moved to inactive.`
+            : undefined
+        }
+        confirmLabel={confirmTarget?.action === 'reactivate' ? 'Reactivate' : 'Deactivate'}
+        destructive={confirmTarget?.action !== 'reactivate'}
+        onConfirm={handleConfirm}
+        loading={isMutating}
+      />
     </Layout>
   );
 };

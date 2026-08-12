@@ -12,11 +12,14 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Loader2, Mail, RefreshCw, Search, Eye, Users, Clock, AlertCircle, Video, CalendarDays,
+  Mail, RefreshCw, Search, Eye, Users, Clock, AlertCircle, Video, CalendarDays,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { emailLogsAPI } from '@/services/emailLogsAPI';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 
 const PAGE_SIZE = 20;
 
@@ -190,24 +193,28 @@ const EmailLogsPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <Mail className="w-6 h-6 text-primary" />
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-2">
+              <Mail className="w-7 h-7 text-primary" />
               Email Logs
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            </span>
+          }
+          description={
+            <>
               Outbound notification emails and calendar invitations
               {retentionDays != null && (
                 <> · retained for {retentionDays} day{retentionDays === 1 ? '' : 's'}</>
               )}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={loadLogs} disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            <span className="ml-2">Refresh</span>
-          </Button>
-        </div>
+            </>
+          }
+          actions={
+            <Button variant="outline" size="sm" onClick={loadLogs} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="ml-2">Refresh</span>
+            </Button>
+          }
+        />
 
         <Card>
           <CardHeader className="pb-3">
@@ -242,19 +249,16 @@ const EmailLogsPage = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Loading email logs…
-              </div>
-            ) : logs.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground text-sm">
-                No email logs found.
-              </div>
+            <LoadingSwap
+              loading={loading && logs.length === 0}
+              fallback={<LoadingState label="Loading email logs…" size="sm" />}
+            >
+            {logs.length === 0 ? (
+              <EmptyState icon={Mail} title="No email logs found" compact />
             ) : (
               <div className="rounded-md border overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader sticky>
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Sent at</TableHead>
                       <TableHead>Type</TableHead>
@@ -331,6 +335,7 @@ const EmailLogsPage = () => {
                 </Table>
               </div>
             )}
+            </LoadingSwap>
 
             {!loading && totalElements > 0 && (
               <div className="flex items-center justify-between gap-2 mt-4">

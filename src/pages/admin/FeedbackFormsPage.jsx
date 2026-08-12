@@ -2,12 +2,15 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Edit, Loader2, ChevronLeft, ChevronRight, FileText, Tags, ListChecks } from 'lucide-react';
+import {
+  Plus, Search, Edit, ChevronLeft, ChevronRight, ChevronDown,
+  FileText, Tags, ListChecks, Filter, X, Building2, Briefcase, Layers,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
@@ -18,7 +21,10 @@ import FeedbackFormPreview from '@/components/FeedbackFormPreview';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
 import ObligatoryQuestionsManager from '@/components/admin/ObligatoryQuestionsManager';
-import { FEEDBACK_INTERVIEW_TYPE_OPTIONS } from '@/lib/statusConstants';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { FEEDBACK_INTERVIEW_TYPE_OPTIONS, formatInterviewTypeLabel } from '@/lib/statusConstants';
 import { useInterviewTypes } from '@/hooks/useInterviewTypes';
 
 const FeedbackFormsPage = () => {
@@ -50,6 +56,7 @@ const FeedbackFormsPage = () => {
   const [designations, setDesignations] = useState([]);
   const [questionCategories, setQuestionCategories] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
   const itemsPerPage = 10;
   
   const [filters, setFilters] = useState({
@@ -78,6 +85,25 @@ const FeedbackFormsPage = () => {
       designationId: '',
     }));
   };
+
+  const clearFilters = () => {
+    setFilters({
+      searchTerm: '',
+      departmentId: '',
+      designationId: '',
+      interviewType: '',
+    });
+    setStatusFilter('all');
+  };
+
+  const activeFormCount = useMemo(
+    () => filteredForms.filter((form) => form.isActive !== false).length,
+    [filteredForms]
+  );
+  const inactiveFormCount = useMemo(
+    () => filteredForms.filter((form) => form.isActive === false).length,
+    [filteredForms]
+  );
 
   const totalPages = Math.ceil(filteredForms.length / itemsPerPage);
   const paginatedForms = filteredForms.slice(
@@ -210,24 +236,22 @@ const FeedbackFormsPage = () => {
       <div
         className={
           activeTab === 'forms'
-            ? 'flex h-[calc(100vh-7rem)] flex-col gap-6 overflow-hidden'
+            ? 'flex h-[calc(100vh-7rem)] min-h-0 flex-col gap-4 overflow-hidden'
             : 'space-y-6'
         }
       >
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-foreground">Feedback Forms</h1>
-            <p className="text-muted-foreground">
-              Manage feedback forms and question categories for your organization.
-            </p>
-          </div>
-
-          {activeTab === 'forms' && (
-            <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
-              <Plus className="w-4 h-4" /> New Form
-            </Button>
-          )}
-        </div>
+        <div className="shrink-0 space-y-4">
+        <PageHeader
+          title="Feedback Forms"
+          description="Manage feedback forms and question categories for your organization."
+          actions={
+            activeTab === 'forms' ? (
+              <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2 w-fit">
+                <Plus className="w-4 h-4" /> New Form
+              </Button>
+            ) : null
+          }
+        />
 
         <AdminSectionTabs
           activeTab={activeTab}
@@ -238,213 +262,297 @@ const FeedbackFormsPage = () => {
             { value: 'categories', label: 'Categories', icon: Tags },
           ]}
         />
+        </div>
 
         {activeTab === 'categories' ? (
           <CategoryManager type="question" onCategoriesChange={setQuestionCategories} />
         ) : activeTab === 'obligatory' ? (
           <ObligatoryQuestionsManager />
         ) : (
-          <>
-        <Card>
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <Card className="shrink-0">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5" /> Filters
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFiltersCollapsed((value) => !value)}
+              className="h-9 gap-2"
+              aria-expanded={!isFiltersCollapsed}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
+              {isFiltersCollapsed ? 'Show' : 'Hide'}
+            </Button>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-5">
-            <div className="space-y-2">
-              <Label>Search</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search forms..."
-                  value={filters.searchTerm}
-                  onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                  className="pl-10"
-                />
+          {!isFiltersCollapsed && (
+            <CardContent>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search forms…"
+                      value={filters.searchTerm}
+                      onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={filters.departmentId || 'all'}
+                    onValueChange={handleDepartmentFilterChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id.toString()}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Designation</Label>
+                  <Select
+                    value={filters.designationId || 'all'}
+                    onValueChange={(value) => setFilters({ ...filters, designationId: value === 'all' ? '' : value })}
+                    disabled={!filters.departmentId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={filters.departmentId ? 'All Designations' : 'Select department first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Designations</SelectItem>
+                      {availableDesignations.map((desig) => (
+                        <SelectItem key={desig.id} value={desig.id.toString()}>
+                          {desig.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Interview Type</Label>
+                  <Select
+                    value={filters.interviewType || 'all'}
+                    onValueChange={(value) => setFilters({ ...filters, interviewType: value === 'all' ? '' : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Interview Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Interview Types</SelectItem>
+                      {interviewTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Forms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Forms</SelectItem>
+                      <SelectItem value="active">Active Only</SelectItem>
+                      <SelectItem value="inactive">Inactive Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Select 
-                value={filters.departmentId || 'all'} 
-                onValueChange={handleDepartmentFilterChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All departments" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All departments</SelectItem>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id.toString()}>
-                      {dept.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Designation</Label>
-              <Select 
-                value={filters.designationId || 'all'} 
-                onValueChange={(value) => setFilters({ ...filters, designationId: value === 'all' ? '' : value })}
-                disabled={!filters.departmentId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={filters.departmentId ? 'All designations' : 'Select department first'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All designations</SelectItem>
-                  {availableDesignations.map((desig) => (
-                    <SelectItem key={desig.id} value={desig.id.toString()}>
-                      {desig.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Interview Type</Label>
-              <Select
-                value={filters.interviewType || 'all'}
-                onValueChange={(value) => setFilters({ ...filters, interviewType: value === 'all' ? '' : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All interview types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All interview types</SelectItem>
-                  {interviewTypeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All forms" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All forms</SelectItem>
-                  <SelectItem value="active">Active only</SelectItem>
-                  <SelectItem value="inactive">Inactive only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
+              <div className="mt-6 rounded-lg border border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50 p-4 dark:border-indigo-800 dark:from-indigo-950/20 dark:to-sky-950/20">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-muted-foreground">Forms Shown</span>
+                  <div className="flex flex-wrap items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-emerald-600" />
+                      <span className="text-sm">
+                        <span className="font-bold text-emerald-700">{activeFormCount}</span>
+                        <span className="ml-1 text-muted-foreground">active</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-slate-500" />
+                      <span className="text-sm">
+                        <span className="font-bold text-slate-600">{inactiveFormCount}</span>
+                        <span className="ml-1 text-muted-foreground">inactive</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-slate-400" />
+                      <span className="text-sm">
+                        <span className="font-bold text-slate-600">{filteredForms.length}</span>
+                        <span className="ml-1 text-muted-foreground">total</span>
+                      </span>
+                    </div>
+                    <Button variant="outline" onClick={clearFilters} className="gap-2">
+                      <X className="w-4 h-4" /> Clear Filters
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
-        {/* Preview Dialog */}
-        <FeedbackFormPreview 
-          open={previewOpen} 
-          onOpenChange={setPreviewOpen} 
-          form={previewForm} 
-          getDepartmentName={getDepartmentName} 
-          getDesignationName={getDesignationName} 
-        />
-
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border">
-            <div className="flex flex-col items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p>Loading forms...</p>
-            </div>
-          </div>
-        ) : filteredForms.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <p className="text-muted-foreground">
-                {forms.length === 0 ? 'No feedback forms yet.' : 'No forms match your filters.'}
-              </p>
-              {forms.length === 0 && (
-                <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2">
-                  <Plus className="w-4 h-4" /> Create Your First Form
-                </Button>
-              )}
-            </div>
+        <LoadingSwap
+          loading={loading && forms.length === 0}
+          className="min-h-0 flex-1 flex flex-col overflow-hidden"
+          fallback={<LoadingState label="Loading forms..." className="flex-1 rounded-lg border" />}
+        >
+        {filteredForms.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center rounded-lg border bg-card">
+            <EmptyState
+              icon={FileText}
+              title={forms.length === 0 ? 'No feedback forms yet.' : 'No forms match your filters.'}
+              action={
+                forms.length === 0 ? (
+                  <Button onClick={() => navigate('/admin/feedback-questions')} className="gap-2">
+                    <Plus className="w-4 h-4" /> Create Your First Form
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={clearFilters} className="gap-2">
+                    <X className="w-4 h-4" /> Clear Filters
+                  </Button>
+                )
+              }
+            />
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="grid gap-4 pb-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            <div className="space-y-3 pb-2">
               <AnimatePresence initial={false}>
-                {paginatedForms.map((form) => (
-                  <motion.div
-                    key={form.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                  >
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setPreviewForm(form); setPreviewOpen(true); }}>
-                      <CardContent className="pt-6">
-                        <div className="flex flex-col gap-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1">
+                {paginatedForms.map((form) => {
+                  const interviewTypes = form.scopes?.interviewTypes || [];
+                  const departmentIds = form.scopes?.departmentIds || [];
+                  const designationIds = form.scopes?.designationIds || [];
+                  const questionCount = form.questions?.length || 0;
+                  const visibleDepartments = departmentIds.slice(0, 2);
+                  const extraDepartments = Math.max(0, departmentIds.length - visibleDepartments.length);
+
+                  return (
+                    <motion.div
+                      key={form.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                    >
+                      <div
+                        className="group cursor-pointer rounded-xl border bg-card p-4 transition-colors hover:border-foreground/15 hover:bg-muted/25"
+                        onClick={() => { setPreviewForm(form); setPreviewOpen(true); }}
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-muted-foreground transition-colors group-hover:border-foreground/10 group-hover:text-foreground">
+                              <FileText className="h-[18px] w-[18px]" />
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-lg font-semibold text-foreground">{form.name}</h3>
-                                <Badge variant="outline">Version {form.versionNumber || 1}</Badge>
-                              </div>
-                              {form.description && (
-                                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{form.description}</p>
-                              )}
-                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <h3 className="truncate text-base font-semibold text-foreground">{form.name}</h3>
+                                <Badge variant="outline" className="font-normal">
+                                  v{form.versionNumber || 1}
+                                </Badge>
                                 <Badge
                                   variant="outline"
                                   className={form.isActive
                                     ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                    : 'border-transparent bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-200'}
+                                    : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-100 dark:bg-slate-800/60 dark:text-slate-300'}
                                 >
                                   {form.isActive ? 'Active' : 'Inactive'}
                                 </Badge>
                               </div>
-                            </div>
 
-                            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate(`/admin/feedback-questions?id=${form.id}`)}
-                                className="gap-2"
-                              >
-                                <Edit className="w-4 h-4" /> Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={form.isActive ? 'destructive' : 'default'}
-                                onClick={() => handleStatusToggle(form, !form.isActive)}
-                                disabled={statusUpdatingId === form.id}
-                                className="gap-2"
-                              >
-                                {statusUpdatingId === form.id ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Updating
-                                  </>
-                                ) : form.isActive ? (
-                                  'Deactivate'
-                                ) : (
-                                  'Activate'
+                              {form.description ? (
+                                <p className="text-sm text-muted-foreground line-clamp-2">{form.description}</p>
+                              ) : (
+                                <p className="text-sm italic text-muted-foreground/70">No description</p>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <Badge variant="secondary" className="gap-1 font-normal">
+                                  <Layers className="h-3 w-3" />
+                                  {questionCount} question{questionCount === 1 ? '' : 's'}
+                                </Badge>
+
+                                {interviewTypes.map((interviewType) => (
+                                  <Badge key={`type-${form.id}-${interviewType}`} variant="outline" className="font-normal">
+                                    {formatInterviewTypeLabel(interviewType)}
+                                  </Badge>
+                                ))}
+
+                                {visibleDepartments.map((deptId) => (
+                                  <Badge key={`dept-${form.id}-${deptId}`} variant="outline" className="gap-1 font-normal">
+                                    <Building2 className="h-3 w-3" />
+                                    {getDepartmentName(deptId)}
+                                  </Badge>
+                                ))}
+                                {extraDepartments > 0 && (
+                                  <Badge variant="outline" className="font-normal">
+                                    +{extraDepartments} more
+                                  </Badge>
                                 )}
-                              </Button>
+
+                                {designationIds.length > 0 && (
+                                  <Badge variant="outline" className="gap-1 font-normal">
+                                    <Briefcase className="h-3 w-3" />
+                                    {designationIds.length} designation{designationIds.length === 1 ? '' : 's'}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
+
+                          <div className="flex shrink-0 items-center gap-2 lg:pt-0.5" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/admin/feedback-questions?id=${form.id}`)}
+                              className="gap-2"
+                            >
+                              <Edit className="w-4 h-4" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={form.isActive ? 'destructive' : 'default'}
+                              onClick={() => handleStatusToggle(form, !form.isActive)}
+                              loading={statusUpdatingId === form.id}
+                              className="gap-2"
+                            >
+                              {form.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                          </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
           </div>
         )}
+        </LoadingSwap>
 
-        <div className="flex items-center justify-between gap-4 border-t bg-background pt-4">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-t bg-background pt-3">
           <div className="text-xs text-muted-foreground">
             {filteredForms.length > 0
               ? `Showing ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, filteredForms.length)} of ${filteredForms.length} form(s)`
@@ -484,8 +592,16 @@ const FeedbackFormsPage = () => {
             </div>
           )}
         </div>
-          </>
+          </div>
         )}
+
+        <FeedbackFormPreview
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          form={previewForm}
+          getDepartmentName={getDepartmentName}
+          getDesignationName={getDesignationName}
+        />
       </div>
     </Layout>
   );

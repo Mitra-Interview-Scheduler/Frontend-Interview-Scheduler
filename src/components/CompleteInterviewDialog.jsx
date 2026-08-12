@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 
 const CompleteInterviewDialog = ({
   open,
@@ -47,14 +47,11 @@ const CompleteInterviewDialog = ({
           </Button>
           <Button
             onClick={onConfirm}
-            disabled={loading}
+            loading={loading}
             className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Completing…
-              </>
+              'Completing…'
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4" />

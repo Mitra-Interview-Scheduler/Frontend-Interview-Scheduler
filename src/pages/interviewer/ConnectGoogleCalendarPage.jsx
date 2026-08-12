@@ -13,6 +13,7 @@ import {
 } from '@/lib/roleHelpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import Layout from '@/components/layout/Layout';
 
 const ConnectGoogleCalendarPage = () => {
@@ -79,18 +80,9 @@ const ConnectGoogleCalendarPage = () => {
     return <Navigate to={getDefaultDashboardPath(userRoles)} replace />;
   }
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
-        </div>
-      </Layout>
-    );
-  }
-
   return (
     <Layout>
+      <LoadingSwap loading={loading} fallback={<LoadingState label="Loading…" />}>
       <div className="flex items-center justify-center min-h-[60vh] p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -113,7 +105,7 @@ const ConnectGoogleCalendarPage = () => {
           <CardContent className="space-y-4">
             <Button
               onClick={handleConnect}
-              disabled={connecting}
+              loading={connecting}
               className="w-full"
             >
               {connecting ? 'Redirecting to Google...' : 'Connect Google Calendar'}
@@ -122,6 +114,7 @@ const ConnectGoogleCalendarPage = () => {
         </Card>
       </motion.div>
       </div>
+      </LoadingSwap>
     </Layout>
   );
 };

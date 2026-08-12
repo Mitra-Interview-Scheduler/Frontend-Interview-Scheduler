@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -133,12 +134,26 @@ function CandidateDetailsPage() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="h-[calc(100vh-4rem)] flex justify-center items-center">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground text-lg">Loading candidate details...</p>
+      <Layout hasPadding={false} className="overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+          <div className="border-blue-200 px-4 py-3 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(-1)}
+                className="gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-blue-900">Candidate Details</h1>
+                <p className="text-blue-600 text-sm mt-1">View comprehensive candidate information</p>
+              </div>
+            </div>
           </div>
+          <LoadingState label="Loading candidate details..." className="flex-1" />
         </div>
       </Layout>
     );

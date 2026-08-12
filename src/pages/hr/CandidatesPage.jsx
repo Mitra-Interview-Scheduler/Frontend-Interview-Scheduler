@@ -24,12 +24,15 @@ import {
   Mail,
   Phone,
   Edit,
-  Loader2,
   Hash,
   Users,
   CalendarClockIcon,
   Eye,
 } from 'lucide-react';
+import { LoadingSwap } from '@/components/ui/loading';
+import { TableSkeleton } from '@/components/ui/page-skeletons';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -158,31 +161,20 @@ const CandidatesPage = () => {
     setIsInterviewSchedulePageOpen(true);
   };
 
-  if (loading && candidates.length === 0) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-3 text-muted-foreground">Loading candidates…</span>
-        </div>
-      </Layout>
-    );
-  }
-
   const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Candidates</h1>
-            <p className="text-muted-foreground">Manage and track all candidates</p>
-          </div>
-          <Button onClick={handleOpenAdd} disabled={loading} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Candidate
-          </Button>
-        </div>
+        <PageHeader
+          title="Candidates"
+          description="Manage and track all candidates"
+          actions={
+            <Button onClick={handleOpenAdd} disabled={loading} className="gap-2">
+              <Plus className="w-4 h-4" /> Add Candidate
+            </Button>
+          }
+        />
 
         <Card>
           <CardHeader>
@@ -228,20 +220,14 @@ const CandidatesPage = () => {
           </CardHeader>
 
           <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : candidates.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No candidates found</p>
-              </div>
+            <LoadingSwap loading={loading && candidates.length === 0} fallback={<TableSkeleton rows={8} columns={5} />}>
+            {candidates.length === 0 ? (
+              <EmptyState icon={Users} title="No candidates found" />
             ) : (
               <div className="space-y-3">
                 <div className="hidden lg:block rounded-lg border bg-card">
                   <Table className="table-fixed" wrapperClassName="max-h-[calc(100vh-24rem)] overflow-auto" style={{ minWidth: '1100px' }}>
-                    <TableHeader>
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead style={{ width: 170 }}>Candidate</TableHead>
                         <TableHead style={{ width: 170 }}>Email</TableHead>
@@ -466,6 +452,7 @@ const CandidatesPage = () => {
                 </div>
               </div>
             )}
+            </LoadingSwap>
 
             {!loading && totalCandidatesCount > 0 && totalPages > 1 && (
               <div className="mt-4 flex items-center justify-between gap-2 border-t pt-4">

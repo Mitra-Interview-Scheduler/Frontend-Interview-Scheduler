@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Archive, Loader2, Trash2 } from 'lucide-react';
+import { Archive, Trash2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { InlineLoading } from '@/components/ui/loading';
 import { interviewTypeAPI } from '@/services/interviewTypeAPI';
 import { toast } from '@/hooks/use-toast';
 
@@ -117,9 +118,8 @@ const DeleteInterviewTypeDialog = ({
               </div>
 
               {loadingPreview && (
-                <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading…
+                <div className="flex items-center justify-center py-4">
+                  <InlineLoading label="Loading…" />
                 </div>
               )}
 
@@ -156,20 +156,12 @@ const DeleteInterviewTypeDialog = ({
           <Button
             variant="destructive"
             onClick={handleDelete}
+            loading={isDeleting}
             disabled={busy || !!previewError || !preview}
             className="gap-2 min-w-[140px]"
           >
-            {isDeleting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {inUse ? 'Deactivating…' : 'Deleting…'}
-              </>
-            ) : (
-              <>
-                {inUse ? <Archive className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
-                {inUse ? 'Deactivate type' : 'Delete permanently'}
-              </>
-            )}
+            {inUse ? <Archive className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+            {inUse ? 'Deactivate type' : 'Delete permanently'}
           </Button>
         </DialogFooter>
       </DialogContent>

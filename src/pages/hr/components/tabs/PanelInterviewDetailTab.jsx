@@ -7,11 +7,11 @@ import {
   Calendar,
   Briefcase,
   Users,
-  Loader2,
   ClipboardList,
   Hourglass,
   UserCheck,
 } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { formatInterviewTypeLabel } from '@/lib/candidateSteps';
 import {
@@ -234,10 +234,7 @@ const PanelInterviewDetailTab = ({
           )}
 
           {!allCancelled && feedbackLoading && (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="mb-3 h-8 w-8 animate-spin text-indigo-500" />
-              <p className="text-sm">Loading feedback…</p>
-            </div>
+            <LoadingState label="Loading feedback…" size="lg" spinnerClassName="text-indigo-500" />
           )}
 
           {!allCancelled && !feedbackLoading && isScheduled && (

@@ -9,7 +9,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
+import { InlineLoading } from '@/components/ui/loading';
 import DepartmentAPI from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
@@ -194,8 +195,8 @@ const AssignAssessmentReviewersDialog = ({
               </p>
             )}
             {departmentId && loadingPeople && (
-              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading people…
+              <div className="flex justify-center py-6">
+                <InlineLoading label="Loading people…" />
               </div>
             )}
             {departmentId && !loadingPeople && people.length === 0 && (
@@ -238,12 +239,8 @@ const AssignAssessmentReviewersDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleAssign} disabled={saving || selectedIds.length === 0} className="min-w-[130px]">
-            {saving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Assigning…</>
-            ) : (
-              `Assign (${selectedIds.length})`
-            )}
+          <Button onClick={handleAssign} loading={saving} disabled={selectedIds.length === 0} className="min-w-[130px]">
+            {saving ? 'Assigning…' : `Assign (${selectedIds.length})`}
           </Button>
         </DialogFooter>
       </DialogContent>

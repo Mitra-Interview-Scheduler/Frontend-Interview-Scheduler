@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
-import { Loader2, Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Phone, User, UserCheck, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
+import { Briefcase, Award, TrendingUp, MapPin, Hash, Calendar, Clock, Phone, User, UserCheck, CalendarClock, Video, ExternalLink, Users } from 'lucide-react';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { motion } from 'framer-motion';
 import  candidateAPI from '@/services/candidateAPI';
 import { feedbackAPI } from '@/services/feedbackAPI';
@@ -184,11 +185,8 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
         </DialogHeader>
 
         <DialogBody className="px-5 py-4 min-h-0">
-          {loading ? (
-            <div className="flex justify-center items-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : error ? (
+          <LoadingSwap loading={loading} fallback={<LoadingState minHeight="sm" />}>
+          {error ? (
             <div className="space-y-4">
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
                 <p className="font-semibold text-base mb-1">Failed to Load Interview Details</p>
@@ -255,14 +253,12 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
                           <Button
                             size="sm"
                             onClick={handleWithdrawPostpone}
-                            disabled={withdrawingPostpone}
+                            loading={withdrawingPostpone}
                             className="bg-amber-600 text-white hover:bg-amber-700"
                           >
-                            {withdrawingPostpone ? (
-                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {hasProposedTime ? 'Declining…' : 'Withdrawing…'}</>
-                            ) : (
-                              hasProposedTime ? 'Yes, decline' : 'Yes, withdraw'
-                            )}
+                            {withdrawingPostpone
+                              ? (hasProposedTime ? 'Declining…' : 'Withdrawing…')
+                              : (hasProposedTime ? 'Yes, decline' : 'Yes, withdraw')}
                           </Button>
                         </div>
                       </div>
@@ -514,6 +510,7 @@ function InterviewStartDialog({ open, interviewScheduleId, onOpenChange }) {
               )}
             </motion.div>
           )}
+          </LoadingSwap>
         </DialogBody>
 
         <DialogFooter className="flex flex-col-reverse gap-2 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end shrink-0">

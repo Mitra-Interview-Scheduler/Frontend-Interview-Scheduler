@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Badge } from '@/components/ui/badge';
-import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
+import { Download, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
+import { PageLoading, Spinner } from '@/components/ui/loading';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import  candidateAPI from '@/services/candidateAPI';
@@ -631,18 +632,13 @@ function InterviewFeedbackPage() {
                 </p>
               </div>
             </div>
-            {loading && <Loader2 className="w-6 h-6 animate-spin text-blue-600" />}
+            {loading && <Spinner className="text-blue-600" />}
           </div>
         </motion.div>
 
         {/* Main Content Area */}
         {loading ? (
-          <div className="flex-1 flex justify-center items-center">
-            <div className="text-center">
-              <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-              <p className="text-muted-foreground text-lg">Loading feedback form...</p>
-            </div>
-          </div>
+          <PageLoading label="Loading feedback form..." />
         ) : (
           <div className="flex-1 flex overflow-hidden gap-4 rounded-lg p-1 border  border-gray-200 ">
             
@@ -752,13 +748,9 @@ function InterviewFeedbackPage() {
                       variant="outline"
                       className="w-full gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
                       onClick={handleDownloadAssessment}
-                      disabled={downloadingAssessment}
+                      loading={downloadingAssessment}
                     >
-                      {downloadingAssessment ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
+                      {!downloadingAssessment && <Download className="w-4 h-4" />}
                       Download assessment
                     </Button>
                   </div>
@@ -769,7 +761,7 @@ function InterviewFeedbackPage() {
                   <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2 ">
                     <FileText className="w-4 h-4" /> Documents
                   </h3>
-                  {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
+                  {documentsLoading && <Spinner size="sm" className="text-muted-foreground mx-auto" />}
                   {!documentsLoading && documents.length === 0 && (
                     <p className="text-xs text-gray-500 text-center py-4 italic">No documents</p>
                   )}
@@ -1034,14 +1026,12 @@ function InterviewFeedbackPage() {
                 {!interviewCompleted && !panelPeerFeedback && (
                   <Button
                     onClick={handleSubmit}
-                    disabled={submitting || completing || !selectedForm || questions.length === 0}
+                    loading={submitting}
+                    disabled={completing || !selectedForm || questions.length === 0}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[48px] text-base font-semibold"
                   >
                     {submitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {feedbackSubmitted ? 'Updating…' : 'Submitting…'}
-                      </>
+                      feedbackSubmitted ? 'Updating…' : 'Submitting…'
                     ) : (
                       <>
                         <FileText className="w-4 h-4" />

@@ -248,14 +248,12 @@ const EditSlotDialog = ({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSubmitting || !!error || endTime <= startTime}
+            loading={isSubmitting}
+            disabled={!!error || endTime <= startTime}
             className="gap-2 bg-indigo-600 hover:bg-indigo-700 min-w-[100px]"
           >
             {isSubmitting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{' '}
-                Saving…
-              </>
+              'Saving…'
             ) : (
               <>
                 <Save className="w-4 h-4" /> {isRecurringSlot && editScope !== 'SINGLE' ? 'Update Series' : 'Save'}

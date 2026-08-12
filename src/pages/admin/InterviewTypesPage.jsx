@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,10 +14,12 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Plus, Edit, Trash2, ListChecks, Loader2, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
-  Users, ClipboardList,
+  Plus, Edit, Trash2, ListChecks, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
+  Users, ClipboardList, Search,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { toast } from '@/hooks/use-toast';
 import { interviewTypeAPI } from '@/services/interviewTypeAPI';
 import { masterStepAPI } from '@/services/masterStepApi';
@@ -31,6 +33,7 @@ import InterviewTypeFilterRulesFields, {
   FILTER_MODE,
 } from './InterviewTypeFilterRulesFields';
 import DeleteInterviewTypeDialog from './components/DeleteInterviewTypeDialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const NONE_VALUE = '__none__';
 
@@ -88,7 +91,9 @@ const InterviewTypesPage = () => {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [reactivatingId, setReactivatingId] = useState(null);
+  const [reactivateTarget, setReactivateTarget] = useState(null);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
@@ -240,15 +245,21 @@ const InterviewTypesPage = () => {
     setDeleteTarget(type);
   };
 
-  const handleReactivate = async (type) => {
+  const requestReactivate = (type) => {
     if (!type?.id || type.active !== false) return;
-    setReactivatingId(type.id);
+    setReactivateTarget(type);
+  };
+
+  const handleReactivate = async () => {
+    if (!reactivateTarget?.id) return;
+    setIsReactivating(true);
     try {
-      await interviewTypeAPI.reactivate(type.id);
+      await interviewTypeAPI.reactivate(reactivateTarget.id);
       toast({
         title: 'Interview type reactivated',
-        description: `${type.label} is available for scheduling again.`,
+        description: `${reactivateTarget.label} is available for scheduling again.`,
       });
+      setReactivateTarget(null);
       await loadData();
     } catch (error) {
       toast({
@@ -257,7 +268,7 @@ const InterviewTypesPage = () => {
         variant: 'destructive',
       });
     } finally {
-      setReactivatingId(null);
+      setIsReactivating(false);
     }
   };
 
@@ -266,6 +277,20 @@ const InterviewTypesPage = () => {
     const step = candidateSteps.find((s) => s.key === key);
     return step ? step.label : key;
   };
+
+  const filteredTypes = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return types;
+    return types.filter((type) => {
+      const pipeline = stepLabel(type.roundStatusKey);
+      return (
+        type.label?.toLowerCase().includes(term)
+        || type.description?.toLowerCase().includes(term)
+        || type.code?.toLowerCase().includes(term)
+        || pipeline?.toLowerCase().includes(term)
+      );
+    });
+  }, [types, searchTerm, candidateSteps]);
 
   const StatusSelect = ({ value, onChange }) => (
     <Select
@@ -286,21 +311,15 @@ const InterviewTypesPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Interview Types</h1>
-            <p className="text-muted-foreground text-lg">
-              Configure the interview types HR can schedule (e.g. Technical, HR, Manager, Assessment).
-            </p>
-          </div>
-          <Button onClick={openAdd} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Type
-          </Button>
-        </motion.div>
+        <PageHeader
+          title="Interview Types"
+          description="Configure the interview types HR can schedule (e.g. Technical, HR, Manager, Assessment)."
+          actions={
+            <Button onClick={openAdd} className="gap-2">
+              <Plus className="w-4 h-4" /> Add Type
+            </Button>
+          }
+        />
 
         <Card>
           <CardHeader>
@@ -308,34 +327,46 @@ const InterviewTypesPage = () => {
               <ListChecks className="w-5 h-5" /> Interview Types ({types.length})
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : types.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No interview types yet.</p>
+          <CardContent className="space-y-4">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search interview types..."
+                className="pl-10"
+              />
+            </div>
+            <LoadingSwap loading={loading && types.length === 0} fallback={<LoadingState />}>
+            {types.length === 0 ? (
+              <EmptyState icon={ListChecks} title="No interview types yet" compact />
+            ) : filteredTypes.length === 0 ? (
+              <EmptyState
+                icon={ListChecks}
+                title={`No interview types match "${searchTerm.trim()}"`}
+                compact
+              />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {types.map((type) => (
+              <div className="space-y-2">
+                {filteredTypes.map((type) => (
                   <div
                     key={type.id}
-                    className={`border rounded-lg p-4 flex items-start justify-between gap-3 hover:shadow-sm transition-shadow ${
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 ${
                       type.active === false ? 'opacity-60' : ''
                     }`}
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold truncate">{type.label}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium truncate">{type.label}</span>
                         {type.isSystem && (
                           <Badge variant="outline" className="text-[10px] gap-1"><Lock className="w-3 h-3" /> System</Badge>
                         )}
                         {type.active === false && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
                       </div>
                       {type.description && (
-                        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{type.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{type.description}</p>
                       )}
-                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                      <p className="text-[11px] text-muted-foreground mt-1">
                         Pipeline: {stepLabel(type.roundStatusKey)}
                         {' · '}
                         {readRequiresInterviewer(type) ? 'Live interview' : 'Assessment'}
@@ -343,41 +374,38 @@ const InterviewTypesPage = () => {
                         {readCreateCalendarMeeting(type) ? 'Meeting on' : 'Meeting off'}
                       </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex shrink-0 gap-1">
                       {type.active === false && (
                         <Button
                           variant="ghost"
-                          size="icon"
-                          onClick={() => handleReactivate(type)}
-                          disabled={isMutating || reactivatingId === type.id}
+                          size="sm"
+                          onClick={() => requestReactivate(type)}
+                          disabled={isMutating || isReactivating}
                           title="Reactivate"
                           className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
                         >
-                          {reactivatingId === type.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RotateCcw className="w-4 h-4" />
-                          )}
+                          <RotateCcw className="w-4 h-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(type)} disabled={isMutating || reactivatingId === type.id}>
-                        <Edit className="w-4 h-4" />
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(type)} disabled={isMutating || isReactivating}>
+                        <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="sm"
                         onClick={() => requestDelete(type)}
-                        disabled={isMutating || reactivatingId === type.id || type.isSystem}
+                        disabled={isMutating || isReactivating || type.isSystem}
                         title={type.isSystem ? 'System types cannot be deleted' : 'Delete'}
                         className="text-destructive hover:text-destructive disabled:text-muted-foreground"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            </LoadingSwap>
           </CardContent>
         </Card>
       </div>
@@ -615,12 +643,8 @@ const InterviewTypesPage = () => {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isMutating} className="min-w-[110px]">
-              {isMutating ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</>
-              ) : (
-                editing ? 'Save changes' : 'Create type'
-              )}
+            <Button onClick={handleSave} loading={isMutating} className="min-w-[110px]">
+              {editing ? 'Save changes' : 'Create type'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -633,6 +657,21 @@ const InterviewTypesPage = () => {
           if (!open) setDeleteTarget(null);
         }}
         onSuccess={loadData}
+      />
+
+      <ConfirmDialog
+        open={Boolean(reactivateTarget)}
+        onOpenChange={(open) => { if (!open && !isReactivating) setReactivateTarget(null); }}
+        title="Reactivate interview type?"
+        description={
+          reactivateTarget
+            ? `Reactivate "${reactivateTarget.label}"? It will be available for scheduling again.`
+            : undefined
+        }
+        confirmLabel="Reactivate"
+        destructive={false}
+        onConfirm={handleReactivate}
+        loading={isReactivating}
       />
     </Layout>
   );

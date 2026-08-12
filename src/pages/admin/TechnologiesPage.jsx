@@ -7,18 +7,22 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Code2, Loader2, Tags } from 'lucide-react';
+import { Plus, Edit, Trash2, Code2, Tags } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
 import { getTechnologyCategoryLabel, toLookupCode } from '@/lib/technologyHelpers';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
 import CategoryManager from '@/components/admin/CategoryManager';
+import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loading';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { AnimatePresence, motion } from 'framer-motion';
 
 const TechnologiesPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') === 'categories' ? 'categories' : 'technologies';
+  const tabMotion = useTabTransition();
 
   const setActiveTab = (tab) => {
     setSearchParams(tab === 'categories' ? { tab: 'categories' } : {});
@@ -32,6 +36,7 @@ const TechnologiesPage = () => {
   const [editingTechnology, setEditingTechnology] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -257,13 +262,14 @@ const TechnologiesPage = () => {
     }
   };
 
-  const handleDeleteTechnology = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
+  const handleDeleteTechnology = async () => {
+    if (!confirmTarget) return;
 
     setIsMutating(true);
 
     try {
-      await technologyAPI.deleteTechnology(id);
+      await technologyAPI.deleteTechnology(confirmTarget.id);
+      setConfirmTarget(null);
       await refreshTechnologies();
       
       toast({
@@ -289,32 +295,21 @@ const TechnologiesPage = () => {
 
   const grouped = groupByCategory(filteredTechnologies);
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-3 text-muted-foreground">Loading...</span>
-        </div>
-      </Layout>
-    );
-  }
-
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Technologies</h1>
-            <p className="text-muted-foreground">Manage technology stack, skills, and categories</p>
-          </div>
-          {activeTab === 'technologies' && (
-            <Button onClick={handleOpenAddDialog} disabled={isMutating}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Technology
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          title="Technologies"
+          description="Manage technology stack, skills, and categories"
+          actions={
+            activeTab === 'technologies' ? (
+              <Button onClick={handleOpenAddDialog} disabled={isMutating || loading}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Technology
+              </Button>
+            ) : null
+          }
+        />
 
         <AdminSectionTabs
           activeTab={activeTab}
@@ -325,10 +320,14 @@ const TechnologiesPage = () => {
           ]}
         />
 
-        {activeTab === 'categories' ? (
-          <CategoryManager type="technology" onCategoriesChange={setCategories} />
-        ) : (
-          <>
+        <LoadingSwap loading={loading && technologies.length === 0} fallback={<LoadingState label="Loading…" />}>
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === 'categories' ? (
+              <motion.div key="categories" {...tabMotion}>
+                <CategoryManager type="technology" onCategoriesChange={setCategories} />
+              </motion.div>
+            ) : (
+              <motion.div key="technologies" className="space-y-6" {...tabMotion}>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -399,10 +398,9 @@ const TechnologiesPage = () => {
               <Button 
                 type="button"
                 onClick={handleAddTechnology} 
-                disabled={isMutating}
+                loading={isMutating}
               >
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isMutating ? 'Adding...' : 'Add Technology'}
+                Add Technology
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -478,10 +476,9 @@ const TechnologiesPage = () => {
               <Button 
                 type="button"
                 onClick={handleEditTechnology} 
-                disabled={isMutating}
+                loading={isMutating}
               >
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isMutating ? 'Updating...' : 'Update'}
+                Update
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -553,7 +550,7 @@ const TechnologiesPage = () => {
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
-                                    onClick={() => handleDeleteTechnology(tech.id, tech.name)}
+                                    onClick={() => setConfirmTarget(tech)}
                                     disabled={isMutating}
                                   >
                                     <Trash2 className="w-3 h-3" />
@@ -571,8 +568,20 @@ const TechnologiesPage = () => {
             )}
           </CardContent>
         </Card>
-          </>
-        )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </LoadingSwap>
+
+        <ConfirmDialog
+          open={Boolean(confirmTarget)}
+          onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
+          title="Delete technology?"
+          description={confirmTarget ? `Are you sure you want to delete ${confirmTarget.name}?` : undefined}
+          confirmLabel="Delete"
+          onConfirm={handleDeleteTechnology}
+          loading={isMutating}
+        />
       </div>
     </Layout>
   );

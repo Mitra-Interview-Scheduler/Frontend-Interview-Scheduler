@@ -3,7 +3,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Loader2,
   Calendar,
   User,
   Briefcase,
@@ -18,6 +17,7 @@ import {
   CheckCircle2,
   Users,
 } from 'lucide-react';
+import { InlineLoading, LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import FeedbackResponseDisplay from '@/components/FeedbackResponseDisplay';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -294,9 +294,7 @@ const InterviewDetailTab = ({
           </CardHeader>
           <CardContent className="pt-5 space-y-4">
             {assessmentLoading && !assessment ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading assessment…
-              </div>
+              <InlineLoading label="Loading assessment…" className="py-4" />
             ) : !assessment ? (
               <p className="text-sm text-muted-foreground py-2">Unable to load assessment details.</p>
             ) : (
@@ -322,11 +320,11 @@ const InterviewDetailTab = ({
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={uploading}
+                          loading={uploading}
                           onClick={() => fileInputRef.current?.click()}
                           className="gap-1.5"
                         >
-                          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {!uploading && <Upload className="w-4 h-4" />}
                           Replace
                         </Button>
                       </div>
@@ -337,11 +335,11 @@ const InterviewDetailTab = ({
                       <p className="text-sm text-slate-700">Upload the candidate&apos;s completed assessment file</p>
                       <Button
                         size="sm"
-                        disabled={uploading}
+                        loading={uploading}
                         onClick={() => fileInputRef.current?.click()}
                         className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
                       >
-                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                        {!uploading && <Upload className="w-4 h-4" />}
                         Choose file
                       </Button>
                     </div>
@@ -357,14 +355,11 @@ const InterviewDetailTab = ({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={handleMarkReceived}
-                    disabled={!canMarkReceived || markingReceived}
+                    loading={markingReceived}
+                    disabled={!canMarkReceived}
                     className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
                   >
-                    {markingReceived ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4" />
-                    )}
+                    {!markingReceived && <CheckCircle2 className="w-4 h-4" />}
                     Mark as Received
                   </Button>
                   <Button
@@ -450,10 +445,7 @@ const InterviewDetailTab = ({
 
           {isAssessment && !isCancelled && reviewers.some((r) => r.feedbackSubmitted) && (
             feedbackLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Loader2 className="mb-3 h-8 w-8 animate-spin text-indigo-500" />
-                <p className="text-sm">Loading feedback…</p>
-              </div>
+              <LoadingState label="Loading feedback…" size="lg" spinnerClassName="text-indigo-500" />
             ) : feedbackResponse ? (
               <FeedbackResponseDisplay
                 form={feedbackForm}
@@ -478,10 +470,7 @@ const InterviewDetailTab = ({
           {isCompleted && !isAssessment && (
             <>
               {feedbackLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <Loader2 className="mb-3 h-8 w-8 animate-spin text-indigo-500" />
-                  <p className="text-sm">Loading feedback…</p>
-                </div>
+                <LoadingState label="Loading feedback…" size="lg" spinnerClassName="text-indigo-500" />
               ) : !feedbackResponse ? (
                 <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900">
                   <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
