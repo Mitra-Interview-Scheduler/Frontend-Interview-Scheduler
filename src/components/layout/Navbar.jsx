@@ -53,12 +53,14 @@ const Navbar = ({ onMenuClick }) => {
 
           <div className="flex items-center gap-3">
             <img
-              src="/mitra-logo.png"
+              src="/mitra-wordmark.png"
               alt="Mitra"
-              className="w-10 h-10 rounded-lg object-contain bg-white"
+              className="h-8 w-auto object-contain sm:h-9"
             />
-            <div className="hidden md:block">
-              <h1 className="text-xl font-bold text-foreground">Mitra Scheduler</h1>
+            <div className="hidden min-w-0 sm:block">
+              <h1 className="truncate text-base font-bold leading-tight text-foreground sm:text-lg">
+                Interview Scheduler
+              </h1>
               <p className="text-xs text-muted-foreground">Interview Management System</p>
             </div>
           </div>
