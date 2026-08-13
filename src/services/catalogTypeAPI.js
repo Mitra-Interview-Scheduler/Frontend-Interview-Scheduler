@@ -1,8 +1,11 @@
 import { createResourceApi } from './resourceApi';
 import api from './api';
+import { createExcelApi } from '@/lib/excelImportExport';
 
 const documentTypes = createResourceApi('/document-types');
 const resourceTypes = createResourceApi('/resource-types');
+const documentExcel = createExcelApi('/document-types', 'document-types.xlsx');
+const resourceExcel = createExcelApi('/resource-types', 'resource-types.xlsx');
 
 export const documentTypeAPI = {
   getActive: documentTypes.getAll,
@@ -13,6 +16,8 @@ export const documentTypeAPI = {
   create: documentTypes.create,
   update: documentTypes.update,
   delete: documentTypes.delete,
+  exportExcel: documentExcel.exportExcel,
+  importExcel: documentExcel.importExcel,
 };
 
 export const resourceTypeAPI = {
@@ -24,4 +29,6 @@ export const resourceTypeAPI = {
   create: resourceTypes.create,
   update: resourceTypes.update,
   delete: resourceTypes.delete,
+  exportExcel: resourceExcel.exportExcel,
+  importExcel: resourceExcel.importExcel,
 };

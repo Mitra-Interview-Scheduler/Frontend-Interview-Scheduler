@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 
@@ -532,16 +533,32 @@ const DesignationsPage = () => {
           </div>
           <div className="flex items-center gap-2">
             {activeTab === 'tiers' && canCreateMasterData && (
-              <Button onClick={handleOpenAddTier} disabled={isMutating}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Tier
-              </Button>
+              <>
+                <ExcelImportExportButtons
+                  onExport={() => tierAPI.exportExcel()}
+                  onImport={(file) => tierAPI.importExcel(file)}
+                  onImported={loadData}
+                  disabled={isMutating}
+                />
+                <Button onClick={handleOpenAddTier} disabled={isMutating}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Tier
+                </Button>
+              </>
             )}
             {activeTab === 'designations' && canCreateMasterData && (
-              <Button onClick={handleOpenAddDesignation} disabled={isMutating}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Designation
-              </Button>
+              <>
+                <ExcelImportExportButtons
+                  onExport={() => designationAPI.exportExcel()}
+                  onImport={(file) => designationAPI.importExcel(file)}
+                  onImported={loadData}
+                  disabled={isMutating}
+                />
+                <Button onClick={handleOpenAddDesignation} disabled={isMutating}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Designation
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -611,12 +628,22 @@ const DesignationsPage = () => {
                     Organizational departments used for tiers and designations
                   </p>
                 </div>
-                {canCreateMasterData && (
-                  <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Department
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {canCreateMasterData && (
+                    <ExcelImportExportButtons
+                      onExport={() => departmentAPI.exportExcel()}
+                      onImport={(file) => departmentAPI.importExcel(file)}
+                      onImported={loadData}
+                      disabled={isMutating}
+                    />
+                  )}
+                  {canCreateMasterData && (
+                    <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Department
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative max-w-md">

@@ -16,6 +16,7 @@ import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 const DomainsPage = () => {
   const [domains, setDomains] = useState([]);
@@ -216,9 +217,17 @@ const DomainsPage = () => {
           title="Domains"
           description="Manage business domains for candidates and interviewers"
           actions={
-            <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }} className="gap-2">
-              <Plus className="w-4 h-4" /> Add Domain
-            </Button>
+            <>
+              <ExcelImportExportButtons
+                onExport={() => domainAPI.exportExcel()}
+                onImport={(file) => domainAPI.importExcel(file)}
+                onImported={loadData}
+                disabled={isMutating}
+              />
+              <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }} className="gap-2">
+                <Plus className="w-4 h-4" /> Add Domain
+              </Button>
+            </>
           }
         />
 

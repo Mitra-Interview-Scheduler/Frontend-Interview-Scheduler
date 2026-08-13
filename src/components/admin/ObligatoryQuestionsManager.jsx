@@ -18,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { LoadingState } from '@/components/ui/loading';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text' },
@@ -252,10 +253,17 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
             These questions appear on every interviewer feedback form, in addition to the selected form questions.
           </p>
         </div>
-        <Button onClick={openCreateDialog} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Question
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExcelImportExportButtons
+            onExport={() => feedbackQuestionsAPI.exportObligatoryExcel()}
+            onImport={(file) => feedbackQuestionsAPI.importObligatoryExcel(file)}
+            onImported={loadQuestions}
+          />
+          <Button onClick={openCreateDialog} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
       {loading ? (

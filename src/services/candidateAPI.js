@@ -160,7 +160,15 @@ const candidateAPI = {
     return response.data;
   },
 
+  exportExcel: async () => {
+    const { exportExcel } = await import('@/lib/excelImportExport');
+    return exportExcel('/candidates/export', 'candidates.xlsx');
+  },
 
+  importExcel: async (file) => {
+    const { importExcel } = await import('@/lib/excelImportExport');
+    return importExcel('/candidates/import', file);
+  },
 };
 
 export default candidateAPI;

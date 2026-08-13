@@ -18,6 +18,7 @@ import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loa
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 const TechnologiesPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -303,10 +304,18 @@ const TechnologiesPage = () => {
           description="Manage technology stack, skills, and categories"
           actions={
             activeTab === 'technologies' ? (
-              <Button onClick={handleOpenAddDialog} disabled={isMutating || loading}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Technology
-              </Button>
+              <>
+                <ExcelImportExportButtons
+                  onExport={() => technologyAPI.exportExcel()}
+                  onImport={(file) => technologyAPI.importExcel(file)}
+                  onImported={loadData}
+                  disabled={isMutating || loading}
+                />
+                <Button onClick={handleOpenAddDialog} disabled={isMutating || loading}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Technology
+                </Button>
+              </>
             ) : null
           }
         />

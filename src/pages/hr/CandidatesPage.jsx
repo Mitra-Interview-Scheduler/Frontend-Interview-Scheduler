@@ -36,7 +36,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import  candidateAPI from '@/services/candidateAPI';
+import candidateAPI from '@/services/candidateAPI';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 import { departmentAPI } from '@/services/departmentAPI';
 import CandidateDialogPage from './components/CandidateDialogPage';
@@ -170,9 +171,17 @@ const CandidatesPage = () => {
           title="Candidates"
           description="Manage and track all candidates"
           actions={
-            <Button onClick={handleOpenAdd} disabled={loading} className="gap-2">
-              <Plus className="w-4 h-4" /> Add Candidate
-            </Button>
+            <>
+              <ExcelImportExportButtons
+                onExport={() => candidateAPI.exportExcel()}
+                onImport={(file) => candidateAPI.importExcel(file)}
+                onImported={() => applyFilters()}
+                disabled={loading}
+              />
+              <Button onClick={handleOpenAdd} disabled={loading} className="gap-2">
+                <Plus className="w-4 h-4" /> Add Candidate
+              </Button>
+            </>
           }
         />
 

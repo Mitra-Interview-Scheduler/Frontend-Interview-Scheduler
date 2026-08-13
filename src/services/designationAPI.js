@@ -1,7 +1,9 @@
 import api from './api';
 import { createResourceApi } from './resourceApi';
+import { createExcelApi } from '@/lib/excelImportExport';
 
 const designations = createResourceApi('/designations');
+const excel = createExcelApi('/designations', 'designations.xlsx');
 
 export const designationAPI = {
   getAllDesignations: designations.getAll,
@@ -20,6 +22,9 @@ export const designationAPI = {
   createDesignation: designations.create,
   updateDesignation: designations.update,
   deleteDesignation: designations.delete,
+
+  exportExcel: excel.exportExcel,
+  importExcel: excel.importExcel,
 };
 
 export default designationAPI;

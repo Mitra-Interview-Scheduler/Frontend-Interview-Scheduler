@@ -65,6 +65,16 @@ export const feedbackQuestionsAPI = {
   deleteObligatoryQuestion: async (id) => {
     await api.delete(`/feedback/obligatory-questions/${id}`);
   },
+
+  exportObligatoryExcel: async () => {
+    const { exportExcel } = await import('@/lib/excelImportExport');
+    return exportExcel('/feedback/obligatory-questions/export', 'obligatory-questions.xlsx');
+  },
+
+  importObligatoryExcel: async (file) => {
+    const { importExcel } = await import('@/lib/excelImportExport');
+    return importExcel('/feedback/obligatory-questions/import', file);
+  },
 };
 
 export default feedbackQuestionsAPI;

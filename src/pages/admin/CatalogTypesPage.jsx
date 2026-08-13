@@ -17,6 +17,7 @@ import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loa
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 const TABS = [
   { value: 'documents', label: 'Document Types', icon: FileText },
@@ -263,16 +264,24 @@ const CatalogTypesPage = () => {
           title="Document & Resource Types"
           description="Manage types available when uploading documents or attaching resource links"
           actions={
-            <Button
-              onClick={() => {
-                resetForm();
-                setIsAddOpen(true);
-              }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add {singular}
-            </Button>
+            <>
+              <ExcelImportExportButtons
+                onExport={() => api.exportExcel()}
+                onImport={(file) => api.importExcel(file)}
+                onImported={loadData}
+                disabled={isMutating}
+              />
+              <Button
+                onClick={() => {
+                  resetForm();
+                  setIsAddOpen(true);
+                }}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add {singular}
+              </Button>
+            </>
           }
         />
 

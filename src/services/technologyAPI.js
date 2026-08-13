@@ -1,8 +1,11 @@
 import api from './api';
 import { createResourceApi } from './resourceApi';
+import { createExcelApi } from '@/lib/excelImportExport';
 
 const technologies = createResourceApi('/technologies');
 const categories = createResourceApi('/technology-categories');
+const techExcel = createExcelApi('/technologies', 'technologies.xlsx');
+const categoryExcel = createExcelApi('/technology-categories', 'technology-categories.xlsx');
 
 export const technologyAPI = {
   getAllTechnologies: technologies.getAll,
@@ -26,6 +29,11 @@ export const technologyAPI = {
   createTechnology: technologies.create,
   updateTechnology: technologies.update,
   deleteTechnology: technologies.delete,
+
+  exportExcel: techExcel.exportExcel,
+  importExcel: techExcel.importExcel,
+  exportCategoriesExcel: categoryExcel.exportExcel,
+  importCategoriesExcel: categoryExcel.importExcel,
 };
 
 export default technologyAPI;

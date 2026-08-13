@@ -19,6 +19,7 @@ import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import { toLookupCode } from '@/lib/technologyHelpers';
 import { LoadingState } from '@/components/ui/loading';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 
 const emptyForm = {
   label: '',
@@ -32,6 +33,8 @@ const META = {
     create: (payload) => technologyAPI.createCategory(payload),
     update: (id, payload) => technologyAPI.updateCategory(id, payload),
     remove: (id) => technologyAPI.deleteCategory(id),
+    exportExcel: () => technologyAPI.exportCategoriesExcel(),
+    importExcel: (file) => technologyAPI.importCategoriesExcel(file),
   },
   question: {
     title: 'Question Categories',
@@ -40,6 +43,8 @@ const META = {
     create: (payload) => questionCategoryAPI.create(payload),
     update: (id, payload) => questionCategoryAPI.update(id, payload),
     remove: (id) => questionCategoryAPI.delete(id),
+    exportExcel: () => questionCategoryAPI.exportExcel(),
+    importExcel: (file) => questionCategoryAPI.importExcel(file),
   },
 };
 
@@ -209,10 +214,18 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
             <CardTitle>{config.title}</CardTitle>
             <CardDescription>{config.description}</CardDescription>
           </div>
-          <Button onClick={openCreateDialog} disabled={isMutating}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Category
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ExcelImportExportButtons
+              onExport={() => config.exportExcel()}
+              onImport={(file) => config.importExcel(file)}
+              onImported={loadItems}
+              disabled={isMutating}
+            />
+            <Button onClick={openCreateDialog} disabled={isMutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Category
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative max-w-md">

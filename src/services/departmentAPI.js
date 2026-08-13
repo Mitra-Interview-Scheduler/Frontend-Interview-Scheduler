@@ -1,4 +1,7 @@
 import api from './api';
+import { createExcelApi } from '@/lib/excelImportExport';
+
+const excel = createExcelApi('/departments', 'departments.xlsx');
 
 export const departmentAPI = {
   getAllDepartments: async () => {
@@ -14,7 +17,10 @@ export const departmentAPI = {
   getDepartmentByName: async (name) => {
     const response = await api.get(`/department/${name}`);
     return response.data;
-  }
+  },
+
+  exportExcel: excel.exportExcel,
+  importExcel: excel.importExcel,
 };
 
 export default departmentAPI;

@@ -1,5 +1,8 @@
 // src/services/interviewTypeAPI.js
 import api from './api';
+import { createExcelApi } from '@/lib/excelImportExport';
+
+const excel = createExcelApi('/interview-types', 'interview-types.xlsx');
 
 export const interviewTypeAPI = {
   /** All interview types (admin management). Pass activeOnly=true for scheduling dropdowns. */
@@ -40,6 +43,9 @@ export const interviewTypeAPI = {
     });
     return response.data;
   },
+
+  exportExcel: excel.exportExcel,
+  importExcel: excel.importExcel,
 };
 
 export default interviewTypeAPI;

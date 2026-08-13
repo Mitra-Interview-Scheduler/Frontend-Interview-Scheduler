@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { toast } from '@/hooks/use-toast';
 import { interviewTypeAPI } from '@/services/interviewTypeAPI';
+import { ExcelImportExportButtons } from '@/components/ExcelImportExportButtons';
 import { masterStepAPI } from '@/services/masterStepApi';
 import DepartmentAPI from '@/services/departmentAPI';
 import { domainAPI } from '@/services/domainAPI';
@@ -315,9 +316,16 @@ const InterviewTypesPage = () => {
           title="Interview Types"
           description="Configure the interview types HR can schedule (e.g. Technical, HR, Manager, Assessment)."
           actions={
-            <Button onClick={openAdd} className="gap-2">
-              <Plus className="w-4 h-4" /> Add Type
-            </Button>
+            <>
+              <ExcelImportExportButtons
+                onExport={() => interviewTypeAPI.exportExcel()}
+                onImport={(file) => interviewTypeAPI.importExcel(file)}
+                onImported={loadData}
+              />
+              <Button onClick={openAdd} className="gap-2">
+                <Plus className="w-4 h-4" /> Add Type
+              </Button>
+            </>
           }
         />
 

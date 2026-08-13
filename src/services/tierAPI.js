@@ -1,7 +1,9 @@
 import api from './api';
 import { createResourceApi } from './resourceApi';
+import { createExcelApi } from '@/lib/excelImportExport';
 
 const tiers = createResourceApi('/tiers');
+const excel = createExcelApi('/tiers', 'tiers.xlsx');
 
 export const tierAPI = {
   getAllTiers: tiers.getAll,
@@ -15,6 +17,9 @@ export const tierAPI = {
   createTier: tiers.create,
   updateTier: tiers.update,
   deleteTier: tiers.delete,
+
+  exportExcel: excel.exportExcel,
+  importExcel: excel.importExcel,
 };
 
 export default tierAPI;
