@@ -35,8 +35,8 @@ export const interviewTypeAPI = {
 
   /** Resolve interviewer filters for a candidate + interview type. */
   resolveFilters: async (code, candidateId) => {
-    const response = await api.get(`/interview-types/${encodeURIComponent(code)}/resolve-filters`, {
-      params: { candidateId },
+    const response = await api.get('/interview-types/resolve-filters', {
+      params: { code, candidateId },
     });
     return response.data;
   },
