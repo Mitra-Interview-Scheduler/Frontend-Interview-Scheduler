@@ -34,6 +34,8 @@ import InterviewTypeFilterRulesFields, {
 } from './InterviewTypeFilterRulesFields';
 import DeleteInterviewTypeDialog from './components/DeleteInterviewTypeDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus } from '@/lib/activeStatusFilter';
 
 const NONE_VALUE = '__none__';
 
@@ -94,6 +96,7 @@ const InterviewTypesPage = () => {
   const [reactivateTarget, setReactivateTarget] = useState(null);
   const [isReactivating, setIsReactivating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
 
   useEffect(() => { loadData(); }, []);
 
@@ -280,17 +283,19 @@ const InterviewTypesPage = () => {
 
   const filteredTypes = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return types;
-    return types.filter((type) => {
-      const pipeline = stepLabel(type.roundStatusKey);
-      return (
-        type.label?.toLowerCase().includes(term)
-        || type.description?.toLowerCase().includes(term)
-        || type.code?.toLowerCase().includes(term)
-        || pipeline?.toLowerCase().includes(term)
-      );
-    });
-  }, [types, searchTerm, candidateSteps]);
+    const searched = !term
+      ? types
+      : types.filter((type) => {
+        const pipeline = stepLabel(type.roundStatusKey);
+        return (
+          type.label?.toLowerCase().includes(term)
+          || type.description?.toLowerCase().includes(term)
+          || type.code?.toLowerCase().includes(term)
+          || pipeline?.toLowerCase().includes(term)
+        );
+      });
+    return filterByActiveStatus(searched, statusFilter);
+  }, [types, searchTerm, statusFilter, candidateSteps]);
 
   const StatusSelect = ({ value, onChange }) => (
     <Select
@@ -324,18 +329,21 @@ const InterviewTypesPage = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ListChecks className="w-5 h-5" /> Interview Types ({types.length})
+              <ListChecks className="w-5 h-5" /> Interview Types ({filteredTypes.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search interview types..."
-                className="pl-10"
-              />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search interview types..."
+                  className="pl-10"
+                />
+              </div>
+              <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
             </div>
             <LoadingSwap loading={loading && types.length === 0} fallback={<LoadingState />}>
             {types.length === 0 ? (
@@ -343,7 +351,7 @@ const InterviewTypesPage = () => {
             ) : filteredTypes.length === 0 ? (
               <EmptyState
                 icon={ListChecks}
-                title={`No interview types match "${searchTerm.trim()}"`}
+                title={searchTerm.trim() ? `No interview types match "${searchTerm.trim()}"` : 'No interview types for this status'}
                 compact
               />
             ) : (
