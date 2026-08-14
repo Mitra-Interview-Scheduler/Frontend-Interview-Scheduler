@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Code2, Tags } from 'lucide-react';
+import { Plus, Edit, Trash2, Code2, Tags, RotateCcw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
@@ -17,6 +17,8 @@ import CategoryManager from '@/components/admin/CategoryManager';
 import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loading';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus, isRecordActive } from '@/lib/activeStatusFilter';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const TechnologiesPage = () => {
@@ -31,6 +33,7 @@ const TechnologiesPage = () => {
   const [technologies, setTechnologies] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filterCategory, setFilterCategory] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTechnology, setEditingTechnology] = useState(null);
@@ -50,19 +53,11 @@ const TechnologiesPage = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (filterCategory === 'ALL') {
-      loadData();
-    } else {
-      filterTechnologies();
-    }
-  }, [filterCategory]);
-
   const loadData = async () => {
     try {
       setLoading(true);
       const [techData, catData] = await Promise.all([
-        technologyAPI.getAllTechnologies(),
+        technologyAPI.getAllTechnologiesIncludingInactive(),
         technologyAPI.getAllCategories()
       ]);
       setTechnologies(techData || []);
@@ -79,29 +74,8 @@ const TechnologiesPage = () => {
     }
   };
 
-  const filterTechnologies = async () => {
-    try {
-      setLoading(true);
-      const data = await technologyAPI.getTechnologiesByCategory(filterCategory);
-      setTechnologies(data || []);
-    } catch (error) {
-      console.error('Error filtering:', error);
-      toast({
-        title: "Error",
-        description: "Failed to filter technologies",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const refreshTechnologies = async () => {
-    if (filterCategory === 'ALL') {
-      await loadData();
-    } else {
-      await filterTechnologies();
-    }
+    await loadData();
   };
 
   const getCategoryColor = (categoryLabel) => {
@@ -262,23 +236,31 @@ const TechnologiesPage = () => {
     }
   };
 
-  const handleDeleteTechnology = async () => {
-    if (!confirmTarget) return;
+  const handleConfirmTechnology = async () => {
+    const tech = confirmTarget?.tech;
+    if (!tech) return;
 
     setIsMutating(true);
 
     try {
-      await technologyAPI.deleteTechnology(confirmTarget.id);
+      if (confirmTarget.action === 'reactivate') {
+        await technologyAPI.updateTechnology(tech.id, { isActive: true });
+        toast({
+          title: "Success",
+          description: "Technology reactivated successfully"
+        });
+      } else {
+        await technologyAPI.deleteTechnology(tech.id);
+        toast({
+          title: "Success",
+          description: "Technology deleted successfully"
+        });
+      }
       setConfirmTarget(null);
       await refreshTechnologies();
-      
-      toast({
-        title: "Success",
-        description: "Technology deleted successfully"
-      });
     } catch (err) {
-      console.error('Error deleting technology:', err);
-      const errorMessage = err.response?.data?.message || err.message || "Failed to delete technology";
+      console.error('Error updating technology:', err);
+      const errorMessage = err.response?.data?.message || err.message || "Failed to update technology";
       toast({
         title: "Error",
         description: errorMessage,
@@ -289,9 +271,12 @@ const TechnologiesPage = () => {
     }
   };
 
-  const filteredTechnologies = technologies.filter(tech =>
-    filterCategory === 'ALL' || tech.category?.code === filterCategory
-  );
+  const filteredTechnologies = useMemo(() => {
+    const byCategory = technologies.filter((tech) =>
+      filterCategory === 'ALL' || tech.category?.code === filterCategory
+    );
+    return filterByActiveStatus(byCategory, statusFilter);
+  }, [technologies, filterCategory, statusFilter]);
 
   const grouped = groupByCategory(filteredTechnologies);
 
@@ -487,19 +472,22 @@ const TechnologiesPage = () => {
         {/* Filter */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Technology Stack ({technologies.length})</CardTitle>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Categories</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.code}>{cat.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle>Technology Stack ({filteredTechnologies.length})</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Categories</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.code}>{cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -523,8 +511,10 @@ const TechnologiesPage = () => {
                         {category} ({techs.length})
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {techs.map((tech) => (
-                          <Card key={tech.id} className="hover:shadow-md transition-shadow">
+                        {techs.map((tech) => {
+                          const inactive = !isRecordActive(tech);
+                          return (
+                          <Card key={tech.id} className={`hover:shadow-md transition-shadow ${inactive ? 'opacity-70' : ''}`}>
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -532,34 +522,53 @@ const TechnologiesPage = () => {
                                     <Code2 className="w-5 h-5 text-primary" />
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <h4 className="font-medium truncate">{tech.name}</h4>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h4 className="font-medium truncate">{tech.name}</h4>
+                                      {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                                    </div>
                                     <Badge className={`${getCategoryColor(getTechnologyCategoryLabel(tech))} text-xs`}>
                                         {getTechnologyCategoryLabel(tech)}
                                       </Badge>
                                   </div>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleOpenEditDialog(tech)}
-                                    disabled={isMutating}
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => setConfirmTarget(tech)}
-                                    disabled={isMutating}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
+                                  {inactive ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setConfirmTarget({ action: 'reactivate', tech })}
+                                      disabled={isMutating}
+                                      className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                      title="Reactivate"
+                                    >
+                                      <RotateCcw className="w-3 h-3" />
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => handleOpenEditDialog(tech)}
+                                        disabled={isMutating}
+                                      >
+                                        <Edit className="w-3 h-3" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => setConfirmTarget({ action: 'deactivate', tech })}
+                                        disabled={isMutating}
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </motion.div>
@@ -576,10 +585,17 @@ const TechnologiesPage = () => {
         <ConfirmDialog
           open={Boolean(confirmTarget)}
           onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
-          title="Delete technology?"
-          description={confirmTarget ? `Are you sure you want to delete ${confirmTarget.name}?` : undefined}
-          confirmLabel="Delete"
-          onConfirm={handleDeleteTechnology}
+          title={confirmTarget?.action === 'reactivate' ? 'Reactivate technology?' : 'Delete technology?'}
+          description={
+            confirmTarget?.tech
+              ? confirmTarget.action === 'reactivate'
+                ? `Reactivate ${confirmTarget.tech.name}? It will be available again.`
+                : `Are you sure you want to delete ${confirmTarget.tech.name}?`
+              : undefined
+          }
+          confirmLabel={confirmTarget?.action === 'reactivate' ? 'Reactivate' : 'Delete'}
+          destructive={confirmTarget?.action !== 'reactivate'}
+          onConfirm={handleConfirmTechnology}
           loading={isMutating}
         />
       </div>
