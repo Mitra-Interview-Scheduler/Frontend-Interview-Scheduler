@@ -16,6 +16,8 @@ import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus, isRecordActive } from '@/lib/activeStatusFilter';
 
 const DomainsPage = () => {
   const [domains, setDomains] = useState([]);
@@ -26,6 +28,7 @@ const DomainsPage = () => {
   const [isMutating, setIsMutating] = useState(false);
   const [formData, setFormData] = useState({ name: '' });
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
   // { action: 'deactivate' | 'reactivate', domain }
   const [confirmTarget, setConfirmTarget] = useState(null);
 
@@ -146,68 +149,14 @@ const DomainsPage = () => {
 
   const filteredDomains = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return domains;
-    return domains.filter((domain) => (
-      domain.name?.toLowerCase().includes(term)
-      || domain.code?.toLowerCase().includes(term)
-    ));
-  }, [domains, searchTerm]);
-
-  const activeDomains = filteredDomains.filter((d) => d.isActive !== false);
-  const inactiveDomains = filteredDomains.filter((d) => d.isActive === false);
-
-  const renderRows = (list, inactive = false) => (
-    <div className="space-y-2">
-      {list.map((domain) => (
-        <div
-          key={domain.id}
-          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
-            inactive ? 'opacity-70' : 'hover:bg-muted/30'
-          }`}
-        >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{domain.name}</span>
-              {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
-            </div>
-            {domain.code && (
-              <p className="text-xs text-muted-foreground mt-1">Code: {domain.code}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 gap-1">
-            {inactive ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmTarget({ action: 'reactivate', domain })}
-                disabled={isMutating}
-                className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                title="Reactivate"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reactivate
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(domain)} disabled={isMutating}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmTarget({ action: 'deactivate', domain })}
-                  disabled={isMutating}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+    const searched = !term
+      ? domains
+      : domains.filter((domain) => (
+        domain.name?.toLowerCase().includes(term)
+        || domain.code?.toLowerCase().includes(term)
+      ));
+    return filterByActiveStatus(searched, statusFilter);
+  }, [domains, searchTerm, statusFilter]);
 
   return (
     <Layout>
@@ -225,18 +174,21 @@ const DomainsPage = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Globe2 className="w-5 h-5" /> Domains ({domains.length})
+              <Globe2 className="w-5 h-5" /> Domains ({filteredDomains.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search domains..."
-                className="pl-10"
-              />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search domains..."
+                  className="pl-10"
+                />
+              </div>
+              <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
             </div>
             <LoadingSwap loading={loading && domains.length === 0} fallback={<LoadingState />}>
               {domains.length === 0 ? (
@@ -249,34 +201,62 @@ const DomainsPage = () => {
               ) : filteredDomains.length === 0 ? (
                 <EmptyState
                   icon={Globe2}
-                  title={`No domains match "${searchTerm.trim()}"`}
+                  title={searchTerm.trim() ? `No domains match "${searchTerm.trim()}"` : 'No domains for this status'}
                   compact
                 />
               ) : (
-                <div className="space-y-6">
-                  <section className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-foreground">Active</h3>
-                      <Badge variant="outline" className="text-[10px]">{activeDomains.length}</Badge>
-                    </div>
-                    {activeDomains.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">No active domains.</p>
-                    ) : (
-                      renderRows(activeDomains)
-                    )}
-                  </section>
-
-                  <section className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-muted-foreground">Inactive</h3>
-                      <Badge variant="secondary" className="text-[10px]">{inactiveDomains.length}</Badge>
-                    </div>
-                    {inactiveDomains.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">No inactive domains.</p>
-                    ) : (
-                      renderRows(inactiveDomains, true)
-                    )}
-                  </section>
+                <div className="space-y-2">
+                  {filteredDomains.map((domain) => {
+                    const inactive = !isRecordActive(domain);
+                    return (
+                      <div
+                        key={domain.id}
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                          inactive ? 'opacity-70' : 'hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{domain.name}</span>
+                            {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                          </div>
+                          {domain.code && (
+                            <p className="text-xs text-muted-foreground mt-1">Code: {domain.code}</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          {inactive ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmTarget({ action: 'reactivate', domain })}
+                              disabled={isMutating}
+                              className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              title="Reactivate"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              Reactivate
+                            </Button>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(domain)} disabled={isMutating}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmTarget({ action: 'deactivate', domain })}
+                                disabled={isMutating}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </LoadingSwap>
