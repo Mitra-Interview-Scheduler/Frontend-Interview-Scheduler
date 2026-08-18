@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Plus, Search, Trash2, UserX, UserCheck, Pencil,
+  Plus, Search, Trash2, UserCheck, Pencil,
   RefreshCw, ShieldAlert, User, Mail, Lock, Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +26,7 @@ import { Spinner, LoadingSwap } from '@/components/ui/loading';
 import { TableSkeleton } from '@/components/ui/page-skeletons';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { getInitial } from '@/lib/personUtils';
 import { sortRoles } from '@/lib/roleHelpers';
 import { env } from '@/config/env';
@@ -51,13 +52,17 @@ const initials = (u) =>
 
 // ─── Admin-delete guard ───────────────────────────────────────────────────────
 
-function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
+function AdminDeactivateGuard({ open, userName, onClose, onConfirm, loading = false }) {
   const [key, setKey]     = useState('');
   const [err, setErr]     = useState('');
 
   const reset = () => { setKey(''); setErr(''); };
 
-  const handleClose = () => { reset(); onClose(); };
+  const handleClose = () => {
+    if (loading) return;
+    reset();
+    onClose();
+  };
 
   const handleConfirm = () => {
     if (key !== ROOT_KEY) { setErr('Incorrect root key.'); return; }
@@ -74,7 +79,7 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
               <ShieldAlert className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <DialogTitle className="text-base leading-tight">Delete Admin Account</DialogTitle>
+              <DialogTitle className="text-base leading-tight">Deactivate Admin Account</DialogTitle>
               <DialogDescription className="text-xs mt-0.5 leading-snug">
                 <span className="font-medium text-foreground">{userName}</span> has admin privileges
               </DialogDescription>
@@ -84,7 +89,8 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
 
         <div className="space-y-3 py-1">
           <p className="text-sm text-muted-foreground">
-            Admin accounts are protected. Enter the root key to permanently delete this account.
+            Admin accounts are protected. Enter the root key to deactivate this account.
+            You can reactivate them later from User Management.
           </p>
           <div className="space-y-1.5">
             <Label htmlFor="root-key" className="text-sm">Root Key</Label>
@@ -94,8 +100,9 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
               placeholder="Enter root key…"
               value={key}
               onChange={(e) => { setKey(e.target.value); setErr(''); }}
-              onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && handleConfirm()}
               className={err ? 'border-red-400 focus-visible:ring-red-300' : ''}
+              disabled={loading}
               autoFocus
             />
             {err && <p className="text-xs text-red-500">{err}</p>}
@@ -103,9 +110,9 @@ function AdminDeleteGuard({ open, userName, onClose, onConfirm }) {
         </div>
 
         <DialogFooter className="gap-2 mt-1">
-          <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
-          <Button size="sm" variant="destructive" onClick={handleConfirm} disabled={!key}>
-            Delete Admin
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={loading}>Cancel</Button>
+          <Button size="sm" variant="destructive" onClick={handleConfirm} disabled={!key || loading} loading={loading}>
+            Deactivate Admin
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -309,12 +316,15 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [guardTarget, setGuardTarget] = useState(null); // user pending admin-delete guard
+  // { action: 'deactivate' | 'reactivate', user, viaDelete?: boolean }
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [guardTarget, setGuardTarget] = useState(null); // admin pending root-key deactivate
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [isMutating, setIsMutating] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -402,38 +412,92 @@ export default function UsersPage() {
     return list;
   }, [users, sortKey, sortDir]);
 
-  const handleToggle = async (user) => {
-    setActionId(user.id);
-    try {
-      await usersAPI.toggleStatus(user.id);
-      setUsers((p) => p.map((u) => u.id === user.id ? { ...u, active: !u.active } : u));
-      toast({ title: 'Status updated' });
-    } catch (err) {
-      toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
-    } finally { setActionId(null); }
+  const userDisplayName = (user) =>
+    `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'this user';
+
+  const isAdminUser = (user) => {
+    const roles = user?.roles || (user?.role ? [user.role] : []);
+    return roles.includes('ADMIN');
+  };
+
+  const applyUserUpdate = (updated) => {
+    if (!updated?.id) return;
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
+    setSelectedUser((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+  };
+
+  const initiateStatusChange = (user, action) => {
+    if (action === 'deactivate' && isAdminUser(user)) {
+      setGuardTarget(user);
+      return;
+    }
+    setConfirmTarget({ action, user });
   };
 
   const initiateDelete = (user) => {
-    const userRoles = user.roles || (user.role ? [user.role] : []);
-    if (userRoles.includes('ADMIN')) { setGuardTarget(user); }
-    else{ executeDelete(user.id); }
+    if (user.active === false) {
+      toast({ title: 'User already inactive', description: 'This user is already deactivated.' });
+      return;
+    }
+    if (isAdminUser(user)) {
+      setGuardTarget(user);
+      return;
+    }
+    setConfirmTarget({ action: 'deactivate', user, viaDelete: true });
   };
 
-  const executeDelete = async (id) => {
-    setGuardTarget(null);
-    setActionId(id);
+  const executeDeactivate = async (user) => {
+    if (!user?.id) return;
+    setIsMutating(true);
+    setActionId(user.id);
     try {
-      await usersAPI.delete(id);
-      setUsers((p) => p.filter((u) => u.id !== id));
-      toast({ title: 'User deleted' });
-
+      const updated = await usersAPI.delete(user.id);
+      applyUserUpdate(updated ?? { ...user, active: false });
+      toast({
+        title: 'User deactivated',
+        description: `${userDisplayName(user)} can no longer sign in. You can reactivate them anytime.`,
+      });
+      setConfirmTarget(null);
+      setGuardTarget(null);
+      await fetchUsers();
     } catch (err) {
       toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
-    } finally { setActionId(null);
-          setRoleFilter('ALL');
-          setSearch('');
+    } finally {
+      setActionId(null);
+      setIsMutating(false);
+    }
+  };
 
-     }
+  const executeReactivate = async (user) => {
+    if (!user?.id) return;
+    setIsMutating(true);
+    setActionId(user.id);
+    try {
+      // Ensure we activate (toggle flips; only call when currently inactive)
+      const updated = await usersAPI.toggleStatus(user.id);
+      applyUserUpdate(updated ?? { ...user, active: true });
+      toast({
+        title: 'User reactivated',
+        description: `${userDisplayName(user)} can sign in again.`,
+      });
+      setConfirmTarget(null);
+      await fetchUsers();
+    } catch (err) {
+      toast({ title: 'Error', description: err.response?.data?.message ?? err.message, variant: 'destructive' });
+    } finally {
+      setActionId(null);
+      setIsMutating(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    const target = confirmTarget;
+    if (!target?.user) return;
+    if (target.action === 'reactivate') {
+      await executeReactivate(target.user);
+    } else {
+      await executeDeactivate(target.user);
+    }
   };
 
   const openDetails = (user) => {
@@ -595,32 +659,32 @@ export default function UsersPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-                            onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
-                            disabled={actionId === user.id}
-                            title={user.active !== false ? 'Deactivate' : 'Activate'}
-                          >
-                            {actionId === user.id ? (
-                              <Spinner size="xs" />
-                            ) : user.active !== false ? (
-                              <UserX className="w-4 h-4" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
-                            onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
-                            disabled={actionId === user.id}
-                            title="Delete User"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {user.active !== false ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
+                              onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
+                              disabled={actionId === user.id || isMutating}
+                              title="Deactivate User"
+                            >
+                              {actionId === user.id ? <Spinner size="xs" /> : <Trash2 className="w-4 h-4" />}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                initiateStatusChange(user, 'reactivate');
+                              }}
+                              disabled={actionId === user.id || isMutating}
+                              title="Reactivate User"
+                            >
+                              {actionId === user.id ? <Spinner size="xs" /> : <UserCheck className="w-4 h-4" />}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -678,32 +742,32 @@ export default function UsersPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
-                            onClick={(e) => { e.stopPropagation(); handleToggle(user); }}
-                            disabled={actionId === user.id}
-                            title={user.active !== false ? 'Deactivate' : 'Activate'}
-                          >
-                            {actionId === user.id ? (
-                              <Spinner size="xs" />
-                            ) : user.active !== false ? (
-                              <UserX className="w-4 h-4" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0  text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
-                            onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
-                            disabled={actionId === user.id}
-                            title="Delete User"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {user.active !== false ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 hover:border-red-200"
+                              onClick={(e) => { e.stopPropagation(); initiateDelete(user); }}
+                              disabled={actionId === user.id || isMutating}
+                              title="Deactivate User"
+                            >
+                              {actionId === user.id ? <Spinner size="xs" /> : <Trash2 className="w-4 h-4" />}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                initiateStatusChange(user, 'reactivate');
+                              }}
+                              disabled={actionId === user.id || isMutating}
+                              title="Reactivate User"
+                            >
+                              {actionId === user.id ? <Spinner size="xs" /> : <UserCheck className="w-4 h-4" />}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -755,11 +819,33 @@ export default function UsersPage() {
         onSave={handleUserSaved}
       />
 
-      <AdminDeleteGuard
+      <AdminDeactivateGuard
         open={!!guardTarget}
         userName={guardTarget ? `${guardTarget.firstName} ${guardTarget.lastName}` : ''}
         onClose={() => setGuardTarget(null)}
-        onConfirm={() => executeDelete(guardTarget?.id)}
+        onConfirm={() => executeDeactivate(guardTarget)}
+        loading={isMutating}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
+        title={
+          confirmTarget?.action === 'reactivate'
+            ? 'Reactivate user?'
+            : 'Deactivate user?'
+        }
+        description={
+          confirmTarget?.user
+            ? confirmTarget.action === 'reactivate'
+              ? `Reactivate "${userDisplayName(confirmTarget.user)}"? They will be able to sign in again.`
+              : `Deactivate "${userDisplayName(confirmTarget.user)}"? They will lose access until an admin reactivates them.`
+            : undefined
+        }
+        confirmLabel={confirmTarget?.action === 'reactivate' ? 'Reactivate' : 'Deactivate'}
+        destructive={confirmTarget?.action !== 'reactivate'}
+        onConfirm={handleConfirm}
+        loading={isMutating}
       />
     </Layout>
   );

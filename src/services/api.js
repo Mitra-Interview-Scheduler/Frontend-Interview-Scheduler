@@ -99,7 +99,7 @@ export const authAPI = {
   },
 };
 
-// You'll need to add GET /api/admin/users and DELETE /api/admin/users/{id}
+// You'll need to add GET /api/admin/users and DELETE /api/admin/users/{id} (soft-deactivate)
 // and PATCH /api/admin/users/{id}/status to your Spring Boot AdminController
 export const usersAPI = {
   getAll: async (pagination = null, filters = null) => {
@@ -135,7 +135,9 @@ export const usersAPI = {
     return response.data;
   },
   delete: async (id) => {
-    await api.delete(`/admin/users/${id}`);
+    // Soft-deactivates the user (backend sets isActive=false)
+    const response = await api.delete(`/admin/users/${id}`);
+    return response.data;
   },
 };
 
