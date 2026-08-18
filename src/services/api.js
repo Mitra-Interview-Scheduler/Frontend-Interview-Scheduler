@@ -3,21 +3,57 @@ import { env } from '@/config/env';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
 
 const API_BASE_URL = env.API_BASE_URL;
+let accessToken = null;
+let refreshPromise = null;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
+const refreshClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+export const setAccessToken = (token) => {
+  accessToken = token || null;
+};
+
+export const clearAccessToken = () => {
+  accessToken = null;
+};
+
+export const getAccessToken = () => accessToken;
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = refreshClient.post('/auth/refresh')
+      .then((response) => {
+        setAccessToken(response.data?.token || null);
+        return response.data;
+      })
+      .catch((error) => {
+        clearAccessToken();
+        throw error;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+};
+
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    if (accessToken) {
       if (typeof config.headers?.set === 'function') {
-        config.headers.set('Authorization', `Bearer ${token}`);
+        config.headers.set('Authorization', `Bearer ${accessToken}`);
       } else {
         config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
+        config.headers.Authorization = `Bearer ${accessToken}`;
       }
     }
     const selectedTimeZone =
@@ -45,7 +81,25 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config || {};
+    const requestUrl = originalRequest.url || '';
+
+    if (error.response?.status === 401
+      && !originalRequest._retry
+      && !requestUrl.includes('/auth/refresh')
+      && !requestUrl.includes('/auth/login')
+      && !requestUrl.includes('/auth/register')
+      && !requestUrl.includes('/auth/google')) {
+      originalRequest._retry = true;
+      try {
+        await refreshAccessToken();
+        return api(originalRequest);
+      } catch (refreshError) {
+        clearAccessToken();
+      }
+    }
+
     if (error.config?._skipAuthRedirect) {
       // Caller opted out of the global 401 logout/redirect (see _skipAuthRedirect on request config).
       return Promise.reject(error);
@@ -53,10 +107,10 @@ api.interceptors.response.use(
     // Only expired/invalid sessions should force re-login. A 403 means the user
     // is authenticated but lacks permission — redirecting to login is misleading.
     if (error.response?.status === 401) {
-      const requestUrl = error.config?.url || '';
       const isAuthRequest = requestUrl.includes('/auth/login')
         || requestUrl.includes('/auth/register')
-        || requestUrl.includes('/auth/google');
+        || requestUrl.includes('/auth/google')
+        || requestUrl.includes('/auth/refresh');
       const isCalendarIntegrationRequest = requestUrl.includes('/integrations/google-calendar');
       // Delivery logs is admin-only; a 401 here must not wipe the whole session
       // (production CORS/auth edge cases were logging users out on navigation).
@@ -68,7 +122,7 @@ api.interceptors.response.use(
         || error.config?.headers?.authorization
       );
       if (!isAuthRequest && !isCalendarIntegrationRequest && !isEmailLogsRequest && hadAuthHeader) {
-        localStorage.removeItem('token');
+        clearAccessToken();
         localStorage.removeItem('user');
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login';
@@ -82,16 +136,26 @@ api.interceptors.response.use(
 export const authAPI = {
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
-    console.log('Login response:', response.data);
+    setAccessToken(response.data?.token || null);
     return response.data;
   },
   googleLogin: async (token) => {
     const response = await api.post('/auth/google', { token });
+    setAccessToken(response.data?.token || null);
     return response.data;
   },
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
+    setAccessToken(response.data?.token || null);
     return response.data;
+  },
+  refresh: async () => refreshAccessToken(),
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      clearAccessToken();
+    }
   },
   verify: async () => {
     const response = await api.get('/auth/verify');

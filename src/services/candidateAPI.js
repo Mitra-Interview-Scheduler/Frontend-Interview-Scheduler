@@ -1,4 +1,4 @@
-import api from './api';
+import api, { getAccessToken } from './api';
 import { withQuery } from './queryParams';
 import { env } from '@/config/env';
 
@@ -9,7 +9,7 @@ async function uploadMultipartFile(url, file, method = 'POST') {
   const formData = new FormData();
   formData.append('file', file);
 
-  const token = localStorage.getItem('token');
+  const token = getAccessToken();
   const timezone =
     localStorage.getItem('preferredTimeZone') ||
     Intl.DateTimeFormat().resolvedOptions().timeZone ||
@@ -17,6 +17,7 @@ async function uploadMultipartFile(url, file, method = 'POST') {
 
   const response = await fetch(`${API_BASE_URL}${url}`, {
     method,
+    credentials: 'include',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'X-Timezone': timezone,

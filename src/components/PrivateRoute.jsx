@@ -9,13 +9,12 @@ const getUserRoles = (user) => getNormalizedRoles(user);
 
 export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   if (loading) {
     return <FullScreenLoading />;
   }
 
-  if (!user || !token) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { authAPI, userSettingsAPI } from '@/services/api';
+import { authAPI, clearAccessToken, setAccessToken, userSettingsAPI } from '@/services/api';
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 
 const AuthContext = createContext(null);
@@ -79,8 +79,8 @@ export const AuthProvider = ({ children }) => {
 
   const clearSession = () => {
     setUser(null);
+    clearAccessToken();
     localStorage.removeItem('user');
-    localStorage.removeItem('token');
     localStorage.removeItem('preferredTimeZone');
     localStorage.removeItem('dateFormat');
     localStorage.removeItem('timeFormat');
@@ -89,10 +89,11 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = localStorage.getItem('user');
-      const token = localStorage.getItem('token');
 
-      if (storedUser && token) {
+      if (storedUser) {
         try {
+          const refreshed = await authAPI.refresh();
+          setAccessToken(refreshed?.token || null);
           await authAPI.verify();
           const parsedUser = JSON.parse(storedUser);
           syncUser(parsedUser);
@@ -109,7 +110,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const response = await authAPI.login(email, password);
-      localStorage.setItem('token', response.token);
       await loadUserSettings();
       return syncUser(buildUserFromResponse(response));
     } catch (error) {
@@ -122,7 +122,6 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async (credentialResponse) => {
     try {
       const response = await authAPI.googleLogin(credentialResponse.credential);
-      localStorage.setItem('token', response.token);
       await loadUserSettings();
       return syncUser(buildUserFromResponse(response));
     } catch (error) {
@@ -132,7 +131,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      console.warn('Logout request failed:', error);
+    }
     clearSession();
   };
 
