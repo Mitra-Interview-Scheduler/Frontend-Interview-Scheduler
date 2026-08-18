@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  ExternalLink, FileText, Link2, NotebookPen, Plus, Trash2, Pencil 
+  FileText, Link2, NotebookPen, Plus, Trash2, Pencil 
 } from 'lucide-react';
 import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
@@ -12,7 +12,8 @@ import CandidateDomainsPanel, { buildCandidateDomainPayload } from '@/components
 import  candidateAPI from '@/services/candidateAPI';
 
 import { toast } from '@/hooks/use-toast';
-import { parseJobDescriptionText } from '@/lib/jobDescriptionUtils';
+import { parseJobDescriptionText, serializeJobDescriptionText } from '@/lib/jobDescriptionUtils';
+import { CandidateFieldEditDialog, SectionEditButton } from '../CandidateFieldEditDialog';
 
 const ProfileSummaryTab = ({
   candidate,
@@ -26,6 +27,8 @@ const ProfileSummaryTab = ({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkIndexToEdit, setLinkIndexToEdit] = useState(null); 
   const [linkSaving, setLinkSaving] = useState(false);
+  const [editField, setEditField] = useState(null);
+  const [fieldSaving, setFieldSaving] = useState(false);
 
   const parseResourceLinks = (rawValue) => {
     if (!rawValue || !String(rawValue).trim()) return [];
@@ -104,15 +107,63 @@ const ProfileSummaryTab = ({
     await executeResourceLinksUpdate(runningList);
   };
 
+  const openFieldEditor = (field) => {
+    setEditField(field);
+  };
+
+  const closeFieldEditor = () => {
+    if (fieldSaving) return;
+    setEditField(null);
+  };
+
+  const handleSaveField = async (value) => {
+    if (!candidate?.id || !editField) return;
+    setFieldSaving(true);
+    try {
+      const payload = {
+        ...buildCandidateDomainPayload(
+          candidate,
+          (candidate.domains || []).map((domain) => domain.id),
+        ),
+        ...(editField === 'jd'
+          ? { jdUrl: serializeJobDescriptionText(value) }
+          : { notes: String(value ?? '').trim() || null }),
+      };
+
+      await candidateAPI.updateCandidate(candidate.id, payload);
+      toast({
+        title: 'Success',
+        description: editField === 'jd' ? 'Job description updated' : 'Notes updated',
+      });
+      setEditField(null);
+      onCandidateUpdated();
+    } catch (err) {
+      toast({
+        title: 'Update Failed',
+        description: err.response?.data?.message || err.message || 'Failed to save changes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setFieldSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Job Description Card */}
       <Card className="border border-slate-200 shadow-sm">
         <CardContent className="p-4">
           <div className="mt-3 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job Description</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job Description</p>
+              </div>
+              <SectionEditButton
+                label={jobDescriptionText ? 'Edit job description' : 'Add job description'}
+                onClick={() => openFieldEditor('jd')}
+                disabled={fieldSaving}
+              />
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
               {jobDescriptionText || '-'}
@@ -124,9 +175,16 @@ const ProfileSummaryTab = ({
       {/* Notes Card */}
       <Card className="border border-slate-200 shadow-sm">
         <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            <NotebookPen className="h-4 w-4 text-blue-600" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <NotebookPen className="h-4 w-4 text-blue-600" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
+            </div>
+            <SectionEditButton
+              label={candidate.notes ? 'Edit notes' : 'Add notes'}
+              onClick={() => openFieldEditor('notes')}
+              disabled={fieldSaving}
+            />
           </div>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{candidate.notes || '-'}</p>
         </CardContent>
@@ -225,6 +283,31 @@ const ProfileSummaryTab = ({
         item={linkIndexToEdit !== null ? resourceLinks[linkIndexToEdit] : null}
         saving={linkSaving}
         onSave={handleSaveResourceLink}
+      />
+
+      <CandidateFieldEditDialog
+        open={Boolean(editField)}
+        title={
+          editField === 'jd'
+            ? (jobDescriptionText ? 'Edit Job Description' : 'Add Job Description')
+            : (candidate.notes ? 'Edit Notes' : 'Add Notes')
+        }
+        description={
+          editField === 'jd'
+            ? 'Paste or write the job description for this candidate.'
+            : 'Add internal notes about this candidate.'
+        }
+        label={editField === 'jd' ? 'Job Description' : 'Notes'}
+        initialValue={editField === 'jd' ? jobDescriptionText : (candidate.notes || '')}
+        placeholder={
+          editField === 'jd'
+            ? 'Paste or write the job description...'
+            : 'Additional notes...'
+        }
+        rows={editField === 'jd' ? 10 : 6}
+        saving={fieldSaving}
+        onClose={closeFieldEditor}
+        onSave={handleSaveField}
       />
     </div>
   );
