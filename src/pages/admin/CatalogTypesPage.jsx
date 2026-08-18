@@ -17,6 +17,8 @@ import { LoadingState, LoadingSwap, useTabTransition } from '@/components/ui/loa
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus, isRecordActive } from '@/lib/activeStatusFilter';
 
 const TABS = [
   { value: 'documents', label: 'Document Types', icon: FileText },
@@ -36,6 +38,7 @@ const CatalogTypesPage = () => {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
   // { action: 'deactivate' | 'reactivate', item }
   const [confirmTarget, setConfirmTarget] = useState(null);
 
@@ -62,6 +65,7 @@ const CatalogTypesPage = () => {
 
   useEffect(() => {
     setSearchTerm('');
+    setStatusFilter(DEFAULT_ACTIVE_STATUS);
     loadData();
   }, [activeTab]);
 
@@ -164,74 +168,14 @@ const CatalogTypesPage = () => {
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((item) => (
-      item.label?.toLowerCase().includes(term)
-      || item.code?.toLowerCase().includes(term)
-    ));
-  }, [items, searchTerm]);
-
-  const filteredActiveItems = useMemo(
-    () => filteredItems.filter((item) => item.active !== false),
-    [filteredItems],
-  );
-  const filteredInactiveItems = useMemo(
-    () => filteredItems.filter((item) => item.active === false),
-    [filteredItems],
-  );
-
-  const renderRows = (list, inactive = false) => (
-    <div className="space-y-2">
-      {list.map((item) => (
-        <div
-          key={item.id}
-          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
-            inactive ? 'opacity-70' : 'hover:bg-muted/30'
-          }`}
-        >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium truncate">{item.label}</span>
-              {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
-            </div>
-            {item.code && (
-              <p className="text-xs text-muted-foreground mt-1">Code: {item.code}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 gap-1">
-            {inactive ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmTarget({ action: 'reactivate', item })}
-                disabled={isMutating}
-                className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                title="Reactivate"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reactivate
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(item)} disabled={isMutating}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmTarget({ action: 'deactivate', item })}
-                  disabled={isMutating}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+    const searched = !term
+      ? items
+      : items.filter((item) => (
+        item.label?.toLowerCase().includes(term)
+        || item.code?.toLowerCase().includes(term)
+      ));
+    return filterByActiveStatus(searched, statusFilter);
+  }, [items, searchTerm, statusFilter]);
 
   const formFields = (
     <div className="space-y-4 py-2">
@@ -279,7 +223,7 @@ const CatalogTypesPage = () => {
         <AdminSectionTabs
           tabs={TABS.map((tab) => ({
             ...tab,
-            count: tab.value === activeTab ? items.length : undefined,
+            count: tab.value === activeTab ? filteredItems.length : undefined,
           }))}
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -290,18 +234,21 @@ const CatalogTypesPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {typeNoun} Types ({items.length})
+                  {typeNoun} Types ({filteredItems.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={`Search ${typeNoun.toLowerCase()} types...`}
-                    className="pl-10"
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative max-w-md flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder={`Search ${typeNoun.toLowerCase()} types...`}
+                      className="pl-10"
+                    />
+                  </div>
+                  <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
                 </div>
                 <LoadingSwap loading={loading && items.length === 0} fallback={<LoadingState />}>
                   {items.length === 0 ? (
@@ -314,34 +261,62 @@ const CatalogTypesPage = () => {
                   ) : filteredItems.length === 0 ? (
                     <EmptyState
                       icon={activeTab === 'documents' ? FileText : Link2}
-                      title={`No types match "${searchTerm.trim()}"`}
+                      title={searchTerm.trim() ? `No types match "${searchTerm.trim()}"` : 'No types for this status'}
                       compact
                     />
                   ) : (
-                    <div className="space-y-6">
-                      <section className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">Active</h3>
-                          <Badge variant="outline" className="text-[10px]">{filteredActiveItems.length}</Badge>
-                        </div>
-                        {filteredActiveItems.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-2">No active types.</p>
-                        ) : (
-                          renderRows(filteredActiveItems)
-                        )}
-                      </section>
-
-                      <section className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-muted-foreground">Inactive</h3>
-                          <Badge variant="secondary" className="text-[10px]">{filteredInactiveItems.length}</Badge>
-                        </div>
-                        {filteredInactiveItems.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-2">No inactive types.</p>
-                        ) : (
-                          renderRows(filteredInactiveItems, true)
-                        )}
-                      </section>
+                    <div className="space-y-2">
+                      {filteredItems.map((item) => {
+                        const inactive = !isRecordActive(item);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                              inactive ? 'opacity-70' : 'hover:bg-muted/30'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium truncate">{item.label}</span>
+                                {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                              </div>
+                              {item.code && (
+                                <p className="text-xs text-muted-foreground mt-1">Code: {item.code}</p>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 gap-1">
+                              {inactive ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setConfirmTarget({ action: 'reactivate', item })}
+                                  disabled={isMutating}
+                                  className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  title="Reactivate"
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                  Reactivate
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button variant="ghost" size="sm" onClick={() => openEdit(item)} disabled={isMutating}>
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setConfirmTarget({ action: 'deactivate', item })}
+                                    disabled={isMutating}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </LoadingSwap>

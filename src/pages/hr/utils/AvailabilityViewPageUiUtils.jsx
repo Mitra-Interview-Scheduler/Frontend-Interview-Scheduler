@@ -148,9 +148,11 @@ export const PROPOSED_TIME_PALETTE = {
   text: '#fff',
 };
 
-// Explicit, stable mapping of departments to palettes
+// Explicit, stable mapping of departments to palettes.
+// Engineering uses sky (index 15), not indigo (index 0), so available slots
+// stay distinct from HR booked indigo (#4F46E5).
 export const DEPARTMENT_PALETTES = {
-  Engineering: INTERVIEWER_PALETTES[0],
+  Engineering: INTERVIEWER_PALETTES[15],
   HR: INTERVIEWER_PALETTES[2],
   Design: INTERVIEWER_PALETTES[3],
   Product: INTERVIEWER_PALETTES[4],

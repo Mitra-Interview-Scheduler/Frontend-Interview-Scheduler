@@ -12,13 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
 import { toLookupCode } from '@/lib/technologyHelpers';
 import { LoadingState } from '@/components/ui/loading';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus, isRecordActive } from '@/lib/activeStatusFilter';
 
 const emptyForm = {
   label: '',
@@ -28,7 +30,7 @@ const META = {
   technology: {
     title: 'Technology Categories',
     description: 'Group technologies by category labels.',
-    load: () => technologyAPI.getTechnologyCategories(),
+    load: () => technologyAPI.getTechnologyCategoriesIncludingInactive(),
     create: (payload) => technologyAPI.createCategory(payload),
     update: (id, payload) => technologyAPI.updateCategory(id, payload),
     remove: (id) => technologyAPI.deleteCategory(id),
@@ -36,7 +38,7 @@ const META = {
   question: {
     title: 'Question Categories',
     description: 'Organize feedback form questions by category.',
-    load: () => questionCategoryAPI.getAll(false),
+    load: () => questionCategoryAPI.getAllIncludingInactive(),
     create: (payload) => questionCategoryAPI.create(payload),
     update: (id, payload) => questionCategoryAPI.update(id, payload),
     remove: (id) => questionCategoryAPI.delete(id),
@@ -54,14 +56,17 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
   const [currentPage, setCurrentPage] = useState(1);
   const [confirmTarget, setConfirmTarget] = useState(null);
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((item) => item.label?.toLowerCase().includes(term));
-  }, [items, searchTerm]);
+    const searched = !term
+      ? items
+      : items.filter((item) => item.label?.toLowerCase().includes(term));
+    return filterByActiveStatus(searched, statusFilter);
+  }, [items, searchTerm, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
 
@@ -72,7 +77,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, statusFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -87,7 +92,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
       const data = await config.load();
       const list = data || [];
       setItems(list);
-      onCategoriesChange?.(list);
+      onCategoriesChange?.(list.filter(isRecordActive));
     } catch (error) {
       console.error('Failed to load categories:', error);
       toast({
@@ -173,21 +178,27 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
       });
       return;
     }
-    setConfirmTarget(item);
+    setConfirmTarget({ action: 'deactivate', item });
   };
 
-  const handleDelete = async () => {
-    if (!confirmTarget) return;
+  const handleConfirm = async () => {
+    const item = confirmTarget?.item;
+    if (!item) return;
     setIsMutating(true);
     try {
-      await config.remove(confirmTarget.id);
+      if (confirmTarget.action === 'reactivate') {
+        await config.update(item.id, { isActive: true });
+        toast({ title: 'Reactivated', description: 'Category reactivated successfully.' });
+      } else {
+        await config.remove(item.id);
+        toast({ title: 'Removed', description: 'Category deactivated successfully.' });
+      }
       setConfirmTarget(null);
       await loadItems();
-      toast({ title: 'Removed', description: 'Category deactivated successfully.' });
     } catch (error) {
       toast({
-        title: 'Delete failed',
-        description: error.response?.data?.message || error.message || 'Unable to delete category',
+        title: confirmTarget.action === 'reactivate' ? 'Reactivate failed' : 'Delete failed',
+        description: error.response?.data?.message || error.message || 'Unable to update category',
         variant: 'destructive',
       });
     } finally {
@@ -215,57 +226,83 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search categories..."
-              className="pl-10"
-              disabled={isMutating}
-            />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search categories..."
+                className="pl-10"
+                disabled={isMutating}
+              />
+            </div>
+            <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
           </div>
 
           {items.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">No categories found</p>
           ) : filteredItems.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">
-              No categories match &quot;{searchTerm.trim()}&quot;
+              {searchTerm.trim()
+                ? `No categories match "${searchTerm.trim()}"`
+                : 'No categories for this status'}
             </p>
           ) : (
             <>
               <div className="space-y-2">
-                {paginatedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{item.label}</span>
-                        {item.isSystem && <Badge variant="secondary">System</Badge>}
+                {paginatedItems.map((item) => {
+                  const inactive = !isRecordActive(item);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
+                        inactive ? 'opacity-70' : 'hover:bg-muted/30'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{item.label}</span>
+                          {item.isSystem && <Badge variant="secondary">System</Badge>}
+                          {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {inactive ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmTarget({ action: 'reactivate', item })}
+                            disabled={isMutating || item.isSystem}
+                            className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            Reactivate
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditDialog(item)}
+                              disabled={isMutating || item.isSystem}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => requestDelete(item)}
+                              disabled={isMutating || item.isSystem}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(item)}
-                        disabled={isMutating || item.isSystem}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => requestDelete(item)}
-                        disabled={isMutating || item.isSystem}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -349,10 +386,17 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
       <ConfirmDialog
         open={Boolean(confirmTarget)}
         onOpenChange={(open) => { if (!open && !isMutating) setConfirmTarget(null); }}
-        title="Deactivate category?"
-        description={confirmTarget ? `Deactivate category "${confirmTarget.label}"?` : undefined}
-        confirmLabel="Deactivate"
-        onConfirm={handleDelete}
+        title={confirmTarget?.action === 'reactivate' ? 'Reactivate category?' : 'Deactivate category?'}
+        description={
+          confirmTarget?.item
+            ? confirmTarget.action === 'reactivate'
+              ? `Reactivate "${confirmTarget.item.label}"? It will be available again.`
+              : `Deactivate category "${confirmTarget.item.label}"?`
+            : undefined
+        }
+        confirmLabel={confirmTarget?.action === 'reactivate' ? 'Reactivate' : 'Deactivate'}
+        destructive={confirmTarget?.action !== 'reactivate'}
+        onConfirm={handleConfirm}
         loading={isMutating}
       />
     </>
