@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit, Trash2, Globe2, Search, RotateCcw } from 'lucide-react';
+import { Plus, SquarePen, Trash2, Globe2, Search, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { domainAPI } from '@/services/domainAPI';
 import { toLookupCode } from '@/lib/technologyHelpers';
@@ -240,7 +240,7 @@ const DomainsPage = () => {
                           ) : (
                             <>
                               <Button variant="ghost" size="sm" onClick={() => openEdit(domain)} disabled={isMutating}>
-                                <Edit className="h-4 w-4" />
+                                <SquarePen className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"

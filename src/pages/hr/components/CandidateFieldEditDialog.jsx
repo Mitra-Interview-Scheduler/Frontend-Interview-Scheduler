@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { SquarePen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,7 +28,7 @@ export function SectionEditButton({ label, onClick, disabled = false, className 
       aria-label={label}
       title={label}
     >
-      <Pencil className="h-3.5 w-3.5" />
+      <SquarePen className="h-3.5 w-3.5" />
     </Button>
   );
 }

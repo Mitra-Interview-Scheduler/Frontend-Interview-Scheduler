@@ -736,11 +736,6 @@ const handleSelectSlot = ({ start, end }) => {
     const isPanelBooked = !isPostponeRequest && !isOverdue && (
       event.status === 'panel_booked' || Boolean(event.panelId)
     );
-    const isBookedLike = event.status === 'booked'
-      || event.status === 'panel_booked'
-      || event.status === 'completed'
-      || event.status === 'overdue'
-      || isPostponeRequest;
     return {
       className: isGoogleExternal
         ? 'google-external-event'
@@ -755,8 +750,9 @@ const handleSelectSlot = ({ start, end }) => {
                 : (event.status === 'booked' ? 'booked-event' : 'available-event'))))),
       style: {
         background:   colors.bg,
+        backgroundColor: colors.solid,
         borderRadius: '5px',
-        opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
+        opacity:      1,
         color:        isGoogleExternal ? '#ffffff' : 'white',
         borderLeft:   `${isPanelBooked || isPostponeRequest || isOverdue ? 4 : 3}px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
@@ -776,9 +772,7 @@ const handleSelectSlot = ({ start, end }) => {
         overflow:     'hidden',
         backgroundImage: isGoogleExternal
           ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 6px, transparent 6px, transparent 12px)'
-          : (isPostponeRequest
-            ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 5px, transparent 5px, transparent 10px)'
-            : undefined),
+          : undefined,
       },
     };
   };

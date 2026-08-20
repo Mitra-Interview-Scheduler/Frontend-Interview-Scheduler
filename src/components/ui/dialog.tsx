@@ -70,15 +70,23 @@ const DialogContent = React.forwardRef<
 });
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
-const DialogHeader = ({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+const DialogHeader = ({
+  className,
+  children,
+  actions,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { actions?: React.ReactNode }) => (
   <div className={cn("flex items-start justify-between gap-3 px-8 py-4 border-b border-gray-100 shrink-0", className)} {...props}>
-    <div className="flex flex-col space-y-2 text-left">
+    <div className="flex min-w-0 flex-1 flex-col space-y-2 text-left">
       {children}
     </div>
-    <DialogPrimitive.Close className="group rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0">
-      <X className="h-5 w-5 transition-transform group-hover:rotate-90" />
-      <span className="sr-only">Close</span>
-    </DialogPrimitive.Close>
+    <div className="flex items-center gap-0.5 shrink-0">
+      {actions}
+      <DialogPrimitive.Close className="group rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0">
+        <X className="h-5 w-5 transition-transform group-hover:rotate-90" />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    </div>
   </div>
 );
 DialogHeader.displayName = "DialogHeader";

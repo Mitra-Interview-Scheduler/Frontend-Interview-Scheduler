@@ -1,36 +1,87 @@
 import axios from 'axios';
 import { env } from '@/config/env';
 import { formatLocalDateTime } from '@/lib/calendarUtils';
+import {
+  clearAccessToken,
+  getAccessToken,
+  getCsrfToken,
+  setAccessToken,
+  setCsrfToken,
+} from '@/lib/authSession';
 
 const API_BASE_URL = env.API_BASE_URL;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
+  withXSRFToken: true,
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
   headers: { 'Content-Type': 'application/json' },
 });
 
+const isCsrfUrl = (url = '') => url.includes('/auth/csrf');
+const isRefreshUrl = (url = '') => url.includes('/auth/refresh');
+const isAuthSessionUrl = (url = '') =>
+  url.includes('/auth/login')
+  || url.includes('/auth/register')
+  || url.includes('/auth/google')
+  || url.includes('/auth/refresh')
+  || url.includes('/auth/logout')
+  || url.includes('/auth/csrf');
+
+let csrfPromise = null;
+let refreshPromise = null;
+
+export const ensureCsrfToken = async () => {
+  const existing = getCsrfToken();
+  if (existing) return existing;
+  if (!csrfPromise) {
+    csrfPromise = api.get('/auth/csrf')
+      .then((response) => {
+        const token = response.data?.token;
+        if (token) setCsrfToken(token);
+        return getCsrfToken();
+      })
+      .finally(() => {
+        csrfPromise = null;
+      });
+  }
+  return csrfPromise;
+};
+
+const applyHeader = (config, name, value) => {
+  if (typeof config.headers?.set === 'function') {
+    config.headers.set(name, value);
+  } else {
+    config.headers = config.headers || {};
+    config.headers[name] = value;
+  }
+};
+
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      if (typeof config.headers?.set === 'function') {
-        config.headers.set('Authorization', `Bearer ${token}`);
-      } else {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+  async (config) => {
+    const requestUrl = config.url || '';
+    if (!isCsrfUrl(requestUrl) && !getCsrfToken()) {
+      await ensureCsrfToken();
     }
+
+    const csrf = getCsrfToken();
+    if (csrf) {
+      applyHeader(config, 'X-XSRF-TOKEN', csrf);
+    }
+
+    const token = getAccessToken();
+    if (token && !isAuthSessionUrl(requestUrl)) {
+      applyHeader(config, 'Authorization', `Bearer ${token}`);
+    }
+
     const selectedTimeZone =
       localStorage.getItem('preferredTimeZone') ||
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       'UTC';
-    if (typeof config.headers?.set === 'function') {
-      config.headers.set('X-Timezone', selectedTimeZone);
-    } else {
-      config.headers = config.headers || {};
-      config.headers['X-Timezone'] = selectedTimeZone;
-    }
-    // Let the browser set multipart boundary; axios must not send application/json.
+    applyHeader(config, 'X-Timezone', selectedTimeZone);
+
     if (config.data instanceof FormData) {
       if (typeof config.headers.delete === 'function') {
         config.headers.delete('Content-Type');
@@ -43,59 +94,100 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+const redirectToLogin = () => {
+  clearAccessToken();
+  localStorage.removeItem('user');
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+};
+
+const refreshAccessToken = () => {
+  if (!refreshPromise) {
+    refreshPromise = api.post('/auth/refresh')
+      .then((response) => {
+        const nextToken = response.data?.token;
+        if (!nextToken) {
+          throw new Error('Refresh did not return an access token');
+        }
+        setAccessToken(nextToken);
+        return nextToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+};
+
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.config?._skipAuthRedirect) {
-      // Caller opted out of the global 401 logout/redirect (see _skipAuthRedirect on request config).
+  (response) => {
+    const token = response.data?.token;
+    if (typeof token === 'string' && isAuthSessionUrl(response.config?.url || '')) {
+      setAccessToken(token);
+    }
+    return response;
+  },
+  async (error) => {
+    const original = error.config;
+    if (!original || original._skipAuthRedirect) {
       return Promise.reject(error);
     }
-    // Only expired/invalid sessions should force re-login. A 403 means the user
-    // is authenticated but lacks permission — redirecting to login is misleading.
-    if (error.response?.status === 401) {
-      const requestUrl = error.config?.url || '';
-      const isAuthRequest = requestUrl.includes('/auth/login')
-        || requestUrl.includes('/auth/register')
-        || requestUrl.includes('/auth/google');
-      const isCalendarIntegrationRequest = requestUrl.includes('/integrations/google-calendar');
-      // Delivery logs is admin-only; a 401 here must not wipe the whole session
-      // (production CORS/auth edge cases were logging users out on navigation).
-      const isEmailLogsRequest = requestUrl.includes('/admin/delivery-logs')
-        || requestUrl.includes('/admin/email-logs');
-      const hadAuthHeader = Boolean(
-        error.config?.headers?.get?.('Authorization')
-        || error.config?.headers?.Authorization
-        || error.config?.headers?.authorization
-      );
-      if (!isAuthRequest && !isCalendarIntegrationRequest && !isEmailLogsRequest && hadAuthHeader) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.href = '/login';
-        }
+
+    const requestUrl = original.url || '';
+    const status = error.response?.status;
+
+    if (status === 401 && !original._retry && !isAuthSessionUrl(requestUrl)) {
+      original._retry = true;
+      try {
+        const nextToken = await refreshAccessToken();
+        applyHeader(original, 'Authorization', `Bearer ${nextToken}`);
+        return api(original);
+      } catch (refreshError) {
+        redirectToLogin();
+        return Promise.reject(refreshError);
       }
     }
+
+    if (status === 401 && isRefreshUrl(requestUrl)) {
+      redirectToLogin();
+    }
+
     return Promise.reject(error);
   }
 );
 
 export const authAPI = {
   login: async (email, password) => {
+    await ensureCsrfToken();
     const response = await api.post('/auth/login', { email, password });
-    console.log('Login response:', response.data);
     return response.data;
   },
   googleLogin: async (token) => {
+    await ensureCsrfToken();
     const response = await api.post('/auth/google', { token });
     return response.data;
   },
   register: async (userData) => {
+    await ensureCsrfToken();
     const response = await api.post('/auth/register', userData);
     return response.data;
   },
   verify: async () => {
     const response = await api.get('/auth/verify');
     return response.data;
+  },
+  refresh: async () => {
+    const response = await api.post('/auth/refresh');
+    return response.data;
+  },
+  logout: async () => {
+    try {
+      await ensureCsrfToken();
+      await api.post('/auth/logout');
+    } catch {
+      // Cookie clear is best-effort; local session is always dropped.
+    }
   },
 };
 
@@ -127,7 +219,6 @@ export const usersAPI = {
   },
   updateRoles: async (id, roles) => {
     const response = await api.put(`/admin/users/${id}/roles`, { roles });
-    console.log('Update roles response:', response.data);
     return response.data;
   },
   toggleStatus: async (id) => {

@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  FileText, Link2, NotebookPen, Plus, Trash2, Pencil 
+  FileText, Link2, NotebookPen, Plus, Trash2, SquarePen 
 } from 'lucide-react';
 import { ResourceLinkDialog } from './../../../../components/ResourceLinkDialog';
 import { CandidateDocumentsPanel } from '@/components/CandidateDocumentsPanel';
@@ -249,7 +249,7 @@ const ProfileSummaryTab = ({
                       disabled={linkSaving}
                       title="Edit Link"
                     >
-                      <Pencil className="h-4 w-4 text-slate-600" />
+                      <SquarePen className="h-4 w-4 text-slate-600" />
                     </Button>
                     <Button 
                       type="button" 

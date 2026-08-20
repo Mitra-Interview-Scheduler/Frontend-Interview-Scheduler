@@ -14,7 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Plus, Edit, Trash2, ListChecks, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
+  Plus, SquarePen, Trash2, ListChecks, Lock, FileText, GitBranch, CalendarClock, RotateCcw,
   Users, ClipboardList, Search,
 } from 'lucide-react';
 import { LoadingState, LoadingSwap } from '@/components/ui/loading';
@@ -396,7 +396,7 @@ const InterviewTypesPage = () => {
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => openEdit(type)} disabled={isMutating || isReactivating}>
-                        <Edit className="h-4 w-4" />
+                        <SquarePen className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Plus, Search, Edit, ChevronLeft, ChevronRight, ChevronDown,
+  Plus, Search, SquarePen, ChevronLeft, ChevronRight, ChevronDown,
   FileText, Tags, ListChecks, Filter, X, Building2, Briefcase, Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -56,7 +56,7 @@ const FeedbackFormsPage = () => {
   const [designations, setDesignations] = useState([]);
   const [questionCategories, setQuestionCategories] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(true);
   const itemsPerPage = 10;
   
   const [filters, setFilters] = useState({
@@ -95,6 +95,16 @@ const FeedbackFormsPage = () => {
     });
     setStatusFilter('all');
   };
+
+  const activeFilterCount = useMemo(() => (
+    [
+      filters.searchTerm.trim(),
+      filters.departmentId,
+      filters.designationId,
+      filters.interviewType,
+      statusFilter !== 'all' ? statusFilter : '',
+    ].filter(Boolean).length
+  ), [filters, statusFilter]);
 
   const activeFormCount = useMemo(
     () => filteredForms.filter((form) => form.isActive !== false).length,
@@ -274,34 +284,63 @@ const FeedbackFormsPage = () => {
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5" /> Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1">{activeFilterCount}</Badge>
+              )}
             </CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsFiltersCollapsed((value) => !value)}
-              className="h-9 gap-2"
-              aria-expanded={!isFiltersCollapsed}
-            >
-              <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
-              {isFiltersCollapsed ? 'Show' : 'Hide'}
-            </Button>
-          </CardHeader>
-          {!isFiltersCollapsed && (
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Search</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search forms…"
-                      value={filters.searchTerm}
-                      onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
+            <div className="flex items-center gap-3">
+              {isFiltersCollapsed && (
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search forms…"
+                    value={filters.searchTerm}
+                    onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+                    className="pl-10"
+                  />
                 </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFiltersCollapsed((value) => !value)}
+                className="h-9 gap-2"
+                aria-expanded={!isFiltersCollapsed}
+                aria-label={isFiltersCollapsed ? 'Show filters' : 'Hide filters'}
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
+                {isFiltersCollapsed ? 'Show' : 'Hide'}
+              </Button>
+            </div>
+          </CardHeader>
+          <AnimatePresence initial={false}>
+            {!isFiltersCollapsed && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, y: -6 }}
+                animate={{ height: 'auto', opacity: 1, y: 0 }}
+                exit={{ height: 0, opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                <CardContent>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {!isFiltersCollapsed && (
+                  <div className="space-y-2">
+                    <Label>Search</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search forms…"
+                        value={filters.searchTerm}
+                        onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                )}
+              {!isFiltersCollapsed && (
+                <>
 
                 <div className="space-y-2">
                   <Label>Department</Label>
@@ -377,41 +416,15 @@ const FeedbackFormsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
+                </>
+              )}
+            </div>
 
-              <div className="mt-6 rounded-lg border border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50 p-4 dark:border-indigo-800 dark:from-indigo-950/20 dark:to-sky-950/20">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-muted-foreground">Forms Shown</span>
-                  <div className="flex flex-wrap items-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-emerald-600" />
-                      <span className="text-sm">
-                        <span className="font-bold text-emerald-700">{activeFormCount}</span>
-                        <span className="ml-1 text-muted-foreground">active</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-slate-500" />
-                      <span className="text-sm">
-                        <span className="font-bold text-slate-600">{inactiveFormCount}</span>
-                        <span className="ml-1 text-muted-foreground">inactive</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full bg-slate-400" />
-                      <span className="text-sm">
-                        <span className="font-bold text-slate-600">{filteredForms.length}</span>
-                        <span className="ml-1 text-muted-foreground">total</span>
-                      </span>
-                    </div>
-                    <Button variant="outline" onClick={clearFilters} className="gap-2">
-                      <X className="w-4 h-4" /> Clear Filters
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          )}
+              
+                </CardContent>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Card>
 
         <LoadingSwap
@@ -529,7 +542,7 @@ const FeedbackFormsPage = () => {
                               onClick={() => navigate(`/admin/feedback-questions?id=${form.id}`)}
                               className="gap-2"
                             >
-                              <Edit className="w-4 h-4" /> Edit
+                              <SquarePen className="w-4 h-4" /> Edit
                             </Button>
                             <Button
                               size="sm"

@@ -23,7 +23,7 @@ import {
   Search,
   Mail,
   Phone,
-  Edit,
+  SquarePen,
   Hash,
   Users,
   CalendarClockIcon,
@@ -365,7 +365,7 @@ const CandidatesPage = () => {
                                 disabled={loading}
                                 title="Edit"
                               >
-                                <Edit className="w-3.5 h-3.5" />
+                                <SquarePen className="w-3.5 h-3.5" />
                               </Button>
                               <Button
                                 variant="outline"
@@ -438,7 +438,7 @@ const CandidatesPage = () => {
                             </Button>
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenEdit(candidate); }} disabled={loading} title="Edit">
-                              <Edit className="w-3.5 h-3.5" />
+                              <SquarePen className="w-3.5 h-3.5" />
                             </Button>
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0"
                               onClick={(e) => { e.stopPropagation(); handleOpenInterviewSchedulePage(candidate); }} disabled={loading} title="Schedule">

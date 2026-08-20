@@ -126,7 +126,11 @@ const AvailabilityViewPage = () => {
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
-  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(() => !(
+    location.state?.filterData
+    || searchParams.get('candidateId')
+    || searchParams.get('interviewType')
+  ));
   const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
   const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
   const [selectedMatchingInterviewer, setSelectedMatchingInterviewer] = useState(null);
@@ -356,6 +360,8 @@ const AvailabilityViewPage = () => {
     const paramInterviewType = searchParams.get('interviewType');
 
     if (!incomingFilter && !paramCandidateId && !paramInterviewType) return;
+
+    setIsFiltersCollapsed(false);
 
     const resolvedInterviewType = resolveInterviewType(
       incomingFilter?.interviewType,
@@ -1966,6 +1972,9 @@ const calendarSlotPropGetter = useCallback((date) => {
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5" /> Filters
+              {hasActiveInterviewerFilters && (
+                <Badge variant="secondary" className="ml-1">Active</Badge>
+              )}
             </CardTitle>
             <Button
               type="button"
@@ -1974,12 +1983,59 @@ const calendarSlotPropGetter = useCallback((date) => {
               onClick={() => setIsFiltersCollapsed((value) => !value)}
               className="h-9 gap-2"
               aria-expanded={!isFiltersCollapsed}
+              aria-label={isFiltersCollapsed ? 'Show filters' : 'Hide filters'}
             >
               <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
               {isFiltersCollapsed ? 'Show' : 'Hide'}
             </Button>
           </CardHeader>
-          {!isFiltersCollapsed && (
+          {isFiltersCollapsed && (hasActiveInterviewerFilters || dateRange.start) && (
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {filterDept.map((id) => {
+                  const dept = departments.find((d) => String(d.id) === String(id));
+                  return dept ? (
+                    <Badge key={`dept-${id}`} variant="outline">{dept.name}</Badge>
+                  ) : null;
+                })}
+                {filterTech.map((id) => {
+                  const tech = technologies.find((t) => t.id === id);
+                  return tech ? (
+                    <Badge key={`tech-${id}`} variant="secondary">{tech.name}</Badge>
+                  ) : null;
+                })}
+                {filterDomain.map((id) => {
+                  const domain = domains.find((d) => d.id === id);
+                  return domain ? (
+                    <Badge key={`domain-${id}`} variant="outline">{domain.name}</Badge>
+                  ) : null;
+                })}
+                {minExperience && (
+                  <Badge variant="outline">{minExperience}+ yrs</Badge>
+                )}
+                {selectedTierInDept && (
+                  <Badge variant="outline">
+                    {tiersForSelectedDept.find((t) => String(t.id) === String(selectedTierInDept))?.name || 'Tier'}
+                  </Badge>
+                )}
+                {minDesignationLevel && (
+                  <Badge variant="outline">Level {minDesignationLevel}+</Badge>
+                )}
+                {dateRange.start && (
+                  <Badge variant="outline">From {formatInputDate(dateRange.start)}</Badge>
+                )}
+              </div>
+            </CardContent>
+          )}
+          <AnimatePresence initial={false}>
+            {!isFiltersCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0, y: -6 }}
+            animate={{ height: 'auto', opacity: 1, y: 0 }}
+            exit={{ height: 0, opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -2236,7 +2292,9 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
             </div>
           </CardContent>
+          </motion.div>
           )}
+          </AnimatePresence>
         </Card>
 
         {/* ── Top Matching Interviewers ─────────────────────────────────────── */}

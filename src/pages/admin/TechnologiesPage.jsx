@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Code2, Tags, RotateCcw } from 'lucide-react';
+import { Plus, SquarePen, Trash2, Code2, Tags, RotateCcw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
@@ -551,7 +551,7 @@ const TechnologiesPage = () => {
                                         onClick={() => handleOpenEditDialog(tech)}
                                         disabled={isMutating}
                                       >
-                                        <Edit className="w-3 h-3" />
+                                        <SquarePen className="w-3 h-3" />
                                       </Button>
                                       <Button 
                                         variant="ghost" 

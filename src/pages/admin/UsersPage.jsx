@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Plus, Search, Trash2, UserCheck, Pencil,
+  Plus, Search, Trash2, UserCheck, SquarePen,
   RefreshCw, ShieldAlert, User, Mail, Lock, Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -657,7 +657,7 @@ export default function UsersPage() {
                             onClick={(e) => { e.stopPropagation(); openDetails(user); }}
                             title="Edit User"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <SquarePen className="w-4 h-4" />
                           </Button>
                           {user.active !== false ? (
                             <Button
@@ -740,7 +740,7 @@ export default function UsersPage() {
                             onClick={(e) => { e.stopPropagation(); openDetails(user); }}
                             title="Edit User"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <SquarePen className="w-4 h-4" />
                           </Button>
                           {user.active !== false ? (
                             <Button

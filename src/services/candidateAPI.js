@@ -1,6 +1,7 @@
 import api from './api';
 import { withQuery } from './queryParams';
 import { env } from '@/config/env';
+import { getAccessToken, getCsrfToken } from '@/lib/authSession';
 
 const API_BASE_URL = env.API_BASE_URL;
 
@@ -9,7 +10,8 @@ async function uploadMultipartFile(url, file, method = 'POST') {
   const formData = new FormData();
   formData.append('file', file);
 
-  const token = localStorage.getItem('token');
+  const token = getAccessToken();
+  const csrf = getCsrfToken();
   const timezone =
     localStorage.getItem('preferredTimeZone') ||
     Intl.DateTimeFormat().resolvedOptions().timeZone ||
@@ -17,8 +19,10 @@ async function uploadMultipartFile(url, file, method = 'POST') {
 
   const response = await fetch(`${API_BASE_URL}${url}`, {
     method,
+    credentials: 'include',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrf ? { 'X-XSRF-TOKEN': csrf } : {}),
       'X-Timezone': timezone,
     },
     body: formData,

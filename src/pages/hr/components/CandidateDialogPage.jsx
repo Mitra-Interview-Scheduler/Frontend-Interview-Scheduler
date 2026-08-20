@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { 
-  Award, Download, FileText, Hash, Link, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
+  Award, Download, FileText, Hash, Link, MapPin, Plus, Trash2, TrendingUp, CalendarClock, SquarePen, ExternalLink 
 } from 'lucide-react';
 import { InlineLoading } from '@/components/ui/loading';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -495,7 +495,22 @@ function CandidateDialogPage({
             : ''
         }`}
       >
-        <DialogHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+        <DialogHeader
+          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100"
+          actions={
+            readOnly && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0"
+                aria-label="Edit candidate"
+                title="Edit candidate"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
+            ) : null
+          }
+        >
           <DialogTitle className="text-blue-900">
             {isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}
           </DialogTitle>
@@ -886,7 +901,7 @@ function CandidateDialogPage({
                             disabled={saving}
                             title="Edit Link"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <SquarePen className="w-3.5 h-3.5" />
                           </Button>
                           <Button
                             type="button"
@@ -1067,10 +1082,6 @@ function CandidateDialogPage({
               <Button variant="outline" onClick={onSchedule} className="gap-2">
                 <CalendarClock className="w-4 h-4" />
                 Schedule Interview
-              </Button>
-              
-              <Button onClick={onEdit} className="gap-2">
-                Edit Candidate
               </Button>
 
               <Button 

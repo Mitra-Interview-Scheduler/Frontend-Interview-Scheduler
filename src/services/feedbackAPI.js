@@ -59,16 +59,16 @@ const feedbackAPI = {
     try {
       const response = await api.get(`/feedback/responses/${interviewScheduleId}`);
       const payload = response.data;
-      if (payload?.response) {
-        return {
-          ...payload.response,
-          form: payload.form || null,
-        };
+      if (!payload?.response) {
+        return null;
       }
-      return payload;
+      return {
+        ...payload.response,
+        form: payload.form || null,
+      };
     } catch (error) {
       if (error.response?.status === 404) {
-        return null; // No feedback yet
+        return null; // No feedback submitted yet
       }
       console.error('Failed to fetch feedback:', error);
       return null;

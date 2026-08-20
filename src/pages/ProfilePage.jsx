@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Mail, Phone, Briefcase, Award, Edit2, Save, TrendingUp } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, Award, SquarePen, Save, TrendingUp } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { PageHeader } from '@/components/ui/page-header';
@@ -264,7 +264,7 @@ const ProfilePage = () => {
                   </>
                 ) : (
                   <>
-                    <Edit2 className="w-4 h-4" />
+                    <SquarePen className="w-4 h-4" />
                     Edit Profile
                   </>
                 )}
