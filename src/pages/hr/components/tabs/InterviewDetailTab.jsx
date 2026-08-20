@@ -16,11 +16,13 @@ import {
   Download,
   CheckCircle2,
   Users,
+  X,
 } from 'lucide-react';
 import { InlineLoading, LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import FeedbackResponseDisplay from '@/components/FeedbackResponseDisplay';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { assessmentAPI } from '@/services/assessmentAPI';
@@ -67,6 +69,8 @@ const InterviewDetailTab = ({
   const [uploading, setUploading] = useState(false);
   const [markingReceived, setMarkingReceived] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [removingReviewerId, setRemovingReviewerId] = useState(null);
+  const [reviewerToRemove, setReviewerToRemove] = useState(null);
   const fileInputRef = useRef(null);
 
   const interviewStatus = resolveInterviewRequestStatus(interview);
@@ -209,6 +213,31 @@ const InterviewDetailTab = ({
 
   const canMarkReceived = hasFile && String(phase || '').toUpperCase() === 'AWAITING';
   const canAssignReviewers = ['RECEIVED', 'UNDER_REVIEW'].includes(String(phase || '').toUpperCase());
+  const canRemoveReviewers = canAssignReviewers && String(phase || '').toUpperCase() !== 'COMPLETED';
+
+  const handleRemoveReviewer = async () => {
+    if (!scheduleId || !reviewerToRemove?.reviewerUserId) return;
+    const reviewerUserId = Number(reviewerToRemove.reviewerUserId);
+    setRemovingReviewerId(reviewerUserId);
+    try {
+      const data = await assessmentAPI.removeReviewer(scheduleId, reviewerUserId);
+      setAssessment(data);
+      toast({
+        title: 'Reviewer removed',
+        description: `${reviewerToRemove.reviewerName || 'Reviewer'} is no longer assigned.`,
+      });
+      setReviewerToRemove(null);
+      onCandidateUpdated?.();
+    } catch (error) {
+      toast({
+        title: 'Could not remove reviewer',
+        description: error.response?.data?.message || 'Failed to remove reviewer',
+        variant: 'destructive',
+      });
+    } finally {
+      setRemovingReviewerId(null);
+    }
+  };
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6 pb-6'}>
@@ -378,21 +407,42 @@ const InterviewDetailTab = ({
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Reviewers ({reviewers.length})
                     </p>
-                    {reviewers.map((r) => (
-                      <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{r.reviewerName}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">
-                            {[r.designationName, r.departmentName].filter(Boolean).join(' · ')}
-                          </p>
+                    {reviewers.map((r) => {
+                      const canRemove = canRemoveReviewers && !r.feedbackSubmitted;
+                      const isRemoving = removingReviewerId === Number(r.reviewerUserId);
+                      return (
+                        <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{r.reviewerName}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {[r.designationName, r.departmentName].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Badge variant="outline" className={r.feedbackSubmitted
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 text-slate-600'}>
+                              {r.feedbackSubmitted ? 'Completed' : 'Pending'}
+                            </Badge>
+                            {canRemove && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                title={`Remove ${r.reviewerName || 'reviewer'}`}
+                                aria-label={`Remove ${r.reviewerName || 'reviewer'}`}
+                                disabled={Boolean(removingReviewerId)}
+                                loading={isRemoving}
+                                onClick={() => setReviewerToRemove(r)}
+                              >
+                                {!isRemoving && <X className="h-4 w-4" />}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <Badge variant="outline" className={r.feedbackSubmitted
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-slate-50 text-slate-600'}>
-                          {r.feedbackSubmitted ? 'Completed' : 'Pending'}
-                        </Badge>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -502,6 +552,22 @@ const InterviewDetailTab = ({
           loadAssessment();
           onCandidateUpdated?.();
         }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(reviewerToRemove)}
+        onOpenChange={(next) => {
+          if (!next && !removingReviewerId) setReviewerToRemove(null);
+        }}
+        title="Remove reviewer?"
+        description={
+          reviewerToRemove
+            ? `${reviewerToRemove.reviewerName || 'This reviewer'} will be unassigned from this assessment and will no longer be able to review it.`
+            : undefined
+        }
+        confirmLabel="Remove"
+        loading={Boolean(removingReviewerId)}
+        onConfirm={handleRemoveReviewer}
       />
     </div>
   );
