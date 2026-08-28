@@ -28,27 +28,14 @@ const feedbackAPI = {
    * POST to /feedback/responses with interviewScheduleId and responses JSON.
    */
   async submitFeedback(interviewScheduleId, responses, feedbackFormId = null) {
-    try {
-      const payload = {
-        interviewScheduleId,
-        feedbackFormId,
-        responses,
-        submittedAt: new Date().toISOString(),
-      };
-      const response = await api.post('/feedback/responses', payload);
-      return response.data;
-    } catch (error) {
-      console.error('Failed to submit feedback:', error);
-      console.warn('Feedback submission failed (no backend), logging responses:', responses);
-      return {
-        id: Date.now(),
-        interviewScheduleId,
-        feedbackFormId,
-        responses,
-        submittedAt: new Date().toISOString(),
-        message: 'Feedback logged (no persistence without backend)',
-      };
-    }
+    const payload = {
+      interviewScheduleId,
+      feedbackFormId,
+      responses,
+      submittedAt: new Date().toISOString(),
+    };
+    const response = await api.post('/feedback/responses', payload);
+    return response.data;
   },
 
   /**
@@ -73,6 +60,11 @@ const feedbackAPI = {
       console.error('Failed to fetch feedback:', error);
       return null;
     }
+  },
+
+  async getAssessmentFeedbackList(interviewScheduleId) {
+    const response = await api.get(`/feedback/responses/${interviewScheduleId}/assessment-reviews`);
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   async completeInterview(interviewScheduleId) {

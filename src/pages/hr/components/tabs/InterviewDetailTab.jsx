@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +32,7 @@ import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import AssignAssessmentReviewersDialog from '../AssignAssessmentReviewersDialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const DetailField = ({ icon: Icon, label, children, iconClassName }) => (
   <div className="flex items-start gap-3">
@@ -64,6 +65,7 @@ const InterviewDetailTab = ({
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState(null);
   const [feedbackResponse, setFeedbackResponse] = useState(null);
+  const [assessmentFeedbackList, setAssessmentFeedbackList] = useState([]);
   const [assessment, setAssessment] = useState(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -71,6 +73,7 @@ const InterviewDetailTab = ({
   const [assignOpen, setAssignOpen] = useState(false);
   const [removingReviewerId, setRemovingReviewerId] = useState(null);
   const [reviewerToRemove, setReviewerToRemove] = useState(null);
+  const [activeReviewerTab, setActiveReviewerTab] = useState('');
   const fileInputRef = useRef(null);
 
   const interviewStatus = resolveInterviewRequestStatus(interview);
@@ -90,27 +93,50 @@ const InterviewDetailTab = ({
   const hasFile = assessment?.hasAssessmentFile ?? interview?.hasAssessmentFile;
   const fileName = assessment?.assessmentFileName || interview?.assessmentFileName;
 
-  const loadAssessment = useCallback(async () => {
+  const loadAssessmentData = useCallback(async () => {
     if (!scheduleId || !isAssessment) {
       setAssessment(null);
+      setAssessmentFeedbackList([]);
       return;
     }
+
     setAssessmentLoading(true);
     try {
       const data = await assessmentAPI.get(scheduleId);
       setAssessment(data);
+
+      const assignedReviewers = data?.reviewers || [];
+      if (assignedReviewers.length === 0) {
+        setAssessmentFeedbackList([]);
+        return;
+      }
+
+      setFeedbackLoading(true);
+      try {
+        const reviews = await feedbackAPI.getAssessmentFeedbackList(scheduleId);
+        setAssessmentFeedbackList(reviews);
+      } catch {
+        setAssessmentFeedbackList([]);
+      } finally {
+        setFeedbackLoading(false);
+      }
     } catch {
-      // Not an assessment schedule (or unauthorized) — hide assessment panel
       setAssessment(null);
+      setAssessmentFeedbackList([]);
     } finally {
       setAssessmentLoading(false);
     }
   }, [scheduleId, isAssessment]);
 
-  const loadFeedback = useCallback(async () => {
-    if (!scheduleId || (!isCompleted && String(phase || '').toUpperCase() !== 'UNDER_REVIEW')) {
+  const loadInterviewFeedback = useCallback(async () => {
+    if (!scheduleId || isAssessment) {
+      return;
+    }
+
+    if (!isCompleted) {
       setFeedbackForm(null);
       setFeedbackResponse(null);
+      setAssessmentFeedbackList([]);
       return;
     }
 
@@ -118,6 +144,7 @@ const InterviewDetailTab = ({
     try {
       const response = await feedbackAPI.getFeedbackForInterview(scheduleId);
       setFeedbackResponse(response);
+      setAssessmentFeedbackList([]);
       if (response?.feedbackFormId) {
         const form = await feedbackQuestionsAPI.getById(response.feedbackFormId);
         setFeedbackForm(form);
@@ -127,17 +154,23 @@ const InterviewDetailTab = ({
     } catch {
       setFeedbackForm(null);
       setFeedbackResponse(null);
+      setAssessmentFeedbackList([]);
     } finally {
       setFeedbackLoading(false);
     }
-  }, [scheduleId, isCompleted, phase]);
+  }, [scheduleId, isCompleted, isAssessment]);
 
   useEffect(() => {
     if (!isActive) return undefined;
-    loadAssessment();
-    loadFeedback();
+
+    if (isAssessment) {
+      loadAssessmentData();
+    } else {
+      loadInterviewFeedback();
+    }
+
     return undefined;
-  }, [isActive, loadAssessment, loadFeedback]);
+  }, [isActive, isAssessment, loadAssessmentData, loadInterviewFeedback]);
 
   const startTime = interview?.scheduledStartDateTime || interview?.preferredStartDateTime;
   const endTime = interview?.scheduledEndDateTime || interview?.preferredEndDateTime;
@@ -146,6 +179,40 @@ const InterviewDetailTab = ({
   const coordinatorName = interview?.interviewCoordinatorName?.trim() || 'Not mentioned';
   const phaseMeta = phaseBadge(phase);
   const reviewers = assessment?.reviewers || [];
+  const reviewerIdsKey = useMemo(
+    () => reviewers.map((reviewer) => reviewer.reviewerUserId).join(','),
+    [reviewers],
+  );
+
+  useEffect(() => {
+    if (!reviewers.length) {
+      setActiveReviewerTab('');
+      return;
+    }
+    setActiveReviewerTab((current) => {
+      if (current && reviewers.some((reviewer) => String(reviewer.reviewerUserId) === current)) {
+        return current;
+      }
+      const submittedReviewer = reviewers.find((reviewer) => reviewer.feedbackSubmitted);
+      const initialReviewer = submittedReviewer || reviewers[0];
+      return String(initialReviewer.reviewerUserId);
+    });
+  }, [reviewerIdsKey, reviewers]);
+
+  const feedbackByReviewerId = useMemo(() => {
+    const map = new Map();
+    assessmentFeedbackList.forEach((entry) => {
+      const reviewerId = entry.response?.interviewerId;
+      if (reviewerId != null) {
+        map.set(Number(reviewerId), entry);
+      }
+    });
+    return map;
+  }, [assessmentFeedbackList]);
+
+  const showInitialAssessmentFeedbackLoading = feedbackLoading
+    && reviewers.length > 0
+    && assessmentFeedbackList.length === 0;
 
   const handleUpload = async (file) => {
     if (!file || !scheduleId) return;
@@ -463,7 +530,7 @@ const InterviewDetailTab = ({
               </CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
                 {isAssessment
-                  ? 'Feedback from assigned reviewers appears here after they submit.'
+                  ? 'Each assigned reviewer submits their own review. Switch tabs below to view individual submissions.'
                   : isCompleted
                     ? 'Submitted responses from the interviewer after the session.'
                     : isCancelled
@@ -493,26 +560,87 @@ const InterviewDetailTab = ({
             </div>
           )}
 
-          {isAssessment && !isCancelled && reviewers.some((r) => r.feedbackSubmitted) && (
-            feedbackLoading ? (
+          {isAssessment && !isCancelled && reviewers.length > 0 && (
+            showInitialAssessmentFeedbackLoading ? (
               <LoadingState label="Loading feedback…" size="lg" spinnerClassName="text-indigo-500" />
-            ) : feedbackResponse ? (
-              <FeedbackResponseDisplay
-                form={feedbackForm}
-                responses={feedbackResponse?.responses || {}}
-                submittedAt={feedbackResponse?.submittedAt}
-              />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Open individual reviewer status above. Full multi-reviewer aggregation can be viewed as each submits.
-              </p>
+              <Tabs
+                value={activeReviewerTab}
+                onValueChange={setActiveReviewerTab}
+                className="w-full"
+              >
+                <TabsList className="mb-4 flex h-auto w-full flex-wrap justify-start gap-1 bg-slate-100 p-1">
+                  {reviewers.map((reviewer) => (
+                    <TabsTrigger
+                      key={reviewer.reviewerUserId}
+                      value={String(reviewer.reviewerUserId)}
+                      className="gap-1.5 data-[state=active]:bg-white"
+                    >
+                      <span className="max-w-[140px] truncate">{reviewer.reviewerName || 'Reviewer'}</span>
+                      <Badge
+                        variant="outline"
+                        className={reviewer.feedbackSubmitted
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0'
+                          : 'bg-amber-50 text-amber-800 border-amber-200 text-[10px] px-1.5 py-0'}
+                      >
+                        {reviewer.feedbackSubmitted ? 'Submitted' : 'Pending'}
+                      </Badge>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {reviewers.map((reviewer) => {
+                  const entry = feedbackByReviewerId.get(Number(reviewer.reviewerUserId));
+                  return (
+                    <TabsContent
+                      key={reviewer.reviewerUserId}
+                      value={String(reviewer.reviewerUserId)}
+                      className="mt-0"
+                    >
+                      {entry ? (
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {entry.reviewerName || reviewer.reviewerName || 'Reviewer'}
+                              </p>
+                              {(entry.reviewerEmail || reviewer.reviewerEmail) && (
+                                <p className="text-xs text-muted-foreground">
+                                  {entry.reviewerEmail || reviewer.reviewerEmail}
+                                </p>
+                              )}
+                            </div>
+                            {entry.response?.submittedAt && (
+                              <p className="text-xs text-muted-foreground">
+                                Submitted {formatDateTime(entry.response.submittedAt)}
+                              </p>
+                            )}
+                          </div>
+                          <FeedbackResponseDisplay
+                            form={entry.form}
+                            responses={entry.response?.responses || {}}
+                            submittedAt={entry.response?.submittedAt}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-muted-foreground">
+                          <Hourglass className="mb-3 h-8 w-8 text-slate-400" />
+                          <p className="font-medium text-slate-700">Review pending</p>
+                          <p className="mt-1 max-w-sm">
+                            {reviewer.reviewerName || 'This reviewer'} has not submitted their assessment review yet.
+                          </p>
+                        </div>
+                      )}
+                    </TabsContent>
+                  );
+                })}
+              </Tabs>
             )
           )}
 
-          {isAssessment && !isCancelled && !reviewers.some((r) => r.feedbackSubmitted) && (
+          {isAssessment && !isCancelled && reviewers.length === 0 && (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-6 py-8 text-center text-sm text-muted-foreground">
               {canAssignReviewers
-                ? 'No reviewer feedback submitted yet.'
+                ? 'No reviewers assigned yet. Assign reviewers to collect individual feedback.'
                 : 'Mark the assessment as received and assign reviewers to collect feedback.'}
             </div>
           )}
@@ -549,7 +677,7 @@ const InterviewDetailTab = ({
         scheduleId={scheduleId}
         alreadyAssignedIds={reviewers.map((r) => r.reviewerUserId)}
         onAssigned={() => {
-          loadAssessment();
+          loadAssessmentData();
           onCandidateUpdated?.();
         }}
       />

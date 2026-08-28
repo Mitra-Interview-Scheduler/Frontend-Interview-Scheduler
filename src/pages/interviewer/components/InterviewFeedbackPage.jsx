@@ -243,12 +243,22 @@ function InterviewFeedbackPage() {
       });
       formList = mergedForms;
 
+      const isAssessmentReview = Boolean(loadedAssessment)
+        || interview?.isAssessmentReview
+        || Boolean(interview?.assessmentPhase);
+
       if (existingFeedback?.responses) {
-        const isOwnFeedback = !existingFeedback.interviewerId
-          || Number(existingFeedback.interviewerId) === Number(user?.id);
-        setPanelPeerFeedback(!isOwnFeedback);
-        setFeedbackSubmitted(isOwnFeedback);
-        setLoadedResponses(existingFeedback.responses);
+        if (isAssessmentReview) {
+          setPanelPeerFeedback(false);
+          setFeedbackSubmitted(true);
+          setLoadedResponses(existingFeedback.responses);
+        } else {
+          const isOwnFeedback = !existingFeedback.interviewerId
+            || Number(existingFeedback.interviewerId) === Number(user?.id);
+          setPanelPeerFeedback(!isOwnFeedback);
+          setFeedbackSubmitted(isOwnFeedback);
+          setLoadedResponses(existingFeedback.responses);
+        }
         if (existingFeedback.feedbackFormId) {
           const matchedForm = formList.find((form) => form.id === existingFeedback.feedbackFormId);
           if (matchedForm) {
@@ -365,6 +375,28 @@ function InterviewFeedbackPage() {
       const result = await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
       setFeedbackSubmitted(true);
       setLoadedResponses({ ...formResponses });
+      setAssessmentMeta((prev) => (prev
+        ? {
+          ...prev,
+          reviewers: (prev.reviewers || []).map((reviewer) => (
+            Number(reviewer.reviewerUserId) === Number(user?.id)
+              ? { ...reviewer, feedbackSubmitted: true }
+              : reviewer
+          )),
+        }
+        : prev));
+
+      if (assessmentMeta) {
+        try {
+          const mine = await assessmentAPI.listMine();
+          const refreshed = (Array.isArray(mine) ? mine : []).find(
+            (item) => String(item.interviewScheduleId) === String(interviewScheduleId),
+          );
+          if (refreshed) setAssessmentMeta(refreshed);
+        } catch {
+          /* keep local reviewer update */
+        }
+      }
 
       const completed = Boolean(result?.assessmentCompleted)
         || String(result?.assessmentPhase || '').toUpperCase() === 'COMPLETED';
@@ -384,9 +416,13 @@ function InterviewFeedbackPage() {
         } else {
           toast({
             title: 'Feedback submitted',
-            description: feedbackSubmitted
-              ? 'Feedback updated successfully'
-              : 'Feedback submitted. Waiting for other reviewers to finish.',
+            description: assessmentMeta
+              ? (feedbackSubmitted
+                ? 'Your review was updated successfully.'
+                : 'Your review was submitted. Other assigned reviewers must submit their reviews separately.')
+              : (feedbackSubmitted
+                ? 'Feedback updated successfully'
+                : 'Feedback submitted. Waiting for other reviewers to finish.'),
           });
         }
       } else {
@@ -430,21 +466,35 @@ function InterviewFeedbackPage() {
         });
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || (assessmentMeta
+      const message = err.response?.data?.message || err.message || (assessmentMeta
         ? 'Failed to complete assessment'
-        : 'Failed to complete interview'));
+        : 'Failed to complete interview');
+      setError(message);
+      toast({
+        title: assessmentMeta ? 'Could not complete assessment' : 'Could not complete interview',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setCompleting(false);
     }
   };
 
+  const pendingAssessmentPeerReviewers = useMemo(() => (
+    (assessmentMeta?.reviewers || []).filter(
+      (reviewer) => !reviewer.feedbackSubmitted
+        && Number(reviewer.reviewerUserId) !== Number(user?.id),
+    )
+  ), [assessmentMeta?.reviewers, user?.id]);
+
   const isFormLocked = submitting || interviewCompleted || panelPeerFeedback;
   const canCompleteInterview = !assessmentMeta
     && !interviewCompleted
-    && (feedbackSubmitted || panelPeerFeedback);
+    && feedbackSubmitted;
   const canCompleteAssessment = Boolean(assessmentMeta)
     && !interviewCompleted
-    && feedbackSubmitted;
+    && feedbackSubmitted
+    && pendingAssessmentPeerReviewers.length === 0;
 
   const handleDownloadDocument = async (document) => {
     if (!candidate?.id || !document?.id) return;
@@ -846,11 +896,13 @@ function InterviewFeedbackPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {panelPeerFeedback
-                    ? 'Another panel interviewer has already submitted feedback for this interview.'
-                    : selectedForm
-                      ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
-                      : 'No feedback form matched this candidate yet.'}
+                  {assessmentMeta
+                    ? 'Submit your individual assessment review. Each assigned reviewer completes their own form separately.'
+                    : panelPeerFeedback
+                      ? 'Another panel interviewer has already submitted feedback. Only one panel member submits and completes the interview feedback form.'
+                      : selectedForm
+                        ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
+                        : 'No feedback form matched this candidate yet.'}
                 </p>
                 {/* Progress Bar */}
                 <div className="space-y-1">
@@ -1075,9 +1127,13 @@ function InterviewFeedbackPage() {
 
       <CompleteInterviewDialog
         open={completeDialogOpen}
-        onOpenChange={setCompleteDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setCompleteDialogOpen(nextOpen);
+          if (!nextOpen) setError('');
+        }}
         onConfirm={handleCompleteInterview}
         loading={completing}
+        error={completeDialogOpen ? error : ''}
         title={assessmentMeta ? 'Complete Assessment' : 'Complete Interview'}
         description={assessmentMeta
           ? 'Confirm that this assessment review is finished. Feedback will be locked and the assessment will be marked completed on the candidate profile. This action cannot be undone.'
