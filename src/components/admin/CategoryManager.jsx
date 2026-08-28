@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Search, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Plus, SquarePen, Trash2, Search, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { technologyAPI } from '@/services/technologyAPI';
 import { questionCategoryAPI } from '@/services/questionCategoryAPI';
@@ -287,7 +287,7 @@ const CategoryManager = ({ type = 'technology', onCategoriesChange }) => {
                               onClick={() => openEditDialog(item)}
                               disabled={isMutating || item.isSystem}
                             >
-                              <Edit className="h-4 w-4" />
+                              <SquarePen className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"

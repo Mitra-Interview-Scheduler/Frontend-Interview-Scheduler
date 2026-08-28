@@ -4,12 +4,13 @@ import { useAuth } from '@/context/AuthContext';
 import PropTypes from 'prop-types';
 import { getNormalizedRoles, normalizeRole } from '@/lib/roleHelpers';
 import { FullScreenLoading } from '@/components/ui/loading';
+import { getAccessToken } from '@/lib/authSession';
 
 const getUserRoles = (user) => getNormalizedRoles(user);
 
 export const PrivateRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getAccessToken();
 
   if (loading) {
     return <FullScreenLoading />;

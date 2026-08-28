@@ -34,6 +34,11 @@ export const assessmentAPI = {
     return response.data;
   },
 
+  removeReviewer: async (scheduleId, reviewerUserId) => {
+    const response = await api.delete(`/hr/assessments/${scheduleId}/reviewers/${reviewerUserId}`);
+    return response.data;
+  },
+
   listReviewers: async (scheduleId) => {
     const response = await api.get(`/hr/assessments/${scheduleId}/reviewers`);
     return response.data;

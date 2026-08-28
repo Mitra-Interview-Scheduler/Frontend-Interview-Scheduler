@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from '@/context/AuthContext';
 import { notificationAPI } from '@/services/notificationAPI';
 import { env } from '@/config/env';
+import { getAccessToken } from '@/lib/authSession';
 
 const NotificationContext = createContext(null);
 
@@ -112,7 +113,7 @@ export const NotificationProvider = ({ children }) => {
       return undefined;
     }
 
-    const token = localStorage.getItem('token');
+    const token = getAccessToken();
     if (!token) {
       return undefined;
     }
@@ -134,7 +135,7 @@ export const NotificationProvider = ({ children }) => {
           heartbeatIncoming: 10_000,
           heartbeatOutgoing: 10_000,
           beforeConnect: () => {
-            const currentToken = localStorage.getItem('token');
+            const currentToken = getAccessToken();
             if (currentToken) {
               client.connectHeaders = { Authorization: `Bearer ${currentToken}` };
             }

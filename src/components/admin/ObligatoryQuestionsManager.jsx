@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, GripVertical } from 'lucide-react';
+import { Plus, SquarePen, Trash2, GripVertical } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import { LoadingState } from '@/components/ui/loading';
@@ -294,7 +294,7 @@ const ObligatoryQuestionsManager = ({ onQuestionsChange }) => {
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Button variant="outline" size="sm" onClick={() => openEditDialog(question)} className="gap-2">
-                    <Edit className="h-4 w-4" />
+                    <SquarePen className="h-4 w-4" />
                     Edit
                   </Button>
                   <Button

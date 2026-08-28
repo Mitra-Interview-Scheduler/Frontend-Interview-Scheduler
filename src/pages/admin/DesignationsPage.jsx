@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Layers, Briefcase, Search, RotateCcw } from 'lucide-react';
+import { Plus, SquarePen, Trash2, Building2, ArrowUp, ArrowDown, Layers, Briefcase, Search, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { designationAPI } from '@/services/designationAPI';
@@ -775,7 +775,7 @@ const DesignationsPage = () => {
                                         onClick={() => handleOpenEditTier(tier)}
                                         disabled={isMutating}
                                       >
-                                        <Edit className="h-4 w-4" />
+                                        <SquarePen className="h-4 w-4" />
                                       </Button>
                                       <Button 
                                         variant="outline" 
@@ -901,7 +901,7 @@ const DesignationsPage = () => {
                                             ) : (
                                             <>
                                               <Button variant="outline" size="icon" onClick={() => handleOpenEditDesignation(des)} disabled={isMutating}>
-                                                <Edit className="h-4 w-4" />
+                                                <SquarePen className="h-4 w-4" />
                                               </Button>
                                               <Button variant="outline" size="icon" onClick={() => handleDeleteDesignation(des)} disabled={isMutating}>
                                                 <Trash2 className="h-4 w-4" />

@@ -27,6 +27,7 @@ import {
   Briefcase,
   Globe2,
   Mail,
+  SquarePen,
   TrendingUp,
   User,
 } from 'lucide-react';
@@ -371,17 +372,29 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-2">
-          <div className="flex items-center gap-3">
-            <div>
-              <DialogTitle className="text-xl">User Details</DialogTitle>
-              <DialogDescription className="mt-1.5">
-                {user
-                  ? `Manage personal info, access, roles, and professional details for ${displayFirstName || ''} ${displayLastName || ''}`.trim()
-                  : 'Review and update user information'}
-              </DialogDescription>
-            </div>
-          </div>
+        <DialogHeader
+          className="px-6 pt-6 pb-2"
+          actions={
+            !editing && user ? (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                disabled={saving}
+                className="rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0 disabled:pointer-events-none disabled:opacity-50"
+                aria-label="Edit user"
+                title="Edit user"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
+            ) : null
+          }
+        >
+          <DialogTitle className="text-xl">User Details</DialogTitle>
+          <DialogDescription className="mt-1.5">
+            {user
+              ? `Manage personal info, access, roles, and professional details for ${displayFirstName || ''} ${displayLastName || ''}`.trim()
+              : 'Review and update user information'}
+          </DialogDescription>
         </DialogHeader>
 
         {!user ? (
@@ -799,16 +812,7 @@ function UserRoleStatusDialog({ open, user, onOpenChange, onSave }) {
             >
               Save Changes
             </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => setEditing(true)}
-              disabled={saving || !user}
-              className="min-w-[110px]"
-            >
-              Edit User
-            </Button>
-          )}
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

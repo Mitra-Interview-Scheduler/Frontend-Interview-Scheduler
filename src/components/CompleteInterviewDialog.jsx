@@ -15,6 +15,7 @@ const CompleteInterviewDialog = ({
   onOpenChange,
   onConfirm,
   loading = false,
+  error = '',
   title = 'Complete Interview',
   description = 'Confirm that this interview is finished. Submitted feedback will be locked and shown on the candidate profile. This action cannot be undone.',
   confirmLabel = 'Confirm Complete',
@@ -36,6 +37,15 @@ const CompleteInterviewDialog = ({
             {description}
           </DialogDescription>
         </DialogHeader>
+
+        {error ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            {error}
+          </div>
+        ) : null}
 
         <DialogFooter className="flex gap-3 pt-4 border-t">
           <Button

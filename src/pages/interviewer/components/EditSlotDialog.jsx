@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Pencil, Save, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { SquarePen, Save, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogBody,
@@ -153,7 +153,7 @@ const EditSlotDialog = ({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-indigo-700">
-            <Pencil className="w-5 h-5" /> Edit Availability Slot
+            <SquarePen className="w-5 h-5" /> Edit Availability Slot
           </DialogTitle>
           <DialogDescription>
             Update the time range or description. Booked slots cannot be edited.
