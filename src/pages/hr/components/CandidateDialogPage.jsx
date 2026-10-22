@@ -13,8 +13,9 @@ import {
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { 
-  Award, Download, FileText, Hash, Link, Loader2, MapPin, Plus, Trash2, TrendingUp, CalendarClock, Pencil, ExternalLink 
+  Award, Download, FileText, Hash, Link, MapPin, Plus, Trash2, TrendingUp, CalendarClock, SquarePen, ExternalLink 
 } from 'lucide-react';
+import { InlineLoading } from '@/components/ui/loading';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import  candidateAPI from '@/services/candidateAPI';
@@ -494,7 +495,22 @@ function CandidateDialogPage({
             : ''
         }`}
       >
-        <DialogHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+        <DialogHeader
+          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100"
+          actions={
+            readOnly && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0"
+                aria-label="Edit candidate"
+                title="Edit candidate"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
+            ) : null
+          }
+        >
           <DialogTitle className="text-blue-900">
             {isCreate ? 'Add New Candidate' : readOnly ? candidate?.name : 'Edit Candidate'}
           </DialogTitle>
@@ -885,7 +901,7 @@ function CandidateDialogPage({
                             disabled={saving}
                             title="Edit Link"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <SquarePen className="w-3.5 h-3.5" />
                           </Button>
                           <Button
                             type="button"
@@ -939,7 +955,9 @@ function CandidateDialogPage({
 
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                 {documentsLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
+                  <div className="flex justify-center py-2">
+                    <InlineLoading />
+                  </div>
                 )}
                 {!documentsLoading
                   && visibleSavedDocuments.length === 0
@@ -1065,10 +1083,6 @@ function CandidateDialogPage({
                 <CalendarClock className="w-4 h-4" />
                 Schedule Interview
               </Button>
-              
-              <Button onClick={onEdit} className="gap-2">
-                Edit Candidate
-              </Button>
 
               <Button 
                 onClick={() => {
@@ -1088,17 +1102,11 @@ function CandidateDialogPage({
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={saving || !isFormValid}
+                loading={saving}
+                disabled={!isFormValid}
                 className="min-w-[110px]"
               >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  isCreate ? 'Add Candidate' : 'Update'
-                )}
+                {saving ? 'Saving…' : isCreate ? 'Add Candidate' : 'Update'}
               </Button>
             </>
           )}

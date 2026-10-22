@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Briefcase, Network, Layers3, Hourglass, Eye, Download, Hash, UserCheck, CalendarDays, UserPlus } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
@@ -11,6 +12,9 @@ import StepProgressIndicator from '@/components/StepProgressIndicator';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import CandidateNextStepsCard from './components/CandidateNextStepsCard';
 import CandidateDetailsTabs from './components/CandidateDetailsTabs';
+import CandidateDialogPage from './components/CandidateDialogPage';
+import { SectionEditButton } from './components/CandidateFieldEditDialog';
+import { departmentAPI } from '@/services/departmentAPI';
 import InterviewDocumentPreviewDialog from '../interviewer/components/InterviewDocumentPreviewDialog';
 import  candidateAPI from '@/services/candidateAPI';
 
@@ -31,6 +35,9 @@ function CandidateDetailsPage() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [interviewRefreshKey, setInterviewRefreshKey] = useState(0);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [editOpening, setEditOpening] = useState(false);
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
   const { interviewRequests, interviews, panels, loading: interviewsLoading, error: interviewsError } = useCandidateInterviews(
     candidate?.id,
@@ -131,14 +138,48 @@ function CandidateDetailsPage() {
     setPreviewUrl(null);
   };
 
+  const handleOpenCandidateEdit = async () => {
+    if (editOpening) return;
+    setEditOpening(true);
+    try {
+      if (departments.length === 0) {
+        const depts = await departmentAPI.getAllDepartments();
+        setDepartments(depts || []);
+      }
+      setIsEditOpen(true);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to open candidate editor',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditOpening(false);
+    }
+  };
+
   if (loading) {
     return (
-      <Layout>
-        <div className="h-[calc(100vh-4rem)] flex justify-center items-center">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground text-lg">Loading candidate details...</p>
+      <Layout hasPadding={false} className="overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+          <div className="border-blue-200 px-4 py-3 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(-1)}
+                className="gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-blue-900">Candidate Details</h1>
+                <p className="text-blue-600 text-sm mt-1">View comprehensive candidate information</p>
+              </div>
+            </div>
           </div>
+          <LoadingState label="Loading candidate details..." className="flex-1" />
         </div>
       </Layout>
     );
@@ -214,7 +255,7 @@ function CandidateDetailsPage() {
             >
             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto p-2 custom-scrollbar scrollbar-none">
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-start gap-3 mb-4">
                   <CandidateAvatar
                     candidate={candidate}
                     documents={documents}
@@ -225,6 +266,12 @@ function CandidateDetailsPage() {
                     <h3 className="font-bold text-lg text-gray-900 truncate">{candidate.name}</h3>
                     <p className="text-xs text-gray-600 truncate">{candidate.email}</p>
                   </div>
+                  <SectionEditButton
+                    label="Edit candidate details"
+                    onClick={handleOpenCandidateEdit}
+                    disabled={editOpening}
+                    className="hover:bg-white/80"
+                  />
                 </div>
 
                 <div className="space-y-3 border-t border-blue-200 pt-4">
@@ -359,6 +406,15 @@ function CandidateDetailsPage() {
           previewLoading={previewLoading}
           onClose={closePreview}
           onDownload={handleDownloadDocument}
+        />
+
+        <CandidateDialogPage
+          open={isEditOpen}
+          candidate={candidate}
+          departments={departments}
+          candidateSteps={candidateSteps}
+          onOpenChange={setIsEditOpen}
+          onSaveSuccess={handleCandidateUpdated}
         />
       </div>
     </Layout>

@@ -116,14 +116,11 @@ const DeleteSlotDialog = ({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={isDeleting}
+            loading={isDeleting}
             className="gap-2 min-w-[120px]"
           >
             {isDeleting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{' '}
-                Deleting...
-              </>
+              'Deleting...'
             ) : (
               <>
                 <Trash2 className="w-4 h-4" /> Delete Slot

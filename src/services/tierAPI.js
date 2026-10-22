@@ -5,6 +5,10 @@ const tiers = createResourceApi('/tiers');
 
 export const tierAPI = {
   getAllTiers: tiers.getAll,
+  getAllTiersIncludingInactive: async () => {
+    const response = await api.get('/tiers/all');
+    return response.data;
+  },
   getTierById: tiers.getById,
 
   getTiersByDepartment: async (departmentId) => {

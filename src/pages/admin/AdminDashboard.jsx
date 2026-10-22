@@ -3,8 +3,10 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, Calendar, Shield, Clock, Loader2, RefreshCw } from 'lucide-react';
+import { Users, Calendar, Shield, Clock, RefreshCw } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
+import { Spinner, LoadingState } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
 import { tierAPI } from '@/services/tierAPI';
 import { usersAPI } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
@@ -22,7 +24,7 @@ const StatCard = ({ icon: Icon, title, value, description, loading }) => (
     <CardContent>
       {loading ? (
         <div className="h-9 flex items-center">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          <Spinner size="sm" className="text-muted-foreground" />
         </div>
       ) : (
         <>
@@ -134,11 +136,9 @@ const AdminDashboard = () => {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
+                <LoadingState minHeight="sm" size="sm" />
               ) : recentUsers.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No users yet.</p>
+                <EmptyState icon={Users} title="No users yet" compact />
               ) : (
                 <div className="space-y-3">
                   {recentUsers.map((user, i) => (

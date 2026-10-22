@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { authAPI, userSettingsAPI } from '@/services/api';
+import { authAPI, ensureCsrfToken, userSettingsAPI } from '@/services/api';
 import { getNormalizedRoles } from '@/lib/roleHelpers';
+import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/authSession';
 
 const AuthContext = createContext(null);
 
@@ -79,6 +80,7 @@ export const AuthProvider = ({ children }) => {
 
   const clearSession = () => {
     setUser(null);
+    clearAccessToken();
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     localStorage.removeItem('preferredTimeZone');
@@ -88,17 +90,14 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      const storedUser = localStorage.getItem('user');
-      const token = localStorage.getItem('token');
-
-      if (storedUser && token) {
-        try {
-          await authAPI.verify();
-          const parsedUser = JSON.parse(storedUser);
-          syncUser(parsedUser);
-        } catch (error) {
-          clearSession();
-        }
+      try {
+        await ensureCsrfToken();
+        const response = await authAPI.refresh();
+        setAccessToken(response.token);
+        syncUser(buildUserFromResponse(response));
+        await loadUserSettings();
+      } catch {
+        clearSession();
       }
       setLoading(false);
     };
@@ -109,7 +108,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const response = await authAPI.login(email, password);
-      localStorage.setItem('token', response.token);
+      setAccessToken(response.token);
       await loadUserSettings();
       return syncUser(buildUserFromResponse(response));
     } catch (error) {
@@ -122,7 +121,7 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async (credentialResponse) => {
     try {
       const response = await authAPI.googleLogin(credentialResponse.credential);
-      localStorage.setItem('token', response.token);
+      setAccessToken(response.token);
       await loadUserSettings();
       return syncUser(buildUserFromResponse(response));
     } catch (error) {
@@ -132,7 +131,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await authAPI.logout();
     clearSession();
   };
 
@@ -143,7 +143,7 @@ export const AuthProvider = ({ children }) => {
     syncUser,
     logout,
     loading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!getAccessToken(),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

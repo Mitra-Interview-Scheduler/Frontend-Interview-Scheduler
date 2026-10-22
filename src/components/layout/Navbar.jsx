@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Menu, LogOut, User, Calendar } from 'lucide-react';
+import { Menu, LogOut, User } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
@@ -52,11 +52,15 @@ const Navbar = ({ onMenuClick }) => {
           </Button>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <div className="hidden md:block">
-              <h1 className="text-xl font-bold text-foreground">Mitra Scheduler</h1>
+            <img
+              src="/mitra-wordmark.png"
+              alt="Mitra"
+              className="h-8 w-auto object-contain sm:h-9"
+            />
+            <div className="hidden min-w-0 sm:block">
+              <h1 className="truncate text-base font-bold leading-tight text-foreground sm:text-lg">
+                Interview Scheduler
+              </h1>
               <p className="text-xs text-muted-foreground">Interview Management System</p>
             </div>
           </div>

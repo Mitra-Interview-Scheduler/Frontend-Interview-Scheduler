@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
@@ -140,10 +139,11 @@ export function ResourceLinkDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={saving || typesLoading || !url.trim() || (isOther && !customTag.trim()) || typeOptions.length === 0}
+            loading={saving}
+            disabled={typesLoading || !url.trim() || (isOther && !customTag.trim()) || typeOptions.length === 0}
             className="min-w-[90px]"
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save Link'}
+            Save Link
           </Button>
         </DialogFooter>
       </DialogContent>

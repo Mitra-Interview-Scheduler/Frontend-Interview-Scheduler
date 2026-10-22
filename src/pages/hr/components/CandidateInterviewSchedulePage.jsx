@@ -227,7 +227,10 @@ function CandidateInterviewSchedulePage({ open, candidate, onOpenChange, onSched
       console.error('Failed to resolve interviewer filters:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to resolve interviewer filters for this interview type',
+        description:
+          error.response?.data?.message
+          || error.response?.data?.detail
+          || 'Failed to resolve interviewer filters for this interview type',
         variant: 'destructive',
       });
     }

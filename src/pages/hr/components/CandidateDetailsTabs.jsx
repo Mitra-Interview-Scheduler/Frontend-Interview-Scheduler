@@ -5,6 +5,9 @@ import { getCandidateDetailTabs } from './candidateDetailsTabsConfig';
 import { resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
 import { InterviewScheduleStatus } from '@/lib/statusConstants';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FadeIn } from '@/components/ui/loading';
+import { FileSearch } from 'lucide-react';
 
 const CandidateDetailsTabs = ({
   candidate,
@@ -47,14 +50,24 @@ const CandidateDetailsTabs = ({
   }, [visibleTabs]);
 
   if (!candidate) {
-    return <div className="text-center text-gray-500">No candidate data available</div>;
+    return (
+      <EmptyState
+        icon={FileSearch}
+        title="No candidate data available"
+        compact
+        className="h-full"
+      />
+    );
   }
 
   if (visibleTabs.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-center text-gray-500">
-        <p>No details to display for the current stage.</p>
-      </div>
+      <EmptyState
+        icon={FileSearch}
+        title="No details to display"
+        description="Nothing is available for the current stage yet."
+        className="h-full"
+      />
     );
   }
 
@@ -91,7 +104,7 @@ const CandidateDetailsTabs = ({
                   value={tab.value}
                   title={tab.label}
                   className={cn(
-                    'h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-all',
+                    'h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-all duration-200',
                     isCancelled
                       ? 'text-red-700 data-[state=inactive]:border data-[state=inactive]:border-red-200 data-[state=inactive]:bg-red-50/80 data-[state=active]:bg-red-50 data-[state=active]:text-red-800 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-red-200'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200',
@@ -111,22 +124,26 @@ const CandidateDetailsTabs = ({
         const isReadOnly = !tab.editableStages.includes(candidate.status);
         return (
           <TabsContent key={tab.value} value={tab.value} className="mt-0 flex-1 overflow-y-auto pr-4">
-            <TabComponent
-              candidate={candidate}
-              interview={tab.interview}
-              panel={tab.panel}
-              panelRequests={tab.panelRequests}
-              steps={steps}
-              stepsLoading={stepsLoading || interviewsLoading}
-              isActive={activeTab === tab.value}
-              readOnly={isReadOnly}
-              documents={documents}
-              documentsLoading={documentsLoading}
-              onPreviewDocument={onPreviewDocument}
-              onDownloadDocument={onDownloadDocument}
-              onDocumentUploaded={onDocumentUploaded}
-              onCandidateUpdated={onCandidateUpdated}
-            />
+            {activeTab === tab.value ? (
+              <FadeIn key={tab.value} y={8}>
+                <TabComponent
+                  candidate={candidate}
+                  interview={tab.interview}
+                  panel={tab.panel}
+                  panelRequests={tab.panelRequests}
+                  steps={steps}
+                  stepsLoading={stepsLoading || interviewsLoading}
+                  isActive={activeTab === tab.value}
+                  readOnly={isReadOnly}
+                  documents={documents}
+                  documentsLoading={documentsLoading}
+                  onPreviewDocument={onPreviewDocument}
+                  onDownloadDocument={onDownloadDocument}
+                  onDocumentUploaded={onDocumentUploaded}
+                  onCandidateUpdated={onCandidateUpdated}
+                />
+              </FadeIn>
+            ) : null}
           </TabsContent>
         );
       })}

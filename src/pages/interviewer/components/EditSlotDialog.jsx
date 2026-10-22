@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Pencil, Save, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { SquarePen, Save, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogBody,
@@ -153,7 +153,7 @@ const EditSlotDialog = ({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-indigo-700">
-            <Pencil className="w-5 h-5" /> Edit Availability Slot
+            <SquarePen className="w-5 h-5" /> Edit Availability Slot
           </DialogTitle>
           <DialogDescription>
             Update the time range or description. Booked slots cannot be edited.
@@ -248,14 +248,12 @@ const EditSlotDialog = ({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSubmitting || !!error || endTime <= startTime}
+            loading={isSubmitting}
+            disabled={!!error || endTime <= startTime}
             className="gap-2 bg-indigo-600 hover:bg-indigo-700 min-w-[100px]"
           >
             {isSubmitting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{' '}
-                Saving…
-              </>
+              'Saving…'
             ) : (
               <>
                 <Save className="w-4 h-4" /> {isRecurringSlot && editScope !== 'SINGLE' ? 'Update Series' : 'Save'}

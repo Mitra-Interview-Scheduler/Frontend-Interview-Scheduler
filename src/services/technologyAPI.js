@@ -6,6 +6,10 @@ const categories = createResourceApi('/technology-categories');
 
 export const technologyAPI = {
   getAllTechnologies: technologies.getAll,
+  getAllTechnologiesIncludingInactive: async () => {
+    const response = await api.get('/technologies/all');
+    return response.data;
+  },
   getTechnologyById: technologies.getById,
 
   getTechnologiesByCategory: async (categoryCode) => {
@@ -19,6 +23,10 @@ export const technologyAPI = {
   },
 
   getTechnologyCategories: categories.getAll,
+  getTechnologyCategoriesIncludingInactive: async () => {
+    const response = await api.get('/technology-categories/all');
+    return response.data;
+  },
   createCategory: categories.create,
   updateCategory: categories.update,
   deleteCategory: categories.delete,

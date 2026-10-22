@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Save, CheckCircle2 } from 'lucide-react';
+import { Save, CheckCircle2 } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading';
 
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI'; 
@@ -339,10 +340,12 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center pt-20 pb-10 space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-xs text-gray-500 font-medium">Loading Candidate Screening Profiles...</p>
-      </div>
+      <LoadingState
+        label="Loading Candidate Screening Profiles..."
+        size="lg"
+        spinnerClassName="text-blue-600"
+        className="pt-20 pb-10"
+      />
     );
   }
 
@@ -726,14 +729,11 @@ const ScreeningTab = ({ candidate, readOnly = false, handleInputChange, formData
                 <Button 
                   size="sm" 
                   onClick={handleSubmitData}
-                  disabled={isSubmitting}
+                  loading={isSubmitting}
                   className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium flex items-center gap-1.5 shadow-sm shadow-blue-100"
                 >
                   {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Syncing...
-                    </>
+                    'Syncing...'
                   ) : (
                     <>
                       <Save className="h-3.5 w-3.5" />

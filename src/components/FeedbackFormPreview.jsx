@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Edit } from 'lucide-react';
+import { SquarePen } from 'lucide-react';
 import { formatInterviewTypeLabel } from '@/lib/statusConstants';
 
 const getOptionLabel = (option) => {
@@ -28,10 +28,29 @@ const FeedbackFormPreview = ({
 
   if (!form) return null;
 
+  const handleEdit = () => {
+    navigate(`/admin/feedback-questions?id=${form.id}`);
+    onOpenChange(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader
+          actions={
+            showEdit && form.id ? (
+              <button
+                type="button"
+                onClick={handleEdit}
+                className="rounded-full p-2 text-muted-foreground transition-all hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 active:scale-95 shrink-0"
+                aria-label="Edit form"
+                title="Edit form"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
+            ) : null
+          }
+        >
           <DialogTitle>Preview - {form.name}</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-4 pr-2">
@@ -127,17 +146,6 @@ const FeedbackFormPreview = ({
         </DialogBody>
         <DialogFooter className="flex gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          {showEdit && form.id && (
-            <Button
-              onClick={() => {
-                navigate(`/admin/feedback-questions?id=${form.id}`);
-                onOpenChange(false);
-              }}
-              className="gap-2"
-            >
-              <Edit className="w-4 h-4" /> Edit Form
-            </Button>
-          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

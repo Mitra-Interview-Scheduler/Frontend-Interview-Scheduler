@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import { Badge } from '@/components/ui/badge';
-import { Download, Loader2, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
+import { Download, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import Layout from '@/components/layout/Layout';
+import { PageLoading, Spinner } from '@/components/ui/loading';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
 import  candidateAPI from '@/services/candidateAPI';
@@ -242,12 +243,22 @@ function InterviewFeedbackPage() {
       });
       formList = mergedForms;
 
+      const isAssessmentReview = Boolean(loadedAssessment)
+        || interview?.isAssessmentReview
+        || Boolean(interview?.assessmentPhase);
+
       if (existingFeedback?.responses) {
-        const isOwnFeedback = !existingFeedback.interviewerId
-          || Number(existingFeedback.interviewerId) === Number(user?.id);
-        setPanelPeerFeedback(!isOwnFeedback);
-        setFeedbackSubmitted(isOwnFeedback);
-        setLoadedResponses(existingFeedback.responses);
+        if (isAssessmentReview) {
+          setPanelPeerFeedback(false);
+          setFeedbackSubmitted(true);
+          setLoadedResponses(existingFeedback.responses);
+        } else {
+          const isOwnFeedback = !existingFeedback.interviewerId
+            || Number(existingFeedback.interviewerId) === Number(user?.id);
+          setPanelPeerFeedback(!isOwnFeedback);
+          setFeedbackSubmitted(isOwnFeedback);
+          setLoadedResponses(existingFeedback.responses);
+        }
         if (existingFeedback.feedbackFormId) {
           const matchedForm = formList.find((form) => form.id === existingFeedback.feedbackFormId);
           if (matchedForm) {
@@ -364,6 +375,28 @@ function InterviewFeedbackPage() {
       const result = await feedbackAPI.submitFeedback(interviewScheduleId, formResponses, selectedForm.id);
       setFeedbackSubmitted(true);
       setLoadedResponses({ ...formResponses });
+      setAssessmentMeta((prev) => (prev
+        ? {
+          ...prev,
+          reviewers: (prev.reviewers || []).map((reviewer) => (
+            Number(reviewer.reviewerUserId) === Number(user?.id)
+              ? { ...reviewer, feedbackSubmitted: true }
+              : reviewer
+          )),
+        }
+        : prev));
+
+      if (assessmentMeta) {
+        try {
+          const mine = await assessmentAPI.listMine();
+          const refreshed = (Array.isArray(mine) ? mine : []).find(
+            (item) => String(item.interviewScheduleId) === String(interviewScheduleId),
+          );
+          if (refreshed) setAssessmentMeta(refreshed);
+        } catch {
+          /* keep local reviewer update */
+        }
+      }
 
       const completed = Boolean(result?.assessmentCompleted)
         || String(result?.assessmentPhase || '').toUpperCase() === 'COMPLETED';
@@ -383,9 +416,13 @@ function InterviewFeedbackPage() {
         } else {
           toast({
             title: 'Feedback submitted',
-            description: feedbackSubmitted
-              ? 'Feedback updated successfully'
-              : 'Feedback submitted. Waiting for other reviewers to finish.',
+            description: assessmentMeta
+              ? (feedbackSubmitted
+                ? 'Your review was updated successfully.'
+                : 'Your review was submitted. Other assigned reviewers must submit their reviews separately.')
+              : (feedbackSubmitted
+                ? 'Feedback updated successfully'
+                : 'Feedback submitted. Waiting for other reviewers to finish.'),
           });
         }
       } else {
@@ -429,21 +466,35 @@ function InterviewFeedbackPage() {
         });
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || (assessmentMeta
+      const message = err.response?.data?.message || err.message || (assessmentMeta
         ? 'Failed to complete assessment'
-        : 'Failed to complete interview'));
+        : 'Failed to complete interview');
+      setError(message);
+      toast({
+        title: assessmentMeta ? 'Could not complete assessment' : 'Could not complete interview',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setCompleting(false);
     }
   };
 
+  const pendingAssessmentPeerReviewers = useMemo(() => (
+    (assessmentMeta?.reviewers || []).filter(
+      (reviewer) => !reviewer.feedbackSubmitted
+        && Number(reviewer.reviewerUserId) !== Number(user?.id),
+    )
+  ), [assessmentMeta?.reviewers, user?.id]);
+
   const isFormLocked = submitting || interviewCompleted || panelPeerFeedback;
   const canCompleteInterview = !assessmentMeta
     && !interviewCompleted
-    && (feedbackSubmitted || panelPeerFeedback);
+    && feedbackSubmitted;
   const canCompleteAssessment = Boolean(assessmentMeta)
     && !interviewCompleted
-    && feedbackSubmitted;
+    && feedbackSubmitted
+    && pendingAssessmentPeerReviewers.length === 0;
 
   const handleDownloadDocument = async (document) => {
     if (!candidate?.id || !document?.id) return;
@@ -631,18 +682,13 @@ function InterviewFeedbackPage() {
                 </p>
               </div>
             </div>
-            {loading && <Loader2 className="w-6 h-6 animate-spin text-blue-600" />}
+            {loading && <Spinner className="text-blue-600" />}
           </div>
         </motion.div>
 
         {/* Main Content Area */}
         {loading ? (
-          <div className="flex-1 flex justify-center items-center">
-            <div className="text-center">
-              <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-              <p className="text-muted-foreground text-lg">Loading feedback form...</p>
-            </div>
-          </div>
+          <PageLoading label="Loading feedback form..." />
         ) : (
           <div className="flex-1 flex overflow-hidden gap-4 rounded-lg p-1 border  border-gray-200 ">
             
@@ -752,13 +798,9 @@ function InterviewFeedbackPage() {
                       variant="outline"
                       className="w-full gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
                       onClick={handleDownloadAssessment}
-                      disabled={downloadingAssessment}
+                      loading={downloadingAssessment}
                     >
-                      {downloadingAssessment ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
+                      {!downloadingAssessment && <Download className="w-4 h-4" />}
                       Download assessment
                     </Button>
                   </div>
@@ -769,7 +811,7 @@ function InterviewFeedbackPage() {
                   <h3 className="font-bold text-sm text-gray-900 mb-3 flex items-center gap-2 ">
                     <FileText className="w-4 h-4" /> Documents
                   </h3>
-                  {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
+                  {documentsLoading && <Spinner size="sm" className="text-muted-foreground mx-auto" />}
                   {!documentsLoading && documents.length === 0 && (
                     <p className="text-xs text-gray-500 text-center py-4 italic">No documents</p>
                   )}
@@ -854,11 +896,13 @@ function InterviewFeedbackPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-600 mb-3">
-                  {panelPeerFeedback
-                    ? 'Another panel interviewer has already submitted feedback for this interview.'
-                    : selectedForm
-                      ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
-                      : 'No feedback form matched this candidate yet.'}
+                  {assessmentMeta
+                    ? 'Submit your individual assessment review. Each assigned reviewer completes their own form separately.'
+                    : panelPeerFeedback
+                      ? 'Another panel interviewer has already submitted feedback. Only one panel member submits and completes the interview feedback form.'
+                      : selectedForm
+                        ? `You are filling out feedback form${candidate ? ` for ${candidate.name}` : ''}.`
+                        : 'No feedback form matched this candidate yet.'}
                 </p>
                 {/* Progress Bar */}
                 <div className="space-y-1">
@@ -1034,14 +1078,12 @@ function InterviewFeedbackPage() {
                 {!interviewCompleted && !panelPeerFeedback && (
                   <Button
                     onClick={handleSubmit}
-                    disabled={submitting || completing || !selectedForm || questions.length === 0}
+                    loading={submitting}
+                    disabled={completing || !selectedForm || questions.length === 0}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2 min-h-[48px] text-base font-semibold"
                   >
                     {submitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {feedbackSubmitted ? 'Updating…' : 'Submitting…'}
-                      </>
+                      feedbackSubmitted ? 'Updating…' : 'Submitting…'
                     ) : (
                       <>
                         <FileText className="w-4 h-4" />
@@ -1085,9 +1127,13 @@ function InterviewFeedbackPage() {
 
       <CompleteInterviewDialog
         open={completeDialogOpen}
-        onOpenChange={setCompleteDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setCompleteDialogOpen(nextOpen);
+          if (!nextOpen) setError('');
+        }}
         onConfirm={handleCompleteInterview}
         loading={completing}
+        error={completeDialogOpen ? error : ''}
         title={assessmentMeta ? 'Complete Assessment' : 'Complete Interview'}
         description={assessmentMeta
           ? 'Confirm that this assessment review is finished. Feedback will be locked and the assessment will be marked completed on the candidate profile. This action cannot be undone.'

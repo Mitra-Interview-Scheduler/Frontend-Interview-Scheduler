@@ -6,8 +6,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Download, Eye, FileText, Loader2, Plus, Trash2,
+  Download, Eye, FileText, Plus, Trash2,
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/loading';
 import { DocumentDropzone } from '@/components/DocumentDropzone';
 import  candidateAPI from '@/services/candidateAPI';
 
@@ -128,7 +129,7 @@ export function CandidateDocumentsPanel({
 
   const documentList = (
     <>
-      {documentsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />}
+      {documentsLoading && <Spinner size="sm" className="text-muted-foreground mx-auto" />}
       {!documentsLoading && documents.length === 0 && (
         <p className="text-sm text-slate-500">No documents available.</p>
       )}
@@ -199,7 +200,7 @@ export function CandidateDocumentsPanel({
                       title="Delete"
                     >
                       {isCurrentlyDeleting
-                        ? <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                        ? <Spinner size="sm" className="text-red-600" />
                         : <Trash2 className="h-4 w-4" />}
                     </Button>
                   )}

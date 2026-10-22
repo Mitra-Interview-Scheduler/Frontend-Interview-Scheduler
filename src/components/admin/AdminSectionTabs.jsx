@@ -17,18 +17,25 @@ const AdminSectionTabs = ({ tabs, activeTab, onTabChange, className }) => (
             type="button"
             onClick={() => onTabChange(tab.value)}
             className={cn(
-              'flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+              'relative flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
               isActive
                 ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                 : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
             )}
           >
-            {Icon && <Icon className="h-4 w-4 shrink-0" />}
+            {Icon && (
+              <Icon
+                className={cn(
+                  'h-4 w-4 shrink-0 transition-transform duration-200',
+                  isActive && 'scale-110',
+                )}
+              />
+            )}
             <span className="truncate">{tab.label}</span>
             {tab.count != null && (
               <Badge
                 variant={isActive ? 'secondary' : 'outline'}
-                className="h-5 min-w-5 shrink-0 px-1.5 text-xs"
+                className="h-5 min-w-5 shrink-0 px-1.5 text-xs transition-colors duration-200"
               >
                 {tab.count}
               </Badge>

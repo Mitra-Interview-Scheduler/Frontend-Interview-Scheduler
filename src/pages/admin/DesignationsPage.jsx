@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -9,13 +9,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Building2, ArrowUp, ArrowDown, Loader2, Layers, Briefcase } from 'lucide-react';
+import { Plus, SquarePen, Trash2, Building2, ArrowUp, ArrowDown, Layers, Briefcase, Search, RotateCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { designationAPI } from '@/services/designationAPI';
 import { departmentAPI } from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import AdminSectionTabs from '@/components/admin/AdminSectionTabs';
+import { LoadingState, useTabTransition } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ActiveStatusFilter } from '@/components/ui/active-status-filter';
+import { DEFAULT_ACTIVE_STATUS, filterByActiveStatus, isRecordActive } from '@/lib/activeStatusFilter';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 
@@ -24,6 +31,7 @@ const DesignationsPage = () => {
   const userRoles = getNormalizedRoles(user);
   const isAdmin = userRoles.includes('ADMIN');
   const canCreateMasterData = userRoles.some((role) => ['ADMIN', 'HR', 'INTERVIEWER'].includes(role));
+  const tabMotion = useTabTransition();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -41,6 +49,10 @@ const DesignationsPage = () => {
   const [departments, setDepartments] = useState([]);
   const [tiers, setTiers] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [departmentSearch, setDepartmentSearch] = useState('');
+  const [designationSearch, setDesignationSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_ACTIVE_STATUS);
+  const [confirmAction, setConfirmAction] = useState(null); // { type, id, label, action }
   const [isAddDesignationOpen, setIsAddDesignationOpen] = useState(false);
   const [isEditDesignationOpen, setIsEditDesignationOpen] = useState(false);
   const [isAddTierOpen, setIsAddTierOpen] = useState(false);
@@ -75,21 +87,13 @@ const DesignationsPage = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (selectedDepartment === 'all') {
-      loadData();
-    } else {
-      filterByDepartment();
-    }
-  }, [selectedDepartment]);
-
   const loadData = async () => {
     try {
       setLoading(true);
       const [designationsData, departmentsData, tiersData] = await Promise.all([
-        designationAPI.getAllDesignations(),
-        departmentAPI.getAllDepartments(),
-        tierAPI.getAllTiers()
+        designationAPI.getAllDesignationsIncludingInactive(),
+        departmentAPI.getAllDepartmentsIncludingInactive(),
+        tierAPI.getAllTiersIncludingInactive()
       ]);
       setDesignations(designationsData || []);
       setDepartments(departmentsData || []);
@@ -106,34 +110,14 @@ const DesignationsPage = () => {
     }
   };
 
-  const filterByDepartment = async () => {
-    try {
-      setLoading(true);
-      const [designationsData, tiersData] = await Promise.all([
-        designationAPI.getDesignationsByDepartment(parseInt(selectedDepartment)),
-        tierAPI.getTiersByDepartment(parseInt(selectedDepartment))
-      ]);
-      setDesignations(designationsData || []);
-      setTiers(tiersData || []);
-    } catch (error) {
-      console.error('Error filtering:', error);
-      toast({
-        title: "Error",
-        description: "Failed to filter data",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
+  const refreshData = async () => {
+    await loadData();
   };
 
-  const refreshData = async () => {
-    if (selectedDepartment === 'all') {
-      await loadData();
-    } else {
-      await filterByDepartment();
-    }
-  };
+  const activeDepartments = useMemo(
+    () => departments.filter(isRecordActive),
+    [departments],
+  );
 
   const getLevelColor = (level) => {
     const colors = {
@@ -289,27 +273,47 @@ const DesignationsPage = () => {
     }
   };
 
-  const handleDeleteTier = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this tier?")) return;
+  const handleDeleteTier = (tier) => {
+    setConfirmAction({ type: 'tier', id: tier.id, label: tier.name, action: 'deactivate' });
+  };
 
+  const executeConfirmAction = async () => {
+    if (!confirmAction) return;
     setIsMutating(true);
     try {
-      await tierAPI.deleteTier(id);
+      if (confirmAction.action === 'reactivate') {
+        if (confirmAction.type === 'tier') {
+          await tierAPI.updateTier(confirmAction.id, { isActive: true });
+        } else if (confirmAction.type === 'department') {
+          await departmentAPI.updateDepartment(confirmAction.id, { isActive: true });
+        } else {
+          await designationAPI.updateDesignation(confirmAction.id, { isActive: true });
+        }
+        toast({ title: 'Success', description: `${confirmAction.type === 'department' ? 'Department' : confirmAction.type === 'tier' ? 'Tier' : 'Designation'} reactivated` });
+      } else if (confirmAction.type === 'tier') {
+        await tierAPI.deleteTier(confirmAction.id);
+        toast({ title: 'Success', description: 'Tier deactivated successfully' });
+      } else if (confirmAction.type === 'department') {
+        await departmentAPI.deleteDepartment(confirmAction.id);
+        toast({ title: 'Success', description: 'Department deactivated successfully' });
+      } else {
+        await designationAPI.deleteDesignation(confirmAction.id);
+        toast({ title: 'Success', description: 'Designation deactivated successfully' });
+      }
+      setConfirmAction(null);
       await refreshData();
-      toast({ title: "Success", description: "Tier deleted successfully" });
     } catch (err) {
-      console.error('Error deleting tier:', err);
+      console.error('Error deleting:', err);
       toast({
-        title: "Error",
-        description: err.response?.data?.message || "Failed to delete tier",
-        variant: "destructive"
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to delete',
+        variant: 'destructive',
       });
     } finally {
       setIsMutating(false);
     }
   };
 
-  // Designation Management
   const handleOpenAddDesignation = () => {
     setDesignationForm({ name: '', levelOrder: '', departmentId: '', tierId: '', description: '' });
     setTimeout(() => setIsAddDesignationOpen(true), 0);
@@ -398,29 +402,13 @@ const DesignationsPage = () => {
     }
   };
 
-  const handleDeleteDesignation = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this designation?")) return;
-
-    setIsMutating(true);
-    try {
-      await designationAPI.deleteDesignation(id);
-      await refreshData();
-      toast({ title: "Success", description: "Designation deleted successfully" });
-    } catch (err) {
-      console.error('Error deleting designation:', err);
-      toast({
-        title: "Error",
-        description: err.response?.data?.message || "Failed to delete designation",
-        variant: "destructive"
-      });
-    } finally {
-      setIsMutating(false);
-    }
+  const handleDeleteDesignation = (des) => {
+    setConfirmAction({ type: 'designation', id: des.id, label: des.name, action: 'deactivate' });
   };
 
   const handleMoveDesignation = async (tierId, index, direction) => {
     const group = designations
-      .filter(d => d.tierId === tierId)
+      .filter((d) => d.tierId === tierId && isRecordActive(d))
       .sort((a, b) => a.levelOrder - b.levelOrder);
     
     if ((direction === 'up' && index === 0) || (direction === 'down' && index === group.length - 1)) {
@@ -475,9 +463,37 @@ const DesignationsPage = () => {
     }
   };
 
-  const filteredTiers = selectedDepartment === 'all' 
-    ? tiers 
-    : tiers.filter(t => t.departmentId === parseInt(selectedDepartment));
+  const filteredTiers = useMemo(() => {
+    const byDept = selectedDepartment === 'all'
+      ? tiers
+      : tiers.filter((t) => t.departmentId === parseInt(selectedDepartment, 10));
+    return filterByActiveStatus(byDept, statusFilter);
+  }, [tiers, selectedDepartment, statusFilter]);
+
+  const filteredDepartments = useMemo(() => {
+    const term = departmentSearch.trim().toLowerCase();
+    const searched = !term
+      ? departments
+      : departments.filter((department) => (
+        department.name?.toLowerCase().includes(term)
+        || department.code?.toLowerCase().includes(term)
+      ));
+    return filterByActiveStatus(searched, statusFilter);
+  }, [departments, departmentSearch, statusFilter]);
+
+  const filteredDesignations = useMemo(() => {
+    const term = designationSearch.trim().toLowerCase();
+    const byDept = selectedDepartment === 'all'
+      ? designations
+      : designations.filter((des) => des.departmentId === parseInt(selectedDepartment, 10));
+    const searched = !term
+      ? byDept
+      : byDept.filter((des) => (
+        des.name?.toLowerCase().includes(term)
+        || des.description?.toLowerCase().includes(term)
+      ));
+    return filterByActiveStatus(searched, statusFilter);
+  }, [designations, designationSearch, selectedDepartment, statusFilter]);
 
   const groupedTiers = filteredTiers.reduce((acc, tier) => {
     const id = tier.departmentId || 0;
@@ -487,28 +503,29 @@ const DesignationsPage = () => {
   }, {});
 
   const availableTiersForForm = designationForm.departmentId
-    ? tiers.filter(t => t.departmentId === parseInt(designationForm.departmentId))
+    ? tiers.filter((t) => t.departmentId === parseInt(designationForm.departmentId, 10) && isRecordActive(t))
     : [];
 
   const departmentFilterCard = (
     <Card>
       <CardContent className="pt-6">
-        <div className="flex items-center gap-4 justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Label className="whitespace-nowrap">Filter by Department:</Label>
             <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-              <SelectTrigger className="w-64">
+              <SelectTrigger className="w-full sm:w-64">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
                 {departments.map(d => (
                   <SelectItem key={d.id} value={d.id.toString()}>
-                    {d.name}
+                    {d.name}{!isRecordActive(d) ? ' (Inactive)' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
           </div>
           <div className="flex items-center gap-2">
             {activeTab === 'tiers' && canCreateMasterData && (
@@ -532,9 +549,27 @@ const DesignationsPage = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-3 text-muted-foreground">Loading...</span>
+        <div className="space-y-6 overflow-hidden">
+          <PageHeader
+            title="Designations & Tiers"
+            description={
+              canCreateMasterData && !isAdmin
+                ? 'Add departments, tiers, and designations for your profile and interviews'
+                : 'Manage organizational hierarchy with departments, tiers, and designations'
+            }
+          />
+
+          <AdminSectionTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            tabs={[
+              { value: 'departments', label: 'Departments', icon: Building2 },
+              { value: 'tiers', label: 'Tiers', icon: Layers },
+              { value: 'designations', label: 'Designations', icon: Briefcase },
+            ]}
+          />
+
+          <LoadingState label="Loading…" />
         </div>
       </Layout>
     );
@@ -543,16 +578,14 @@ const DesignationsPage = () => {
   return (
     <Layout>
       <div className="space-y-6 overflow-hidden">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Designations & Tiers</h1>
-            <p className="text-muted-foreground mt-1">
-              {canCreateMasterData && !isAdmin
-                ? 'Add departments, tiers, and designations for your profile and interviews'
-                : 'Manage organizational hierarchy with departments, tiers, and designations'}
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Designations & Tiers"
+          description={
+            canCreateMasterData && !isAdmin
+              ? 'Add departments, tiers, and designations for your profile and interviews'
+              : 'Manage organizational hierarchy with departments, tiers, and designations'
+          }
+        />
 
         <AdminSectionTabs
           activeTab={activeTab}
@@ -564,55 +597,122 @@ const DesignationsPage = () => {
           ]}
         />
 
-        {activeTab === 'departments' ? (
-          <div className="space-y-4">
-            {canCreateMasterData && (
-              <div className="flex justify-end">
-                <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Department
-                </Button>
-              </div>
-            )}
-
-            {departments.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No departments found</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {departments.map((department) => (
-                  <Card key={department.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold">{department.name}</h3>
+        <AnimatePresence mode="wait" initial={false}>
+          {activeTab === 'departments' ? (
+          <motion.div key="departments" className="space-y-4" {...tabMotion}>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Departments</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Organizational departments used for tiers and designations
+                  </p>
+                </div>
+                {canCreateMasterData && (
+                  <Button onClick={handleOpenAddDepartment} disabled={isMutating}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Department
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative max-w-md flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={departmentSearch}
+                      onChange={(e) => setDepartmentSearch(e.target.value)}
+                      placeholder="Search departments..."
+                      className="pl-10"
+                    />
+                  </div>
+                  <ActiveStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
+                </div>
+                {departments.length === 0 ? (
+                  <EmptyState icon={Building2} title="No departments found" compact />
+                ) : filteredDepartments.length === 0 ? (
+                  <EmptyState
+                    icon={Building2}
+                    title={departmentSearch.trim() ? `No departments match "${departmentSearch.trim()}"` : 'No departments for this status'}
+                    compact
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {filteredDepartments.map((department) => {
+                      const inactive = !isRecordActive(department);
+                      return (
+                      <div
+                        key={department.id}
+                        className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
+                          inactive ? 'opacity-70' : 'hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{department.name}</span>
+                            {department.code && (
+                              <Badge variant="outline" className="text-[10px]">{department.code}</Badge>
+                            )}
+                            {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                          </div>
                           {department.code && (
                             <p className="text-xs text-muted-foreground mt-1">Code: {department.code}</p>
                           )}
                         </div>
-                        <Badge variant="outline">{department.code || '—'}</Badge>
+                        {isAdmin && (
+                          <div className="flex shrink-0 gap-1">
+                            {inactive ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmAction({
+                                  type: 'department',
+                                  id: department.id,
+                                  label: department.name,
+                                  action: 'reactivate',
+                                })}
+                                disabled={isMutating}
+                                className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                Reactivate
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmAction({
+                                  type: 'department',
+                                  id: department.id,
+                                  label: department.name,
+                                  action: 'deactivate',
+                                })}
+                                disabled={isMutating}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         ) : activeTab === 'tiers' ? (
-          <div className="space-y-4">
+          <motion.div key="tiers" className="space-y-4" {...tabMotion}>
             {departmentFilterCard}
 
             {/* Add Tier button moved into department filter card */}
 
             {filteredTiers.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Layers className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No tiers found</p>
+                <CardContent>
+                  <EmptyState icon={Layers} title="No tiers found" />
                 </CardContent>
               </Card>
             ) : (
@@ -629,8 +729,10 @@ const DesignationsPage = () => {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {group.tiers.sort((a, b) => a.tierOrder - b.tierOrder).map((tier) => (
-                          <Card key={tier.id}>
+                        {group.tiers.sort((a, b) => a.tierOrder - b.tierOrder).map((tier) => {
+                          const inactive = !isRecordActive(tier);
+                          return (
+                          <Card key={tier.id} className={inactive ? 'opacity-70' : ''}>
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
@@ -638,7 +740,10 @@ const DesignationsPage = () => {
                                     Tier {tier.tierOrder}
                                   </Badge>
                                   <div>
-                                    <h3 className="font-semibold">{tier.name}</h3>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h3 className="font-semibold">{tier.name}</h3>
+                                      {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                                    </div>
                                     {tier.description && (
                                       <p className="text-sm text-muted-foreground mt-1">{tier.description}</p>
                                     )}
@@ -646,6 +751,23 @@ const DesignationsPage = () => {
                                 </div>
                                 <div className="flex gap-1">
                                   {isAdmin && (
+                                    inactive ? (
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => setConfirmAction({
+                                          type: 'tier',
+                                          id: tier.id,
+                                          label: tier.name,
+                                          action: 'reactivate',
+                                        })}
+                                        disabled={isMutating}
+                                        className="text-emerald-600 hover:text-emerald-700"
+                                        title="Reactivate"
+                                      >
+                                        <RotateCcw className="h-4 w-4" />
+                                      </Button>
+                                    ) : (
                                     <>
                                       <Button 
                                         variant="outline" 
@@ -653,48 +775,71 @@ const DesignationsPage = () => {
                                         onClick={() => handleOpenEditTier(tier)}
                                         disabled={isMutating}
                                       >
-                                        <Edit className="h-4 w-4" />
+                                        <SquarePen className="h-4 w-4" />
                                       </Button>
                                       <Button 
                                         variant="outline" 
                                         size="icon" 
-                                        onClick={() => handleDeleteTier(tier.id)}
+                                        onClick={() => handleDeleteTier(tier)}
                                         disabled={isMutating}
                                       >
                                         <Trash2 className="h-4 w-4" />
                                       </Button>
                                     </>
+                                    )
                                   )}
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
             )}
-          </div>
+          </motion.div>
         ) : (
-          <div className="space-y-4">
+          <motion.div key="designations" className="space-y-4" {...tabMotion}>
             {departmentFilterCard}
 
-            {/* Add Designation button moved into department filter card */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={designationSearch}
+                onChange={(e) => setDesignationSearch(e.target.value)}
+                placeholder="Search designations..."
+                className="pl-10 bg-card"
+              />
+            </div>
 
             {designations.length === 0 ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No designations available. Please create designations first.</p>
+                <CardContent>
+                  <EmptyState
+                    icon={Briefcase}
+                    title="No designations available"
+                    description="Please create designations first."
+                  />
+                </CardContent>
+              </Card>
+            ) : filteredDesignations.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <EmptyState
+                    icon={Briefcase}
+                    title={designationSearch.trim() ? `No designations match "${designationSearch.trim()}"` : 'No designations for this status'}
+                    compact
+                  />
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-4 max-h-[60vh] overflow-auto">
                 {(selectedDepartment === 'all' ? departments : departments.filter(d => d.id === parseInt(selectedDepartment))).map((dept) => {
                   const deptTiers = tiers.filter(t => t.departmentId === dept.id).sort((a, b) => a.tierOrder - b.tierOrder);
-                  const deptHasItems = deptTiers.some(t => designations.some(d => d.tierId === t.id));
+                  const deptHasItems = deptTiers.some(t => filteredDesignations.some(d => d.tierId === t.id));
                   if (!deptHasItems) return null;
                   return (
                     <Card key={dept.id}>
@@ -709,7 +854,7 @@ const DesignationsPage = () => {
                       <CardContent>
                         <div className="space-y-4">
                           {deptTiers.map((tier) => {
-                            const tierDesignations = designations.filter(d => d.tierId === tier.id).sort((a, b) => a.levelOrder - b.levelOrder);
+                            const tierDesignations = filteredDesignations.filter(d => d.tierId === tier.id).sort((a, b) => a.levelOrder - b.levelOrder);
                             if (tierDesignations.length === 0) return null;
                             return (
                               <div key={tier.id} className={`space-y-6 border-l-4 pl-4 ${getTierBorder(tier.tierOrder)}`}>
@@ -718,13 +863,18 @@ const DesignationsPage = () => {
                                   <h4 className="font-medium">{tier.name} ({tierDesignations.length})</h4>
                                 </div>
                                 <div className="space-y-6">
-                                  {tierDesignations.map((des, idx, arr) => (
-                                    <Card key={des.id} className="hover:shadow-md transition-shadow">
+                                  {tierDesignations.map((des, idx, arr) => {
+                                    const inactive = !isRecordActive(des);
+                                    return (
+                                    <Card key={des.id} className={`hover:shadow-md transition-shadow ${inactive ? 'opacity-70' : ''}`}>
                                       <CardContent className="p-4 flex items-center justify-between gap-4">
                                         <div className="flex items-center gap-4 flex-1 min-w-0">
                                           <Badge className={getLevelColor(des.levelOrder)}>Level {des.levelOrder}</Badge>
                                           <div className="min-w-0 flex-1">
-                                            <h3 className="font-semibold truncate">{des.name}</h3>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <h3 className="font-semibold truncate">{des.name}</h3>
+                                              {inactive && <Badge variant="secondary" className="text-[10px]">Inactive</Badge>}
+                                            </div>
                                             {des.description && (
                                               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{des.description}</p>
                                             )}
@@ -732,29 +882,62 @@ const DesignationsPage = () => {
                                         </div>
                                         <div className="flex gap-1 shrink-0">
                                           {isAdmin && (
+                                            inactive ? (
+                                              <Button
+                                                variant="outline"
+                                                size="icon"
+                                                onClick={() => setConfirmAction({
+                                                  type: 'designation',
+                                                  id: des.id,
+                                                  label: des.name,
+                                                  action: 'reactivate',
+                                                })}
+                                                disabled={isMutating}
+                                                className="text-emerald-600 hover:text-emerald-700"
+                                                title="Reactivate"
+                                              >
+                                                <RotateCcw className="h-4 w-4" />
+                                              </Button>
+                                            ) : (
                                             <>
                                               <Button variant="outline" size="icon" onClick={() => handleOpenEditDesignation(des)} disabled={isMutating}>
-                                                <Edit className="h-4 w-4" />
+                                                <SquarePen className="h-4 w-4" />
                                               </Button>
-                                              <Button variant="outline" size="icon" onClick={() => handleDeleteDesignation(des.id)} disabled={isMutating}>
+                                              <Button variant="outline" size="icon" onClick={() => handleDeleteDesignation(des)} disabled={isMutating}>
                                                 <Trash2 className="h-4 w-4" />
                                               </Button>
-                                              {idx > 0 && (
-                                                <Button variant="ghost" size="icon" onClick={() => handleMoveDesignation(tier.id, idx, 'up')} disabled={isMutating}>
+                                              {idx > 0 && !designationSearch.trim() && (
+                                                <Button variant="ghost" size="icon" onClick={() => {
+                                                  const fullGroup = designations
+                                                    .filter((d) => d.tierId === tier.id && isRecordActive(d))
+                                                    .sort((a, b) => a.levelOrder - b.levelOrder);
+                                                  const fullIdx = fullGroup.findIndex((d) => d.id === des.id);
+                                                  if (fullIdx > 0) handleMoveDesignation(tier.id, fullIdx, 'up');
+                                                }} disabled={isMutating}>
                                                   <ArrowUp className="h-4 w-4" />
                                                 </Button>
                                               )}
-                                              {idx < arr.length - 1 && (
-                                                <Button variant="ghost" size="icon" onClick={() => handleMoveDesignation(tier.id, idx, 'down')} disabled={isMutating}>
+                                              {idx < arr.length - 1 && !designationSearch.trim() && (
+                                                <Button variant="ghost" size="icon" onClick={() => {
+                                                  const fullGroup = designations
+                                                    .filter((d) => d.tierId === tier.id && isRecordActive(d))
+                                                    .sort((a, b) => a.levelOrder - b.levelOrder);
+                                                  const fullIdx = fullGroup.findIndex((d) => d.id === des.id);
+                                                  if (fullIdx >= 0 && fullIdx < fullGroup.length - 1) {
+                                                    handleMoveDesignation(tier.id, fullIdx, 'down');
+                                                  }
+                                                }} disabled={isMutating}>
                                                   <ArrowDown className="h-4 w-4" />
                                                 </Button>
                                               )}
                                             </>
+                                            )
                                           )}
                                         </div>
                                       </CardContent>
                                     </Card>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
@@ -766,8 +949,9 @@ const DesignationsPage = () => {
                 })}
               </div>
             )}
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Add Department Dialog */}
         <Dialog open={isAddDepartmentOpen} onOpenChange={setIsAddDepartmentOpen}>
@@ -805,8 +989,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddDepartmentOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddDepartment} disabled={isMutating}>
-                {isMutating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleAddDepartment} loading={isMutating}>
                 Create Department
               </Button>
             </DialogFooter>
@@ -842,7 +1025,7 @@ const DesignationsPage = () => {
                     <SelectValue placeholder="Select a department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departments.map(d => (
+                    {activeDepartments.map(d => (
                       <SelectItem key={d.id} value={d.id.toString()}>
                         {d.name}
                       </SelectItem>
@@ -878,8 +1061,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddTierOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddTier} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleAddTier} loading={isMutating}>
                 Create
               </Button>
             </DialogFooter>
@@ -935,8 +1117,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsEditTierOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleEditTier} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleEditTier} loading={isMutating}>
                 Update
               </Button>
             </DialogFooter>
@@ -972,7 +1153,7 @@ const DesignationsPage = () => {
                     <SelectValue placeholder="Select a department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departments.map(d => (
+                    {activeDepartments.map(d => (
                       <SelectItem key={d.id} value={d.id.toString()}>
                         {d.name}
                       </SelectItem>
@@ -1027,8 +1208,7 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsAddDesignationOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleAddDesignation} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleAddDesignation} loading={isMutating}>
                 Create
               </Button>
             </DialogFooter>
@@ -1105,14 +1285,34 @@ const DesignationsPage = () => {
               <Button variant="outline" onClick={() => setIsEditDesignationOpen(false)} disabled={isMutating}>
                 Cancel
               </Button>
-              <Button onClick={handleEditDesignation} disabled={isMutating}>
-                {isMutating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button onClick={handleEditDesignation} loading={isMutating}>
                 Update
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => { if (!open && !isMutating) setConfirmAction(null); }}
+        title={
+          confirmAction?.action === 'reactivate'
+            ? `Reactivate ${confirmAction.type}?`
+            : `Deactivate ${confirmAction?.type || 'item'}?`
+        }
+        description={
+          confirmAction
+            ? confirmAction.action === 'reactivate'
+              ? `Reactivate "${confirmAction.label}"? It will be available again.`
+              : `Deactivate "${confirmAction.label}"? It will be moved to inactive.`
+            : undefined
+        }
+        confirmLabel={confirmAction?.action === 'reactivate' ? 'Reactivate' : 'Deactivate'}
+        destructive={confirmAction?.action !== 'reactivate'}
+        onConfirm={executeConfirmAction}
+        loading={isMutating}
+      />
     </Layout>
   );
 };

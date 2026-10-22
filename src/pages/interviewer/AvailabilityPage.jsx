@@ -13,6 +13,8 @@ import {
 import { Button }   from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw, CalendarClock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Spinner, LoadingOverlay } from '@/components/ui/loading';
+import { PageHeader } from '@/components/ui/page-header';
 import Layout from '@/components/layout/Layout';
 import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
@@ -160,9 +162,7 @@ const CalendarToolbar = ({
 
       <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
         {loading && (
-          <div className="flex items-center mr-2">
-            <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          </div>
+          <Spinner size="xs" className="mr-2 text-primary" />
         )}
         {viewList.map((availableView) => (
           <Button
@@ -736,11 +736,6 @@ const handleSelectSlot = ({ start, end }) => {
     const isPanelBooked = !isPostponeRequest && !isOverdue && (
       event.status === 'panel_booked' || Boolean(event.panelId)
     );
-    const isBookedLike = event.status === 'booked'
-      || event.status === 'panel_booked'
-      || event.status === 'completed'
-      || event.status === 'overdue'
-      || isPostponeRequest;
     return {
       className: isGoogleExternal
         ? 'google-external-event'
@@ -755,8 +750,9 @@ const handleSelectSlot = ({ start, end }) => {
                 : (event.status === 'booked' ? 'booked-event' : 'available-event'))))),
       style: {
         background:   colors.bg,
+        backgroundColor: colors.solid,
         borderRadius: '5px',
-        opacity:      isGoogleExternal ? 1 : (isBookedLike ? 0.88 : 0.96),
+        opacity:      1,
         color:        isGoogleExternal ? '#ffffff' : 'white',
         borderLeft:   `${isPanelBooked || isPostponeRequest || isOverdue ? 4 : 3}px solid ${colors.border}`,
         borderTop:    'none', borderRight: 'none', borderBottom: 'none',
@@ -776,9 +772,7 @@ const handleSelectSlot = ({ start, end }) => {
         overflow:     'hidden',
         backgroundImage: isGoogleExternal
           ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 6px, transparent 6px, transparent 12px)'
-          : (isPostponeRequest
-            ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 5px, transparent 5px, transparent 10px)'
-            : undefined),
+          : undefined,
       },
     };
   };
@@ -827,15 +821,10 @@ const handleSelectSlot = ({ start, end }) => {
       <div className="space-y-6 pb-1">
 
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">My Availability</h1>
-            <p className="text-muted-foreground text-lg">
-              Manage your interview availability · slots sync to Google Calendar when connected
-            </p>
-          </div>
-        </motion.div>
+        <PageHeader
+          title="My Availability"
+          description="Manage your interview availability · slots sync to Google Calendar when connected"
+        />
 
         
 
@@ -860,22 +849,16 @@ const handleSelectSlot = ({ start, end }) => {
                   ))}
                 </div>
                 <AnimatePresence mode="wait">
-                  {loading && !isCalendarSyncing ? (
-                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="h-[700px] flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="relative w-16 h-16 mx-auto mb-6">
-                          <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
-                          <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
-                        </div>
-                        <p className="text-muted-foreground text-lg font-medium">Loading calendar…</p>
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="availability-calendar-container relative" style={{ width: '100%', height : '75vh' }}>
+                  <motion.div
+                    key="calendar"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="availability-calendar-container relative"
+                    style={{ width: '100%', height: '75vh' }}
+                  >
                       <div
-                        className={`h-full transition-[filter] duration-200 ${isCalendarSyncing ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
+                        className={`h-full transition-[filter] duration-200 ${loading || isCalendarSyncing ? 'pointer-events-none select-none blur-[2px] opacity-60' : ''}`}
                       >
                         <Calendar
                           localizer={localizer}
@@ -888,7 +871,7 @@ const handleSelectSlot = ({ start, end }) => {
                           onSelectEvent={handleEventClick}
                           onNavigate={setCalendarDate}
                           onView={setCurrentView}
-                          selectable={!isCalendarSyncing}
+                          selectable={!loading && !isCalendarSyncing}
                           eventPropGetter={eventStyleGetter}
                           slotPropGetter={slotPropGetter}
                           dayPropGetter={dayPropGetter}
@@ -954,24 +937,17 @@ const handleSelectSlot = ({ start, end }) => {
                           }}
                         />
                       </div>
-                      {isCalendarSyncing && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
-                          <div className="rounded-lg border bg-background/95 px-6 py-5 shadow-lg text-center">
-                            <div className="relative w-12 h-12 mx-auto mb-3">
-                              <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
-                              <div className="absolute inset-0 border-4 border-t-indigo-500 rounded-full animate-spin" />
-                            </div>
-                            <p className="text-sm font-medium text-foreground">
-                              {syncingCalendar ? 'Syncing with Google Calendar…' : 'Loading Google Calendar events…'}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {syncingCalendar ? 'Updating availability results' : 'Fetching connected calendars'}
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                      <LoadingOverlay
+                        show={loading || isCalendarSyncing}
+                        label={
+                          syncingCalendar
+                            ? 'Syncing with Google Calendar…'
+                            : loadingGoogleEvents
+                              ? 'Loading Google Calendar events…'
+                              : 'Loading calendar…'
+                        }
+                      />
                     </motion.div>
-                  )}
                 </AnimatePresence>
               </CardContent>
             </Card>

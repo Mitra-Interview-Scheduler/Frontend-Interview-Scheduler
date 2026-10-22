@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Clock, Trash2, Calendar as CalendarIcon, User, Pencil,
+  Clock, Trash2, Calendar as CalendarIcon, User, SquarePen,
   CheckCircle2,Calendar
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -169,7 +169,7 @@ const UpcomingCard = ({
                             onEventClick(event);
                           }}
                         >
-                          <Pencil className="w-4 h-4 text-indigo-600" />
+                          <SquarePen className="w-4 h-4 text-indigo-600" />
                         </Button>
                         <Button
                           variant="ghost"

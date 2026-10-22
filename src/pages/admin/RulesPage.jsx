@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Edit, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, SquarePen, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 
@@ -282,7 +282,7 @@ const RulesPage = () => {
                         <Badge variant="outline">Priority: {rule.priority}</Badge>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
+                            <SquarePen className="w-4 h-4" />
                           </Button>
                           <Button 
                             variant="outline" 

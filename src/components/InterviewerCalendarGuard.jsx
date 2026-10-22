@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { useAuth } from '@/context/AuthContext';
 import { googleCalendarAPI } from '@/services/api';
 import { getNormalizedRoles, hasInterviewerRole } from '@/lib/roleHelpers';
+import { FullScreenLoading } from '@/components/ui/loading';
 
 const EXEMPT_PATHS = [
   '/login',
@@ -58,11 +59,7 @@ export const InterviewerCalendarGuard = ({ children }) => {
   }, [authLoading, user, requiresCalendar, isExemptPath, location.pathname]);
 
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
-      </div>
-    );
+    return <FullScreenLoading />;
   }
 
   if (!requiresCalendar) {
@@ -70,11 +67,7 @@ export const InterviewerCalendarGuard = ({ children }) => {
   }
 
   if (checking && !isExemptPath) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
-      </div>
-    );
+    return <FullScreenLoading />;
   }
 
   if (!connected && !isExemptPath) {

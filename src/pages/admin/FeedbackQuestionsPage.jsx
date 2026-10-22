@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { Plus, Trash2, Eye, Save, Copy, GripVertical, Loader2, ChevronDown, Tags } from 'lucide-react';
+import { Plus, Trash2, Eye, Save, Copy, GripVertical, ChevronDown, Tags } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
 import { departmentAPI } from '@/services/departmentAPI';
@@ -445,9 +445,10 @@ const FeedbackQuestionsPage = () => {
             <Button
               onClick={handleSave}
               className="gap-2"
-              disabled={saving || loading || (Boolean(editId) && !hasChanges)}
+              loading={saving}
+              disabled={loading || (Boolean(editId) && !hasChanges)}
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <Save className="w-4 h-4" />
               {editId ? 'Save Changes' : 'Create Form'}
             </Button>
             <Button variant="outline" onClick={() => navigate('/admin/feedback-forms')} className="gap-2">

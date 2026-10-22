@@ -5,6 +5,10 @@ const designations = createResourceApi('/designations');
 
 export const designationAPI = {
   getAllDesignations: designations.getAll,
+  getAllDesignationsIncludingInactive: async () => {
+    const response = await api.get('/designations/all');
+    return response.data;
+  },
   getDesignationById: designations.getById,
 
   getDesignationsByDepartment: async (departmentId) => {

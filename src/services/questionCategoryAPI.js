@@ -11,6 +11,11 @@ export const questionCategoryAPI = {
     return response.data;
   },
 
+  getAllIncludingInactive: async () => {
+    const response = await api.get('/question-categories/all');
+    return response.data;
+  },
+
   getById: categories.getById,
   create: categories.create,
   update: categories.update,

@@ -4,12 +4,14 @@ import {
   DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Users } from 'lucide-react';
+import { Search, Users } from 'lucide-react';
+import { InlineLoading } from '@/components/ui/loading';
 import DepartmentAPI from '@/services/departmentAPI';
 import { tierAPI } from '@/services/tierAPI';
 import { departmentUsersAPI } from '@/services/departmentUsersAPI';
@@ -28,6 +30,7 @@ const AssignAssessmentReviewersDialog = ({
   const [departmentId, setDepartmentId] = useState('');
   const [minTierId, setMinTierId] = useState('');
   const [people, setPeople] = useState([]);
+  const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -37,6 +40,7 @@ const AssignAssessmentReviewersDialog = ({
     setDepartmentId('');
     setMinTierId('');
     setPeople([]);
+    setSearch('');
     setSelectedIds([]);
     setTiers([]);
     let active = true;
@@ -105,6 +109,24 @@ const AssignAssessmentReviewersDialog = ({
     () => new Set((alreadyAssignedIds || []).map(Number)),
     [alreadyAssignedIds],
   );
+
+  const filteredPeople = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return people;
+    return people.filter((person) => {
+      const haystack = [
+        person.fullName,
+        person.email,
+        person.designationName,
+        person.tierName,
+        person.tierOrder != null ? `tier ${person.tierOrder}` : null,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [people, search]);
 
   const togglePerson = (id) => {
     const num = Number(id);
@@ -187,6 +209,21 @@ const AssignAssessmentReviewersDialog = ({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="assign-reviewers-search">Search</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="assign-reviewers-search"
+                placeholder="Search by name, email, or designation…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                disabled={saving || !departmentId}
+                className="pl-9"
+              />
+            </div>
+          </div>
+
           <div className="rounded-xl border max-h-64 overflow-y-auto p-2 space-y-1">
             {!departmentId && (
               <p className="text-xs text-muted-foreground px-2 py-4 text-center">
@@ -194,8 +231,8 @@ const AssignAssessmentReviewersDialog = ({
               </p>
             )}
             {departmentId && loadingPeople && (
-              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading people…
+              <div className="flex justify-center py-6">
+                <InlineLoading label="Loading people…" />
               </div>
             )}
             {departmentId && !loadingPeople && people.length === 0 && (
@@ -203,7 +240,12 @@ const AssignAssessmentReviewersDialog = ({
                 No interviewers match these filters.
               </p>
             )}
-            {people.map((person) => {
+            {departmentId && !loadingPeople && people.length > 0 && filteredPeople.length === 0 && (
+              <p className="text-xs text-muted-foreground px-2 py-4 text-center">
+                No interviewers match “{search.trim()}”.
+              </p>
+            )}
+            {filteredPeople.map((person) => {
               const id = Number(person.id);
               const already = assignedSet.has(id);
               const checked = already || selectedIds.includes(id);
@@ -238,12 +280,8 @@ const AssignAssessmentReviewersDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleAssign} disabled={saving || selectedIds.length === 0} className="min-w-[130px]">
-            {saving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Assigning…</>
-            ) : (
-              `Assign (${selectedIds.length})`
-            )}
+          <Button onClick={handleAssign} loading={saving} disabled={selectedIds.length === 0} className="min-w-[130px]">
+            {saving ? 'Assigning…' : `Assign (${selectedIds.length})`}
           </Button>
         </DialogFooter>
       </DialogContent>

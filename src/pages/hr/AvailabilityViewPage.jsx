@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
+import { Spinner, InlineLoading, LoadingOverlay } from '@/components/ui/loading';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,DialogBody,
@@ -125,7 +126,11 @@ const AvailabilityViewPage = () => {
   const [pendingFilter, setPendingFilter] = useState(null);
   const [interviewType, setInterviewType] = useState(InterviewType.TECHNICAL);
   const { interviewTypes: availableInterviewTypes } = useInterviewTypes(true);
-  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(() => !(
+    location.state?.filterData
+    || searchParams.get('candidateId')
+    || searchParams.get('interviewType')
+  ));
   const [matchingInterviewers, setMatchingInterviewers] = useState(EMPTY_MATCHING_INTERVIEWERS);
   const [matchingInterviewersLoading, setMatchingInterviewersLoading] = useState(false);
   const [selectedMatchingInterviewer, setSelectedMatchingInterviewer] = useState(null);
@@ -356,6 +361,8 @@ const AvailabilityViewPage = () => {
 
     if (!incomingFilter && !paramCandidateId && !paramInterviewType) return;
 
+    setIsFiltersCollapsed(false);
+
     const resolvedInterviewType = resolveInterviewType(
       incomingFilter?.interviewType,
       paramInterviewType,
@@ -562,7 +569,7 @@ const AvailabilityViewPage = () => {
         </div>
         <div className="flex items-center gap-3">
           <span className="rbc-toolbar-label text-base font-semibold">{label}</span>
-          {loading && <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin ml-2" />}
+          {loading && <Spinner size="xs" className="ml-2" />}
           {viewList.map(v => (
             <button key={v} onClick={() => onView(v)} className={`btn ${v === view ? 'btn-primary' : ''}`}>{v}</button>
           ))}
@@ -1965,6 +1972,9 @@ const calendarSlotPropGetter = useCallback((date) => {
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Filter className="w-5 h-5" /> Filters
+              {hasActiveInterviewerFilters && (
+                <Badge variant="secondary" className="ml-1">Active</Badge>
+              )}
             </CardTitle>
             <Button
               type="button"
@@ -1973,12 +1983,59 @@ const calendarSlotPropGetter = useCallback((date) => {
               onClick={() => setIsFiltersCollapsed((value) => !value)}
               className="h-9 gap-2"
               aria-expanded={!isFiltersCollapsed}
+              aria-label={isFiltersCollapsed ? 'Show filters' : 'Hide filters'}
             >
               <ChevronDown className={`w-4 h-4 transition-transform ${isFiltersCollapsed ? '-rotate-90' : ''}`} />
               {isFiltersCollapsed ? 'Show' : 'Hide'}
             </Button>
           </CardHeader>
-          {!isFiltersCollapsed && (
+          {isFiltersCollapsed && (hasActiveInterviewerFilters || dateRange.start) && (
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {filterDept.map((id) => {
+                  const dept = departments.find((d) => String(d.id) === String(id));
+                  return dept ? (
+                    <Badge key={`dept-${id}`} variant="outline">{dept.name}</Badge>
+                  ) : null;
+                })}
+                {filterTech.map((id) => {
+                  const tech = technologies.find((t) => t.id === id);
+                  return tech ? (
+                    <Badge key={`tech-${id}`} variant="secondary">{tech.name}</Badge>
+                  ) : null;
+                })}
+                {filterDomain.map((id) => {
+                  const domain = domains.find((d) => d.id === id);
+                  return domain ? (
+                    <Badge key={`domain-${id}`} variant="outline">{domain.name}</Badge>
+                  ) : null;
+                })}
+                {minExperience && (
+                  <Badge variant="outline">{minExperience}+ yrs</Badge>
+                )}
+                {selectedTierInDept && (
+                  <Badge variant="outline">
+                    {tiersForSelectedDept.find((t) => String(t.id) === String(selectedTierInDept))?.name || 'Tier'}
+                  </Badge>
+                )}
+                {minDesignationLevel && (
+                  <Badge variant="outline">Level {minDesignationLevel}+</Badge>
+                )}
+                {dateRange.start && (
+                  <Badge variant="outline">From {formatInputDate(dateRange.start)}</Badge>
+                )}
+              </div>
+            </CardContent>
+          )}
+          <AnimatePresence initial={false}>
+            {!isFiltersCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0, y: -6 }}
+            animate={{ height: 'auto', opacity: 1, y: 0 }}
+            exit={{ height: 0, opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -2235,7 +2292,9 @@ const calendarSlotPropGetter = useCallback((date) => {
               </div>
             </div>
           </CardContent>
+          </motion.div>
           )}
+          </AnimatePresence>
         </Card>
 
         {/* ── Top Matching Interviewers ─────────────────────────────────────── */}
@@ -2281,7 +2340,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </CardHeader>
             <CardContent className="space-y-4">
               {matchingInterviewersLoading ? (
-                <p className="text-sm text-muted-foreground">Finding matching interviewers…</p>
+                <InlineLoading label="Finding matching interviewers…" />
               ) : !hasMatchingInterviewers ? (
                 <p className="text-sm text-muted-foreground italic">
                   No matching interviewers for{' '}
@@ -2479,24 +2538,12 @@ const calendarSlotPropGetter = useCallback((date) => {
             </CardContent>
           )}
           <CardContent>
-            <AnimatePresence mode="wait">
-              {loading ? (
-                <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="h-[720px] flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="relative w-16 h-16 mx-auto mb-6">
-                      <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-                      <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
-                    </div>
-                    <p className="text-muted-foreground text-lg font-medium">Loading availability…</p>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div key="calendar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="availability-calendar-container hr-calendar"
-                  style={{ width: '100%', height : '65vh' }}>
-
-                  <Calendar
+            <div className="relative">
+              <div
+                className="availability-calendar-container hr-calendar"
+                style={{ width: '100%', height: '65vh' }}
+              >
+                <Calendar
                     localizer={localizer}
                     components={{ ...calendarComponents, toolbar: (toolbarProps) => <HRCalendarToolbar {...toolbarProps} loading={loading} /> }}
                     events={calendarEvents}
@@ -2542,10 +2589,9 @@ const calendarSlotPropGetter = useCallback((date) => {
                       eventTimeRangeFormat: calendarFormats.eventTimeRangeFormat,
                     }}
                   />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
+              </div>
+              <LoadingOverlay show={loading} label="Loading availability…" />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -2728,11 +2774,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                   </Button>
                   <Button
                     onClick={handleApprovePostpone}
-                    disabled={cancelling || postponeActionLoading}
+                    loading={postponeActionLoading}
+                    disabled={cancelling}
                     className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
                   >
                     {postponeActionLoading ? (
-                      <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Working…</>
+                      'Working…'
                     ) : cancelTarget.resource.pendingPostponePreferredStart
                       && cancelTarget.resource.pendingPostponePreferredEnd ? (
                       <><CheckCircle2 className="w-4 h-4 shrink-0" /> Accept Proposed Time</>
@@ -2744,11 +2791,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <Button
                   variant="destructive"
                   onClick={handleCancelBooked}
-                  disabled={cancelling || postponeActionLoading}
+                  loading={cancelling}
+                  disabled={postponeActionLoading}
                   className="w-full gap-2"
                 >
                   {cancelling ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                    'Cancelling…'
                   ) : cancelTarget?.resource?.panelId ? (
                     <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel</>
                   ) : (
@@ -2769,11 +2817,12 @@ const calendarSlotPropGetter = useCallback((date) => {
                 <Button
                   variant="destructive"
                   onClick={handleCancelBooked}
-                  disabled={cancelling || postponeActionLoading}
+                  loading={cancelling}
+                  disabled={postponeActionLoading}
                   className="w-full gap-2"
                 >
                   {cancelling ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" /> Cancelling…</>
+                    'Cancelling…'
                   ) : cancelTarget?.resource?.panelId ? (
                     <><Trash2 className="w-4 h-4 shrink-0" /> Cancel Panel & Restore Slots</>
                   ) : (
@@ -2981,7 +3030,8 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendRequest}
-              disabled={!!singlePrivilegeError || scheduling || slotWindowConflicts.loading}
+              loading={scheduling}
+              disabled={!!singlePrivilegeError || slotWindowConflicts.loading}
               className={`gap-2${hasSlotWindowConflict ? ' bg-red-600 hover:bg-red-700 text-white' : ''}`}
               title={
                 hasSlotWindowConflict
@@ -2991,11 +3041,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     : undefined
               }
             >
-              {scheduling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
-              ) : (
-                <><Send className="w-4 h-4" /> Schedule Interview</>
-              )}
+              {scheduling ? 'Scheduling…' : <><Send className="w-4 h-4" /> Schedule Interview</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3169,6 +3215,7 @@ const calendarSlotPropGetter = useCallback((date) => {
             </Button>
             <Button
               onClick={handleSendPanelRequest}
+              loading={scheduling}
               className={`gap-2${
                 hasSlotWindowConflict
                   ? ' bg-red-600 hover:bg-red-700 text-white'
@@ -3177,7 +3224,6 @@ const calendarSlotPropGetter = useCallback((date) => {
               disabled={
                 panelTimeOptions.length === 0
                 || panelPrivilegeErrors.length > 0
-                || scheduling
                 || slotWindowConflicts.loading
               }
               title={
@@ -3188,11 +3234,7 @@ const calendarSlotPropGetter = useCallback((date) => {
                     : undefined
               }
             >
-              {scheduling ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Scheduling…</>
-              ) : (
-                <><Users className="w-4 h-4" /> Schedule Panel Interview</>
-              )}
+              {scheduling ? 'Scheduling…' : <><Users className="w-4 h-4" /> Schedule Panel Interview</>}
             </Button>
           </DialogFooter>
         </DialogContent>

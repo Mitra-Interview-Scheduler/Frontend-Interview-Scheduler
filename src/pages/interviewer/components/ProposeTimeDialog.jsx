@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { isAfter, isSameDay } from 'date-fns';
-import { ArrowRight, Calendar, Check, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { ArrowRight, Calendar, Check, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { availabilityAPI } from '@/services/availabilityAPI';
@@ -402,14 +403,17 @@ function ProposeTimeDialog({
             )}
 
             <DialogBody className="max-h-[46vh] overflow-y-auto px-5 py-4">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-14">
-                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">
-                    {isPanel ? 'Finding shared free times…' : 'Loading your availability…'}
-                  </p>
-                </div>
-              ) : error ? (
+              <LoadingSwap
+                loading={loading}
+                fallback={
+                  <LoadingState
+                    label={isPanel ? 'Finding shared free times…' : 'Loading your availability…'}
+                    size="md"
+                    minHeight="sm"
+                  />
+                }
+              >
+              {error ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </div>
@@ -565,6 +569,7 @@ function ProposeTimeDialog({
                   ))}
                 </div>
               )}
+              </LoadingSwap>
             </DialogBody>
 
             <DialogFooter className="gap-3 border-t border-slate-200 bg-white px-5 py-4">
@@ -586,19 +591,19 @@ function ProposeTimeDialog({
               {panelHasNoCommonWindows ? (
                 <Button
                   onClick={handleSubmitReasonOnly}
-                  disabled={loading || submitting || !canSubmitReasonOnly || !!error}
+                  loading={submitting}
+                  disabled={loading || !canSubmitReasonOnly || !!error}
                   className="gap-2"
                 >
-                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                   Request postpone
                 </Button>
               ) : (
                 <Button
                   onClick={handleSubmitTimed}
-                  disabled={loading || submitting || !canSubmitTimed || !!error}
+                  loading={submitting}
+                  disabled={loading || !canSubmitTimed || !!error}
                   className="gap-2"
                 >
-                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                   Send proposal
                 </Button>
               )}
