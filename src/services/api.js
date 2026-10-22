@@ -17,7 +17,9 @@ const api = axios.create({
   withXSRFToken: true,
   xsrfCookieName: 'XSRF-TOKEN',
   xsrfHeaderName: 'X-XSRF-TOKEN',
-  headers: { 'Content-Type': 'application/json' },
+  // X-Requested-With is required by the backend on POST /api/auth/* (CSRF defence for the
+  // cookie-based refresh/logout); other sites cannot send it without passing CORS.
+  headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
 });
 
 const isCsrfUrl = (url = '') => url.includes('/auth/csrf');

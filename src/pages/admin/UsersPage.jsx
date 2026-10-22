@@ -29,11 +29,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { getInitial } from '@/lib/personUtils';
 import { sortRoles } from '@/lib/roleHelpers';
-import { env } from '@/config/env';
 
 // ─── constants ───────────────────────────────────────────────────────────────
-
-const ROOT_KEY = env.ROOT_KEY;
 
 const ROLE_META = {
   ADMIN:       { label: 'Admin',       dot: 'bg-violet-500', badge: 'bg-violet-100 text-violet-700 border-violet-200' },
@@ -52,11 +49,11 @@ const initials = (u) =>
 
 // ─── Admin-delete guard ───────────────────────────────────────────────────────
 
-function AdminDeactivateGuard({ open, userName, onClose, onConfirm, loading = false }) {
-  const [key, setKey]     = useState('');
+function AdminDeactivateGuard({ open, userName, userEmail, onClose, onConfirm, loading = false }) {
+  const [typed, setTyped] = useState('');
   const [err, setErr]     = useState('');
 
-  const reset = () => { setKey(''); setErr(''); };
+  const reset = () => { setTyped(''); setErr(''); };
 
   const handleClose = () => {
     if (loading) return;
@@ -65,7 +62,10 @@ function AdminDeactivateGuard({ open, userName, onClose, onConfirm, loading = fa
   };
 
   const handleConfirm = () => {
-    if (key !== ROOT_KEY) { setErr('Incorrect root key.'); return; }
+    if (typed.trim().toLowerCase() !== (userEmail || '').toLowerCase()) {
+      setErr('Email does not match.');
+      return;
+    }
     reset();
     onConfirm();
   };
@@ -89,17 +89,19 @@ function AdminDeactivateGuard({ open, userName, onClose, onConfirm, loading = fa
 
         <div className="space-y-3 py-1">
           <p className="text-sm text-muted-foreground">
-            Admin accounts are protected. Enter the root key to deactivate this account.
-            You can reactivate them later from User Management.
+            Admin accounts are protected. Type{' '}
+            <span className="font-medium text-foreground">{userEmail}</span>{' '}
+            to confirm. You can reactivate them later from User Management.
           </p>
           <div className="space-y-1.5">
-            <Label htmlFor="root-key" className="text-sm">Root Key</Label>
+            <Label htmlFor="confirm-admin-email" className="text-sm">Admin email</Label>
             <Input
-              id="root-key"
-              type="password"
-              placeholder="Enter root key…"
-              value={key}
-              onChange={(e) => { setKey(e.target.value); setErr(''); }}
+              id="confirm-admin-email"
+              type="email"
+              autoComplete="off"
+              placeholder={userEmail}
+              value={typed}
+              onChange={(e) => { setTyped(e.target.value); setErr(''); }}
               onKeyDown={(e) => e.key === 'Enter' && !loading && handleConfirm()}
               className={err ? 'border-red-400 focus-visible:ring-red-300' : ''}
               disabled={loading}
@@ -111,7 +113,7 @@ function AdminDeactivateGuard({ open, userName, onClose, onConfirm, loading = fa
 
         <DialogFooter className="gap-2 mt-1">
           <Button variant="outline" size="sm" onClick={handleClose} disabled={loading}>Cancel</Button>
-          <Button size="sm" variant="destructive" onClick={handleConfirm} disabled={!key || loading} loading={loading}>
+          <Button size="sm" variant="destructive" onClick={handleConfirm} disabled={!typed || loading} loading={loading}>
             Deactivate Admin
           </Button>
         </DialogFooter>
@@ -822,6 +824,7 @@ export default function UsersPage() {
       <AdminDeactivateGuard
         open={!!guardTarget}
         userName={guardTarget ? `${guardTarget.firstName} ${guardTarget.lastName}` : ''}
+        userEmail={guardTarget?.email ?? ''}
         onClose={() => setGuardTarget(null)}
         onConfirm={() => executeDeactivate(guardTarget)}
         loading={isMutating}
