@@ -69,6 +69,66 @@ export const resolveInterviewRoundStatus = (round) => {
   return resolveInterviewRequestStatus(round);
 };
 
+/** Matches HR dashboard: COMPLETED with no feedback, or SCHEDULED past end by overdueHours. */
+export const FEEDBACK_OVERDUE_HOURS = 24;
+
+export const isInterviewFeedbackOverdue = (
+  interview,
+  { now = new Date(), overdueHours = FEEDBACK_OVERDUE_HOURS } = {},
+) => {
+  if (!interview) return false;
+  if (interview.assessmentPhase) return false;
+  if (interview.feedbackSubmitted) return false;
+
+  const status = resolveInterviewRequestStatus(interview);
+  if (status === InterviewScheduleStatus.CANCELLED) return false;
+
+  if (status === InterviewScheduleStatus.COMPLETED) {
+    return true;
+  }
+
+  if (status !== InterviewScheduleStatus.SCHEDULED) return false;
+
+  const endRaw =
+    interview.scheduledEndDateTime
+    || interview.preferredEndDateTime
+    || interview.endDateTime;
+  if (!endRaw) return false;
+  const endMs = new Date(endRaw).getTime();
+  if (Number.isNaN(endMs)) return false;
+
+  const cutoffMs = now.getTime() - Math.max(1, overdueHours) * 60 * 60 * 1000;
+  return endMs < cutoffMs;
+};
+
+export const isPanelFeedbackOverdue = (
+  panelRequests = [],
+  panel = null,
+  options = {},
+) => {
+  const requests = Array.isArray(panelRequests) ? panelRequests : [];
+  if (requests.length === 0) return false;
+  if (requests.every((r) => resolveInterviewRequestStatus(r) === InterviewScheduleStatus.CANCELLED)) {
+    return false;
+  }
+  // Shared panel feedback: any submitted response clears overdue for the panel tab.
+  if (requests.some((r) => r.feedbackSubmitted)) return false;
+
+  if (requests.some((r) => isInterviewFeedbackOverdue(r, options))) return true;
+
+  const endRaw = panel?.endDateTime || requests[0]?.scheduledEndDateTime;
+  if (!endRaw) return false;
+  const endMs = new Date(endRaw).getTime();
+  if (Number.isNaN(endMs)) return false;
+  const overdueHours = options.overdueHours ?? FEEDBACK_OVERDUE_HOURS;
+  const now = options.now ?? new Date();
+  const cutoffMs = now.getTime() - Math.max(1, overdueHours) * 60 * 60 * 1000;
+  const anyCompleted = requests.some(
+    (r) => resolveInterviewRequestStatus(r) === InterviewScheduleStatus.COMPLETED,
+  );
+  return anyCompleted || endMs < cutoffMs;
+};
+
 const getInterviewRoundCreationOrderTimestamp = (round) => {
   if (round?.createdAt) {
     const time = new Date(round.createdAt).getTime();

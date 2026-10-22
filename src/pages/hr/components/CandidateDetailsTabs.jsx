@@ -97,6 +97,7 @@ const CandidateDetailsTabs = ({
                 )
                 : isInterviewTab
                   && resolveInterviewRequestStatus(tab.interview) === InterviewScheduleStatus.CANCELLED;
+              const isFeedbackOverdue = Boolean(tab.feedbackOverdue) && !isCancelled;
 
               return (
                 <TabsTrigger
@@ -105,11 +106,11 @@ const CandidateDetailsTabs = ({
                   title={tab.label}
                   className={cn(
                     'h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-all duration-200',
-                    isCancelled
+                    isCancelled || isFeedbackOverdue
                       ? 'text-red-700 data-[state=inactive]:border data-[state=inactive]:border-red-200 data-[state=inactive]:bg-red-50/80 data-[state=active]:bg-red-50 data-[state=active]:text-red-800 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-red-200'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200',
-                    isInterviewTab && !isCancelled && tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-sky-200 data-[state=inactive]:bg-sky-50/50 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-900 data-[state=active]:ring-sky-200',
-                    isInterviewTab && !isCancelled && !tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
+                    isInterviewTab && !isCancelled && !isFeedbackOverdue && tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-sky-200 data-[state=inactive]:bg-sky-50/50 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-900 data-[state=active]:ring-sky-200',
+                    isInterviewTab && !isCancelled && !isFeedbackOverdue && !tab.isPanelTab && 'data-[state=inactive]:border data-[state=inactive]:border-cyan-100 data-[state=inactive]:bg-cyan-50/40 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-800 data-[state=active]:ring-cyan-200',
                   )}
                 >
                   {tab.label}

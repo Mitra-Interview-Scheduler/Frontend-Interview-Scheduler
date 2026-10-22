@@ -5,7 +5,7 @@ import ProfileActivityTab from './tabs/ProfileActivityTab';
 import InterviewDetailTab from './tabs/InterviewDetailTab';
 import PanelInterviewDetailTab from './tabs/PanelInterviewDetailTab';
 import { formatInterviewTypeLabel, resolveRoundKeyFromReceivedStatus } from '@/lib/candidateSteps';
-import { buildInterviewTabEntries, resolveInterviewRequestStatus } from '@/lib/candidateInterviews';
+import { buildInterviewTabEntries, resolveInterviewRequestStatus, isInterviewFeedbackOverdue, isPanelFeedbackOverdue } from '@/lib/candidateInterviews';
 import {
   ALL_MASTER_STATUS_KEYS,
   CLOSING_STATUS_LIST,
@@ -87,7 +87,7 @@ const buildInterviewOrderMap = (tabEntries = []) => {
   return orderMap;
 };
 
-const getInterviewTabLabel = (interview, orderNumber) => {
+const getInterviewTabLabel = (interview, orderNumber, feedbackOverdue = false) => {
   const type = formatInterviewTypeLabel(interview?.interviewType);
   const status = interview?.interviewStatus
     || (interview?.status === InterviewRequestStatus.CANCELLED ? InterviewScheduleStatus.CANCELLED : null);
@@ -99,21 +99,23 @@ const getInterviewTabLabel = (interview, orderNumber) => {
   if (phase === 'RECEIVED') return `${type} - Received`;
   if (phase === 'UNDER_REVIEW') return `${type} - Under review`;
   if (phase === 'COMPLETED' || status === InterviewScheduleStatus.COMPLETED) {
-    return `${type} - Completed`;
+    return feedbackOverdue ? `${type} - Feedback overdue` : `${type} - Completed`;
   }
 
   const orderLabel = orderNumber != null ? String(orderNumber) : '1';
+  if (feedbackOverdue) return `${type} - Feedback overdue`;
   return `${type} - ${orderLabel}`;
 };
 
-const getPanelTabLabel = (panelRequests, orderNumber) => {
+const getPanelTabLabel = (panelRequests, orderNumber, feedbackOverdue = false) => {
   const type = formatInterviewTypeLabel(panelRequests?.[0]?.interviewType);
   const orderLabel = orderNumber != null ? String(orderNumber) : '1';
   const allCancelled = panelRequests.every(
     (request) => resolveInterviewRequestStatus(request) === InterviewScheduleStatus.CANCELLED,
   );
-  const cancelledSuffix = allCancelled ? ' · Cancelled' : '';
-  return `${type} Panel - ${orderLabel}${cancelledSuffix}`;
+  if (allCancelled) return `${type} Panel - ${orderLabel} · Cancelled`;
+  if (feedbackOverdue) return `${type} Panel - Feedback overdue`;
+  return `${type} Panel - ${orderLabel}`;
 };
 
 /** Profile + screening, then interview tabs, interview summary, profile activity last. */
@@ -147,25 +149,29 @@ export const getCandidateDetailTabs = (candidateStatus, interviews = [], panels 
     ? tabEntries.map((entry) => {
         if (entry.kind === 'panel') {
           const panelKey = `panel-${entry.panel?.id}`;
+          const feedbackOverdue = isPanelFeedbackOverdue(entry.panelRequests, entry.panel);
           return {
             value: panelKey,
-            label: getPanelTabLabel(entry.panelRequests, interviewOrderMap.get(panelKey)),
+            label: getPanelTabLabel(entry.panelRequests, interviewOrderMap.get(panelKey), feedbackOverdue),
             component: PanelInterviewDetailTab,
             editableStages: [],
             panel: entry.panel,
             panelRequests: entry.panelRequests,
             isPanelTab: true,
+            feedbackOverdue,
           };
         }
 
         const interviewKey = entry.interview.interviewScheduleId ?? entry.interview.id;
+        const feedbackOverdue = isInterviewFeedbackOverdue(entry.interview);
         return {
           value: `interview-${interviewKey}`,
-          label: getInterviewTabLabel(entry.interview, interviewOrderMap.get(interviewKey)),
+          label: getInterviewTabLabel(entry.interview, interviewOrderMap.get(interviewKey), feedbackOverdue),
           component: InterviewDetailTab,
           editableStages: [],
           interview: entry.interview,
           isPanelTab: false,
+          feedbackOverdue,
         };
       })
     : [];
