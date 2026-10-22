@@ -11,10 +11,10 @@ const cspDirectives = (scriptSrc: string) =>
   [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https: blob:",
-    `connect-src 'self' ${apiOrigin} ws: wss: https://accounts.google.com`,
+    `connect-src 'self' ${apiOrigin} ws: wss: https://accounts.google.com https://www.googleapis.com`,
     "frame-src https://accounts.google.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -27,6 +27,10 @@ const commonSecurityHeaders = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  // Google Identity Services uses postMessage from accounts.google.com. same-origin
+  // blocks that and shows "Cross-Origin-Opener-Policy policy would block the
+  // window.postMessage call" even when the ID token is delivered.
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
 };
 
 const prodScriptSrc = "'self' https://accounts.google.com";

@@ -275,6 +275,7 @@ const Login = () => {
                   theme="outline"
                   text="signin_with"
                   shape="rectangular"
+                  use_fedcm_for_prompt
                 />
               )}
             </div>
