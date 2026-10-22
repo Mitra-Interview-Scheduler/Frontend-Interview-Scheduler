@@ -17,7 +17,9 @@ const api = axios.create({
   withXSRFToken: true,
   xsrfCookieName: 'XSRF-TOKEN',
   xsrfHeaderName: 'X-XSRF-TOKEN',
-  headers: { 'Content-Type': 'application/json' },
+  // X-Requested-With is required by the backend on POST /api/auth/* (CSRF defence for the
+  // cookie-based refresh/logout); other sites cannot send it without passing CORS.
+  headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
 });
 
 const isCsrfUrl = (url = '') => url.includes('/auth/csrf');
@@ -102,7 +104,20 @@ const redirectToLogin = () => {
   }
 };
 
-const refreshAccessToken = () => {
+export const isRateLimited = (error) => error?.response?.status === 429;
+
+// Seconds to wait after a 429, from the Retry-After header (or the JSON body).
+export const getRetryAfterSeconds = (error) => {
+  const header = Number.parseInt(error?.response?.headers?.['retry-after'], 10);
+  if (Number.isFinite(header) && header > 0) return header;
+  const body = Number.parseInt(error?.response?.data?.retryAfterSeconds, 10);
+  return Number.isFinite(body) && body > 0 ? body : null;
+};
+
+// Single shared refresh: concurrent callers (page load + 401 retries) reuse one request,
+// so they neither burn the rate limit nor race on refresh-token rotation.
+// Resolves with the refresh response body ({ token, id, email, roles, ... }).
+export const refreshSession = () => {
   if (!refreshPromise) {
     refreshPromise = api.post('/auth/refresh')
       .then((response) => {
@@ -111,7 +126,7 @@ const refreshAccessToken = () => {
           throw new Error('Refresh did not return an access token');
         }
         setAccessToken(nextToken);
-        return nextToken;
+        return response.data;
       })
       .finally(() => {
         refreshPromise = null;
@@ -119,6 +134,8 @@ const refreshAccessToken = () => {
   }
   return refreshPromise;
 };
+
+const refreshAccessToken = () => refreshSession().then((data) => data.token);
 
 api.interceptors.response.use(
   (response) => {
@@ -144,8 +161,13 @@ api.interceptors.response.use(
         applyHeader(original, 'Authorization', `Bearer ${nextToken}`);
         return api(original);
       } catch (refreshError) {
-        redirectToLogin();
-        return Promise.reject(refreshError);
+        // Only a rejected refresh token means the session is over. A 429, network error
+        // or 5xx is temporary: keep the user signed in and surface the original error.
+        if (refreshError?.response?.status === 401) {
+          redirectToLogin();
+          return Promise.reject(refreshError);
+        }
+        return Promise.reject(isRateLimited(refreshError) ? refreshError : error);
       }
     }
 
@@ -177,10 +199,7 @@ export const authAPI = {
     const response = await api.get('/auth/verify');
     return response.data;
   },
-  refresh: async () => {
-    const response = await api.post('/auth/refresh');
-    return response.data;
-  },
+  refresh: () => refreshSession(),
   logout: async () => {
     try {
       await ensureCsrfToken();

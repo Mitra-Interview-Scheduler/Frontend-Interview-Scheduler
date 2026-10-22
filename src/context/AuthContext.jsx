@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { authAPI, ensureCsrfToken, userSettingsAPI } from '@/services/api';
+import {
+  authAPI,
+  ensureCsrfToken,
+  getRetryAfterSeconds,
+  isRateLimited,
+  userSettingsAPI,
+} from '@/services/api';
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/authSession';
 
@@ -14,7 +20,29 @@ export const useAuth = () => {
   return context;
 };
 
+// Page-load refresh: on a 429, wait and retry instead of signing the user out.
+const MAX_REFRESH_RETRIES = 2;
+const MAX_RETRY_WAIT_SECONDS = 15;
+const wait = (seconds) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+
+const refreshWithRateLimitRetry = async () => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await authAPI.refresh();
+    } catch (error) {
+      if (!isRateLimited(error) || attempt >= MAX_REFRESH_RETRIES) throw error;
+      await wait(Math.min(getRetryAfterSeconds(error) ?? 5, MAX_RETRY_WAIT_SECONDS));
+    }
+  }
+};
+
 const getErrorMessage = (error, fallback) => {
+  if (isRateLimited(error)) {
+    const seconds = getRetryAfterSeconds(error);
+    return seconds
+      ? `Too many attempts. Please wait ${seconds} seconds and try again.`
+      : 'Too many attempts. Please wait a moment and try again.';
+  }
   const data = error?.response?.data;
   if (typeof data === 'string' && data.trim()) return data;
   if (data?.message) return data.message;
@@ -92,7 +120,7 @@ export const AuthProvider = ({ children }) => {
     const initAuth = async () => {
       try {
         await ensureCsrfToken();
-        const response = await authAPI.refresh();
+        const response = await refreshWithRateLimitRetry();
         setAccessToken(response.token);
         syncUser(buildUserFromResponse(response));
         await loadUserSettings();

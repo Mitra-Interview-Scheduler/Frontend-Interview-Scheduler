@@ -1,5 +1,4 @@
 const DEFAULT_API_BASE_URL = 'http://localhost:8080/api';
-const DEFAULT_ROOT_KEY = 'root';
 const DEFAULT_CALENDAR_MIN_HOUR = 7;
 const DEFAULT_CALENDAR_MAX_HOUR = 19;
 
@@ -47,7 +46,6 @@ const GOOGLE_CLIENT_ID = getEnv(
 export const env = {
   API_BASE_URL,
   API_ORIGIN: API_BASE_URL.replace(/\/api$/, ''),
-  ROOT_KEY: getEnv('VITE_ROOT_KEY', import.meta.env.VITE_ROOT_KEY, { fallback: DEFAULT_ROOT_KEY }),
   GOOGLE_CLIENT_ID,
   CALENDAR_MIN_HOUR: toNumber(import.meta.env.VITE_CALENDAR_MIN_HOUR, DEFAULT_CALENDAR_MIN_HOUR),
   CALENDAR_MAX_HOUR: toNumber(import.meta.env.VITE_CALENDAR_MAX_HOUR, DEFAULT_CALENDAR_MAX_HOUR),
