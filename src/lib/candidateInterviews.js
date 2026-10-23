@@ -83,14 +83,15 @@ export const isInterviewFeedbackOverdue = (
   const status = resolveInterviewRequestStatus(interview);
   if (status === InterviewScheduleStatus.CANCELLED) return false;
 
-  if (status === InterviewScheduleStatus.COMPLETED) {
-    return true;
+  // Same rule as the backend: completed or scheduled interviews only become overdue once the
+  // grace period after they ended has passed (a just-finished interview is not overdue yet).
+  if (status !== InterviewScheduleStatus.COMPLETED && status !== InterviewScheduleStatus.SCHEDULED) {
+    return false;
   }
 
-  if (status !== InterviewScheduleStatus.SCHEDULED) return false;
-
   const endRaw =
-    interview.scheduledEndDateTime
+    interview.completedAt
+    || interview.scheduledEndDateTime
     || interview.preferredEndDateTime
     || interview.endDateTime;
   if (!endRaw) return false;
@@ -123,10 +124,8 @@ export const isPanelFeedbackOverdue = (
   const overdueHours = options.overdueHours ?? FEEDBACK_OVERDUE_HOURS;
   const now = options.now ?? new Date();
   const cutoffMs = now.getTime() - Math.max(1, overdueHours) * 60 * 60 * 1000;
-  const anyCompleted = requests.some(
-    (r) => resolveInterviewRequestStatus(r) === InterviewScheduleStatus.COMPLETED,
-  );
-  return anyCompleted || endMs < cutoffMs;
+  // Completed panels wait for the same grace period as scheduled ones.
+  return endMs < cutoffMs;
 };
 
 const getInterviewRoundCreationOrderTimestamp = (round) => {

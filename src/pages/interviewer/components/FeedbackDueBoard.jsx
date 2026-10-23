@@ -125,14 +125,16 @@ FeedbackDueRow.propTypes = {
 export function FeedbackDueBoard({
   items,
   count,
+  overdueCount,
   onLoadPage,
   onOpen,
   formatDateTime,
 }) {
   const total = count ?? 0;
-  const overdue = (Array.isArray(items) ? items : []).filter(
-    (item) => Number(item.hoursSince) >= 24
-  ).length;
+  // Total from the server (all overdue items), not just the ones in this preview page.
+  const overdue = Number.isFinite(overdueCount)
+    ? overdueCount
+    : (Array.isArray(items) ? items : []).filter((item) => Number(item.hoursSince) >= 24).length;
 
   return (
     <DashboardSection
@@ -172,6 +174,7 @@ export function FeedbackDueBoard({
 FeedbackDueBoard.propTypes = {
   items: PropTypes.array,
   count: PropTypes.number,
+  overdueCount: PropTypes.number,
   onLoadPage: PropTypes.func,
   onOpen: PropTypes.func.isRequired,
   formatDateTime: PropTypes.func.isRequired,

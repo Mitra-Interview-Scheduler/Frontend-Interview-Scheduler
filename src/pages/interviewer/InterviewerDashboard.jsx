@@ -453,6 +453,7 @@ const InterviewerDashboard = () => {
           <FeedbackDueBoard
             items={feedbackDue.items}
             count={feedbackDue.count}
+            overdueCount={actionQueue.feedbackOverdueCount}
             onLoadPage={loadSection('feedbackDue')}
             onOpen={(scheduleId) => navigate(`/interviewer/feedback/${scheduleId}`)}
             formatDateTime={formatDateTime}
