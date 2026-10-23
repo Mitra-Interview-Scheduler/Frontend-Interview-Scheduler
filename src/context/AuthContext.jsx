@@ -9,6 +9,7 @@ import {
 } from '@/services/api';
 import { getNormalizedRoles } from '@/lib/roleHelpers';
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/lib/authSession';
+import { isServerUnavailableError } from '@/lib/serverStatus';
 
 const AuthContext = createContext(null);
 
@@ -70,6 +71,8 @@ const buildUserFromResponse = (response) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // True when the session could not be restored because the server is unreachable
+  const [serverUnavailable, setServerUnavailable] = useState(false);
 
   const getPrimaryRole = (roles) => {
     const normalizedRoles = getNormalizedRoles(roles);
@@ -116,21 +119,25 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('timeFormat');
   };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await ensureCsrfToken();
-        const response = await refreshWithRateLimitRetry();
-        setAccessToken(response.token);
-        syncUser(buildUserFromResponse(response));
-        await loadUserSettings();
-      } catch {
-        clearSession();
-      }
-      setLoading(false);
-    };
+  const restoreSession = async () => {
+    setLoading(true);
+    setServerUnavailable(false);
+    try {
+      await ensureCsrfToken();
+      const response = await refreshWithRateLimitRetry();
+      setAccessToken(response.token);
+      syncUser(buildUserFromResponse(response));
+      await loadUserSettings();
+    } catch (error) {
+      clearSession();
+      // Server down (not a missing/expired session): show the "server unavailable" page
+      setServerUnavailable(isServerUnavailableError(error));
+    }
+    setLoading(false);
+  };
 
-    initAuth();
+  useEffect(() => {
+    restoreSession();
   }, []);
 
   const login = async (email, password) => {
@@ -171,6 +178,8 @@ export const AuthProvider = ({ children }) => {
     syncUser,
     logout,
     loading,
+    serverUnavailable,
+    retrySession: restoreSession,
     isAuthenticated: !!user && !!getAccessToken(),
   };
 
