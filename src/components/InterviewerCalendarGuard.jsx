@@ -17,60 +17,57 @@ const EXEMPT_PATHS = [
 export const InterviewerCalendarGuard = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
-  const [checking, setChecking] = React.useState(true);
-  const [connected, setConnected] = React.useState(false);
+  // Result of the last status check: which user it was for and which navigation it ran on.
+  const [status, setStatus] = React.useState({ userKey: null, locationKey: null, connected: false });
 
   const userRoles = getNormalizedRoles(user);
   const requiresCalendar = hasInterviewerRole(userRoles);
   const isExemptPath = EXEMPT_PATHS.some((path) => location.pathname.startsWith(path));
+  const userKey = user ? String(user.id ?? user.email) : null;
+
+  const shouldCheck = !authLoading && Boolean(userKey) && requiresCalendar && !isExemptPath;
+  const checkedForUser = status.userKey === userKey;
+  // A connected calendar is trusted for the rest of the session. A disconnected one is
+  // re-checked on the next navigation, so returning from the connect page picks it up.
+  const isStale = !checkedForUser || (!status.connected && status.locationKey !== location.key);
 
   React.useEffect(() => {
+    if (!shouldCheck || !isStale) {
+      return undefined;
+    }
+
     let cancelled = false;
+    const locationKey = location.key;
 
-    const checkCalendarStatus = async () => {
-      if (authLoading || !user || !requiresCalendar || isExemptPath) {
+    googleCalendarAPI
+      .getStatus()
+      .then((result) => Boolean(result?.connected))
+      .catch(() => false)
+      .then((connected) => {
         if (!cancelled) {
-          setConnected(true);
-          setChecking(false);
+          setStatus({ userKey, locationKey, connected });
         }
-        return;
-      }
-
-      try {
-        const status = await googleCalendarAPI.getStatus();
-        if (!cancelled) {
-          setConnected(Boolean(status.connected));
-          setChecking(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setConnected(false);
-          setChecking(false);
-        }
-      }
-    };
-
-    setChecking(true);
-    checkCalendarStatus();
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user, requiresCalendar, isExemptPath, location.pathname]);
+  }, [shouldCheck, isStale, userKey, location.key]);
 
   if (authLoading) {
     return <FullScreenLoading />;
   }
 
-  if (!requiresCalendar) {
+  if (!requiresCalendar || isExemptPath || !userKey) {
     return children;
   }
 
-  if (checking && !isExemptPath) {
+  // Only the very first check for a user blocks rendering; later checks run behind the page.
+  if (!checkedForUser) {
     return <FullScreenLoading />;
   }
 
-  if (!connected && !isExemptPath) {
+  if (!status.connected && !isStale) {
     return (
       <Navigate
         to="/interviewer/connect-calendar"
