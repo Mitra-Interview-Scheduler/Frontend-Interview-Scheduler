@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { cn } from '@/lib/utils';
+import { RouteErrorBoundary } from '@/components/ErrorBoundary';
 
 const DEFAULT_OPTIONS = { hasPadding: true, className: undefined };
 
@@ -58,7 +59,8 @@ const Layout = ({ children }) => {
       >
         <div className={cn(options.hasPadding ? 'p-6' : 'p-0', options.className)}>
           <LayoutOptionsContext.Provider value={setOptions}>
-            {children ?? <Outlet />}
+            {/* Inner boundary keeps the navbar/sidebar usable when a single page crashes */}
+            <RouteErrorBoundary>{children ?? <Outlet />}</RouteErrorBoundary>
           </LayoutOptionsContext.Provider>
         </div>
       </main>
