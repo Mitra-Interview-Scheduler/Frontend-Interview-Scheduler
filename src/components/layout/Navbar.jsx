@@ -1,17 +1,18 @@
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Menu, LogOut, User } from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import CalendarHealthIcon from './CalendarHealthIcon';
 import { Badge } from '@/components/ui/badge';
 import PropTypes from 'prop-types';
 import { getNormalizedRoles } from '@/lib/roleHelpers';
@@ -28,23 +29,29 @@ const Navbar = ({ onMenuClick }) => {
 
   const getRoleBadgeColor = (role) => {
     switch (role) {
-      case 'ADMIN': return 'bg-primary text-primary-foreground';
-      case 'HR': return 'bg-secondary text-secondary-foreground';
-      case 'INTERVIEWER': return 'bg-success text-success-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case 'ADMIN':
+        return 'bg-primary text-primary-foreground';
+      case 'HR':
+        return 'bg-secondary text-secondary-foreground';
+      case 'INTERVIEWER':
+        return 'bg-success text-success-foreground';
+      default:
+        return 'bg-muted text-muted-foreground';
     }
   };
 
-  const profileImage = normalizeImageUrl(user?.profilePicture || user?.profilePictureUrl || null);
+  const profileImage = normalizeImageUrl(
+    user?.profilePicture || user?.profilePictureUrl || null
+  );
   const userRoles = getNormalizedRoles(user);
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 shadow-sm">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onMenuClick}
             title="Toggle Sidebar"
           >
@@ -66,7 +73,8 @@ const Navbar = ({ onMenuClick }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <CalendarHealthIcon />
           <NotificationBell />
 
           <DropdownMenu>
@@ -108,7 +116,9 @@ const Navbar = ({ onMenuClick }) => {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div>
-                  <p className="font-medium">{user?.firstName} {user?.lastName}</p>
+                  <p className="font-medium">
+                    {user?.firstName} {user?.lastName}
+                  </p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                   {userRoles.length > 0 && (
                     <div className="flex gap-1 flex-wrap mt-2">
@@ -126,7 +136,10 @@ const Navbar = ({ onMenuClick }) => {
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem
+                onClick={logout}
+                className="text-destructive focus:text-destructive"
+              >
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
               </DropdownMenuItem>

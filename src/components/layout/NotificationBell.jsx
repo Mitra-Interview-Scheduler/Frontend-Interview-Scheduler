@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
-import { Bell, CheckCheck, ChevronDown } from 'lucide-react';
+import { Bell, CheckCheck, ChevronDown, ClipboardList } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading';
@@ -29,6 +29,7 @@ const TYPE_LABELS = {
   CANDIDATE_COORDINATOR_ASSIGNED: 'Candidate',
   CANDIDATE_COORDINATOR_UNASSIGNED: 'Reassigned',
   FEEDBACK_SUBMITTED: 'Feedback',
+  FEEDBACK_NUDGE: 'Feedback reminder',
   STATUS_CHANGED: 'Status',
   INTERVIEW_POSTPONE_REQUESTED: 'Time Proposed',
   INTERVIEW_POSTPONE_REJECTED: 'Time Declined',
@@ -49,13 +50,30 @@ const formatNotificationType = (type) => {
 const isCancelledNotification = (type) =>
   type === 'INTERVIEW_CANCELLED' || (type && type.includes('CANCELLED'));
 
+const feedbackFormPath = (notification) => {
+  if (!notification?.relatedEntityId) return null;
+  if (
+    notification.type === 'FEEDBACK_NUDGE'
+    || notification.type === 'ASSESSMENT_REVIEW_ASSIGNED'
+  ) {
+    return `/interviewer/feedback/${notification.relatedEntityId}`;
+  }
+  return null;
+};
+
 const NotificationItem = ({
   notification,
   expanded,
   onClick,
   onMarkAsRead,
+  onOpenFeedback,
 }) => {
   const cancelled = isCancelledNotification(notification.type);
+  const formPath = feedbackFormPath(notification);
+  const formLabel =
+    notification.type === 'ASSESSMENT_REVIEW_ASSIGNED'
+      ? 'Open assessment review'
+      : 'Open feedback form';
 
   return (
     <div
@@ -146,34 +164,51 @@ const NotificationItem = ({
         )}
       </button>
 
-      {expanded && !notification.read && (
+      {formPath || (expanded && !notification.read) ? (
         <div
           className={cn(
-            'mx-4 mb-3 mt-1 border-t pt-3',
-            cancelled ? 'border-destructive/20' : 'border-primary/15'
+            'mx-4 mb-3 mt-1 space-y-2',
+            (formPath || expanded) && (cancelled ? 'border-t border-destructive/20 pt-3' : 'border-t border-primary/15 pt-3')
           )}
         >
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={cn(
-              'w-full h-9 gap-2 text-xs font-medium shadow-sm',
-              cancelled
-                ? 'border-destructive/35 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive'
-                : 'border-primary/35 bg-background text-primary hover:bg-primary/10 hover:text-primary'
-            )}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onMarkAsRead(notification.id);
-            }}
-          >
-            <CheckCheck className="w-4 h-4" />
-            Mark as read
-          </Button>
+          {formPath ? (
+            <Button
+              type="button"
+              size="sm"
+              className="w-full h-10 gap-2 text-xs font-medium"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenFeedback(notification, formPath);
+              }}
+            >
+              <ClipboardList className="w-4 h-4" />
+              {formLabel}
+            </Button>
+          ) : null}
+          {expanded && !notification.read ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn(
+                'w-full h-10 gap-2 text-xs font-medium shadow-sm',
+                cancelled
+                  ? 'border-destructive/35 bg-background text-destructive hover:bg-destructive/10 hover:text-destructive'
+                  : 'border-primary/35 bg-background text-primary hover:bg-primary/10 hover:text-primary'
+              )}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onMarkAsRead(notification.id);
+              }}
+            >
+              <CheckCheck className="w-4 h-4" />
+              Mark as read
+            </Button>
+          ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -248,17 +283,20 @@ const NotificationBell = () => {
     }
   }, [unread.length, read.length]);
 
+  const handleOpenFeedback = (notification, path) => {
+    if (!notification.read) {
+      markAsRead(notification.id);
+    }
+    setPanelOpen(false);
+    setExpandedId(null);
+    navigate(path);
+  };
+
   const handleNotificationClick = (notification) => {
     setExpandedId((current) => (current === notification.id ? null : notification.id));
-    if (
-      notification?.type === 'ASSESSMENT_REVIEW_ASSIGNED'
-      && notification?.relatedEntityId
-    ) {
-      if (!notification.read) {
-        markAsRead(notification.id);
-      }
-      setPanelOpen(false);
-      navigate(`/interviewer/feedback/${notification.relatedEntityId}`);
+    const path = feedbackFormPath(notification);
+    if (notification?.type === 'ASSESSMENT_REVIEW_ASSIGNED' && path) {
+      handleOpenFeedback(notification, path);
     }
   };
 
@@ -285,6 +323,7 @@ const NotificationBell = () => {
             expanded={expandedId === notification.id}
             onClick={() => handleNotificationClick(notification)}
             onMarkAsRead={handleMarkAsRead}
+            onOpenFeedback={handleOpenFeedback}
           />
         ))}
       </div>

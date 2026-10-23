@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +58,7 @@ const getTargetDesignation = (candidate) => {
 
 const CandidatesPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { formatDate } = useFormattedDateTime();
   const { candidateSteps } = useCandidateSteps();
@@ -65,7 +66,7 @@ const CandidatesPage = () => {
   const [departments, setDepartments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('ALL');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState(() => searchParams.get('status') || 'ALL');
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -76,6 +77,25 @@ const CandidatesPage = () => {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [isInterviewSchedulePageOpen, setIsInterviewSchedulePageOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+
+  // Apply status from dashboard funnel (or other deep links).
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || 'ALL';
+    setFilterStatus((current) => (current === statusFromUrl ? current : statusFromUrl));
+  }, [searchParams]);
+
+  const handleStatusFilterChange = (value) => {
+    setFilterStatus(value);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (!value || value === 'ALL') next.delete('status');
+        else next.set('status', value);
+        return next;
+      },
+      { replace: true }
+    );
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -197,7 +217,7 @@ const CandidatesPage = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <Select value={filterStatus} onValueChange={handleStatusFilterChange}>
                 <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
