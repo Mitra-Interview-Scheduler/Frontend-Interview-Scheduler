@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -275,7 +274,7 @@ const HRDashboard = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="space-y-6">
           <div>
             <h1 className="text-4xl font-bold text-foreground mb-2">Pipeline Cockpit</h1>
@@ -286,12 +285,12 @@ const HRDashboard = () => {
           <StatCardsSkeleton count={4} />
           <LoadingState label="Loading pipeline cockpit…" minHeight="sm" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <motion.div
         className="space-y-6"
         variants={containerVariants}
@@ -804,7 +803,7 @@ const HRDashboard = () => {
           </DashboardSection>
         </motion.div>
       </motion.div>
-    </Layout>
+    </>
   );
 };
 

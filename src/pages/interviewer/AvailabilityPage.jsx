@@ -15,7 +15,6 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, RefreshCw, Calenda
 import { Badge } from '@/components/ui/badge';
 import { Spinner, LoadingOverlay } from '@/components/ui/loading';
 import { PageHeader } from '@/components/ui/page-header';
-import Layout from '@/components/layout/Layout';
 import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -817,7 +816,7 @@ const handleSelectSlot = ({ start, end }) => {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <Layout>
+    <>
       <div className="space-y-6 pb-1">
 
         {/* Header */}
@@ -1027,7 +1026,7 @@ const handleSelectSlot = ({ start, end }) => {
           }
         }}
       />
-    </Layout>
+    </>
   );
 };
 

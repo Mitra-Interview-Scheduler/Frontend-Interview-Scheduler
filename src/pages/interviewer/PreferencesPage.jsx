@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Users, Plus, Trash2, Star, Search } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -100,7 +99,7 @@ const PreferencesPage = () => {
     });
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Panel Preferences</h1>
@@ -309,7 +308,7 @@ const PreferencesPage = () => {
           </CardContent>
         </Card>
       </div>
-    </Layout>
+    </>
   );
 };
 

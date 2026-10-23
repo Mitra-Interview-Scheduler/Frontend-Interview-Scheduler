@@ -8,7 +8,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -184,7 +183,7 @@ const CandidatesPage = () => {
   const startIndex = (currentPage - 1) * CANDIDATES_PER_PAGE;
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title="Candidates"
@@ -538,7 +537,7 @@ const CandidatesPage = () => {
           onScheduled={applyFilters}
         />
       </div>
-    </Layout>
+    </>
   );
 };
 

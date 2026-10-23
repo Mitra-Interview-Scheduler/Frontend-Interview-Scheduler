@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -191,7 +190,7 @@ const EmailLogsPage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title={
@@ -542,7 +541,7 @@ const EmailLogsPage = () => {
           })()}
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 };
 

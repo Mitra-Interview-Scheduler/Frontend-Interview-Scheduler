@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Mail, Briefcase, Award, TrendingUp, FileText, ArrowLeft, MapPin, Hash, Phone, Eye, Network, Layers3, Hourglass, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import Layout from '@/components/layout/Layout';
 import { PageLoading, Spinner } from '@/components/ui/loading';
 import { feedbackAPI } from '@/services/feedbackAPI';
 import { feedbackQuestionsAPI } from '@/services/feedbackQuestionsAPI';
@@ -30,12 +29,14 @@ import {
   readResponseValue,
 } from '@/lib/feedbackResponseKeys';
 import { useAuth } from '@/context/AuthContext';
+import { useLayoutOptions } from '@/components/layout/Layout';
 
 function InterviewFeedbackPage() {
   const navigate = useNavigate();
   const { interviewScheduleId } = useParams();
   const { user } = useAuth();
   
+  useLayoutOptions({ hasPadding: false });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -660,7 +661,7 @@ function InterviewFeedbackPage() {
   };
 
   return (
-    <Layout hasPadding={false}>
+    <>
       <div className="max-h-[90vh] flex flex-col ">
         
         {/* Fixed Header */}
@@ -1140,7 +1141,7 @@ function InterviewFeedbackPage() {
           : 'Confirm that this interview is finished. Submitted feedback will be locked and shown on the candidate profile. This action cannot be undone.'}
         confirmLabel={assessmentMeta ? 'Complete Assessment' : 'Confirm Complete'}
       />
-    </Layout>
+    </>
   );
 }
 

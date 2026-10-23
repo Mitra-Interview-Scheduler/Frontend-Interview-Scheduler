@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -548,7 +547,7 @@ const DesignationsPage = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="space-y-6 overflow-hidden">
           <PageHeader
             title="Designations & Tiers"
@@ -571,12 +570,12 @@ const DesignationsPage = () => {
 
           <LoadingState label="Loading…" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6 overflow-hidden">
         <PageHeader
           title="Designations & Tiers"
@@ -1313,7 +1312,7 @@ const DesignationsPage = () => {
         onConfirm={executeConfirmAction}
         loading={isMutating}
       />
-    </Layout>
+    </>
   );
 };
 

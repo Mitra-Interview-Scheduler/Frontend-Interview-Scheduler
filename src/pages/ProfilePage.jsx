@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User, Mail, Phone, Briefcase, Award, SquarePen, Save, TrendingUp } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { LoadingState, LoadingSwap } from '@/components/ui/loading';
 import { PageHeader } from '@/components/ui/page-header';
 import { toast } from 'sonner';
@@ -234,9 +233,9 @@ const ProfilePage = () => {
 
   if (!loading && !profile) {
     return (
-      <Layout>
+      <>
         <div className="text-center text-muted-foreground">Failed to load profile</div>
-      </Layout>
+      </>
     );
   }
 
@@ -245,7 +244,7 @@ const ProfilePage = () => {
     : false;
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title="My Profile"
@@ -572,7 +571,7 @@ const ProfilePage = () => {
         )}
         </LoadingSwap>
       </div>
-    </Layout>
+    </>
   );
 };
 

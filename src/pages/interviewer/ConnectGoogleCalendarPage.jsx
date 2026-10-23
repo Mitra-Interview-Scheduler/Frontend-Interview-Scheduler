@@ -14,7 +14,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState, LoadingSwap } from '@/components/ui/loading';
-import Layout from '@/components/layout/Layout';
 
 const ConnectGoogleCalendarPage = () => {
   const navigate = useNavigate();
@@ -81,7 +80,7 @@ const ConnectGoogleCalendarPage = () => {
   }
 
   return (
-    <Layout>
+    <>
       <LoadingSwap loading={loading} fallback={<LoadingState label="Loading…" />}>
       <div className="flex items-center justify-center min-h-[60vh] p-4">
       <motion.div
@@ -115,7 +114,7 @@ const ConnectGoogleCalendarPage = () => {
       </motion.div>
       </div>
       </LoadingSwap>
-    </Layout>
+    </>
   );
 };
 

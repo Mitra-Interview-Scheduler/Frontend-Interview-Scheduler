@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -159,7 +158,7 @@ const DomainsPage = () => {
   }, [domains, searchTerm, statusFilter]);
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title="Domains"
@@ -331,7 +330,7 @@ const DomainsPage = () => {
         onConfirm={handleConfirm}
         loading={isMutating}
       />
-    </Layout>
+    </>
   );
 };
 
