@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { googleCalendarAPI } from '@/services/api';
 import { getNormalizedRoles, hasInterviewerRole } from '@/lib/roleHelpers';
 import { FullScreenLoading } from '@/components/ui/loading';
+import { getCalendarGrantMsLeft, isCalendarUsable } from '@/lib/googleCalendarRedirect';
 
 const EXEMPT_PATHS = [
   '/login',
@@ -17,8 +18,15 @@ const EXEMPT_PATHS = [
 export const InterviewerCalendarGuard = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
-  // Result of the last status check: which user it was for and which navigation it ran on.
-  const [status, setStatus] = React.useState({ userKey: null, locationKey: null, connected: false });
+  // Result of the last status check: which user it was for, which navigation it ran on, when the
+  // Google grant expires, and whether an exempt page (settings, connect page…) was visited since.
+  const [status, setStatus] = React.useState({
+    userKey: null,
+    locationKey: null,
+    connected: false,
+    expiresAt: Infinity,
+    visitedExempt: false,
+  });
 
   const userRoles = getNormalizedRoles(user);
   const requiresCalendar = hasInterviewerRole(userRoles);
@@ -27,9 +35,19 @@ export const InterviewerCalendarGuard = ({ children }) => {
 
   const shouldCheck = !authLoading && Boolean(userKey) && requiresCalendar && !isExemptPath;
   const checkedForUser = status.userKey === userKey;
-  // A connected calendar is trusted for the rest of the session. A disconnected one is
-  // re-checked on the next navigation, so returning from the connect page picks it up.
-  const isStale = !checkedForUser || (!status.connected && status.locationKey !== location.key);
+  // A connected calendar is trusted until its grant expires or the user visits an exempt page
+  // (where they can disconnect or reconnect it). A disconnected one is re-checked on the next
+  // navigation, so returning from the connect page picks up the new connection.
+  const isStale = !checkedForUser
+    || status.visitedExempt
+    || (status.connected && status.expiresAt <= Date.now())
+    || (!status.connected && status.locationKey !== location.key);
+
+  React.useEffect(() => {
+    if (isExemptPath && checkedForUser && !status.visitedExempt) {
+      setStatus((prev) => ({ ...prev, visitedExempt: true }));
+    }
+  }, [isExemptPath, checkedForUser, status.visitedExempt]);
 
   React.useEffect(() => {
     if (!shouldCheck || !isStale) {
@@ -41,11 +59,17 @@ export const InterviewerCalendarGuard = ({ children }) => {
 
     googleCalendarAPI
       .getStatus()
-      .then((result) => Boolean(result?.connected))
-      .catch(() => false)
-      .then((connected) => {
+      .catch(() => null)
+      .then((result) => {
         if (!cancelled) {
-          setStatus({ userKey, locationKey, connected });
+          setStatus({
+            userKey,
+            locationKey,
+            // An expired grant counts as disconnected so the user is sent to reconnect.
+            connected: isCalendarUsable(result),
+            expiresAt: Date.now() + getCalendarGrantMsLeft(result),
+            visitedExempt: false,
+          });
         }
       });
 
