@@ -184,15 +184,28 @@ const HRDashboard = () => {
     try {
       const res = await dashboardAPI.nudgeFeedback(scheduleId);
       toast({
-        title: 'Ping sent',
+        title: 'Reminder sent',
         description: res?.message || 'Interviewer notified to submit feedback.',
       });
-      await loadDashboard({ silent: true });
+      // Refresh only the overdue-feedback card (nudge counts / last reminded), not the whole dashboard.
+      const overdue = await dashboardAPI.getHrDashboardItems('feedbackOverdue', {
+        ...hrItemParams,
+        page: 0,
+        size: 5,
+      });
+      setData((prev) =>
+        prev
+          ? { ...prev, actionQueue: { ...prev.actionQueue, feedbackOverdue: asCountedList(overdue) } }
+          : prev
+      );
     } catch (err) {
+      const status = err.response?.status;
+      const message = err.response?.data?.message || err.message || 'Could not send reminder.';
+      // 409 = already reminded recently / feedback already in / not overdue: informational, not an error.
       toast({
-        title: 'Ping failed',
-        description: err.response?.data?.message || err.message || 'Could not send ping.',
-        variant: 'destructive',
+        title: status === 409 ? 'No reminder sent' : 'Reminder failed',
+        description: message,
+        variant: status === 409 ? 'default' : 'destructive',
       });
     } finally {
       setPingingId(null);
