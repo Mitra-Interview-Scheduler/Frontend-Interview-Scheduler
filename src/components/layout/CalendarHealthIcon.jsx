@@ -44,8 +44,18 @@ const CalendarHealthIcon = () => {
 
   useEffect(() => {
     loadStatus();
-    const id = setInterval(loadStatus, 5 * 60 * 1000);
-    return () => clearInterval(id);
+    // Poll only while the tab is visible; refresh as soon as the user comes back to it.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') loadStatus();
+    }, 5 * 60 * 1000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadStatus();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [loadStatus]);
 
   // After OAuth reconnect redirect (?googleCalendar=connected), refresh expiry immediately.
@@ -79,11 +89,12 @@ const CalendarHealthIcon = () => {
     }
   };
 
-  if (!isInterviewer || !status?.connected || !status?.tokenExpiresAt) {
+  if (!isInterviewer || !status?.connected || !status?.grantExpiresAt) {
     return null;
   }
 
-  const expiresAt = new Date(status.tokenExpiresAt);
+  // grantExpiresAt is a UTC timestamp with offset, so the browser parses it unambiguously.
+  const expiresAt = new Date(status.grantExpiresAt);
   if (Number.isNaN(expiresAt.getTime())) {
     return null;
   }
@@ -127,7 +138,7 @@ const CalendarHealthIcon = () => {
               : daysLeft <= 1
                 ? 'Expires within a day'
                 : `About ${daysLeft} days left`}
-            {status.tokenExpiresAt ? ` · ${formatDateTime(status.tokenExpiresAt)}` : ''}
+            {status.grantExpiresAt ? ` · ${formatDateTime(status.grantExpiresAt)}` : ''}
           </p>
           {status.googleAccountEmail ? (
             <p className="text-xs text-muted-foreground mt-1 truncate">
