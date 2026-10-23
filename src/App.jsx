@@ -42,6 +42,8 @@ import ConnectGoogleCalendarPage from "./pages/interviewer/ConnectGoogleCalendar
 import NotFound from "./pages/NotFound";
 import { InterviewerCalendarGuard } from "@/components/InterviewerCalendarGuard";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
+import ConnectionBanner from "@/components/ConnectionBanner";
+import { ServerAvailabilityGate } from "./pages/ServerUnavailable";
 
 const queryClient = new QueryClient();
 
@@ -55,7 +57,9 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+            <ConnectionBanner />
             <RouteErrorBoundary fullScreen>
+            <ServerAvailabilityGate>
             <InterviewerCalendarGuard>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -342,6 +346,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
             </InterviewerCalendarGuard>
+            </ServerAvailabilityGate>
             </RouteErrorBoundary>
             </BrowserRouter>
           </TooltipProvider>

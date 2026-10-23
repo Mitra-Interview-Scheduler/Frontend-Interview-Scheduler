@@ -8,6 +8,7 @@ import {
   setAccessToken,
   setCsrfToken,
 } from '@/lib/authSession';
+import { isServerUnavailableError, setServerReachable } from '@/lib/serverStatus';
 
 const API_BASE_URL = env.API_BASE_URL;
 
@@ -139,6 +140,7 @@ const refreshAccessToken = () => refreshSession().then((data) => data.token);
 
 api.interceptors.response.use(
   (response) => {
+    setServerReachable(true);
     const token = response.data?.token;
     if (typeof token === 'string' && isAuthSessionUrl(response.config?.url || '')) {
       setAccessToken(token);
@@ -146,6 +148,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    setServerReachable(!isServerUnavailableError(error));
     const original = error.config;
     if (!original || original._skipAuthRedirect) {
       return Promise.reject(error);
