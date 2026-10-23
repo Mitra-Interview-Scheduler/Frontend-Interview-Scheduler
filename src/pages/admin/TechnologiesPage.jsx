@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -281,7 +280,7 @@ const TechnologiesPage = () => {
   const grouped = groupByCategory(filteredTechnologies);
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title="Technologies"
@@ -599,7 +598,7 @@ const TechnologiesPage = () => {
           loading={isMutating}
         />
       </div>
-    </Layout>
+    </>
   );
 };
 

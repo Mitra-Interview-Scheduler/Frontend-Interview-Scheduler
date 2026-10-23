@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -148,7 +147,7 @@ const AnalyticsPage = () => {
   ];
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -531,7 +530,7 @@ const AnalyticsPage = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
+    </>
   );
 };
 

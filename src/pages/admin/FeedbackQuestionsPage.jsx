@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -428,7 +427,7 @@ const FeedbackQuestionsPage = () => {
   const previewPayload = buildPayload();
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-1">
@@ -834,7 +833,7 @@ const FeedbackQuestionsPage = () => {
           showEdit={false}
         />
       </div>
-    </Layout>
+    </>
   );
 };
 

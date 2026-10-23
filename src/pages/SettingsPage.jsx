@@ -6,7 +6,6 @@ import { userSettingsAPI, googleCalendarAPI } from '@/services/api';
 import { hasInterviewerRole, getNormalizedRoles } from '@/lib/roleHelpers';
 import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
 import { useNavigate } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -319,7 +318,7 @@ const SettingsPage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="w-full space-y-6 pb-8">
         <PageHeader
           title="Settings"
@@ -663,7 +662,7 @@ const SettingsPage = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

@@ -21,7 +21,6 @@ import {
   Shield,
   Users,
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -145,7 +144,7 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="space-y-6">
           <div>
             <h1 className="text-3xl font-bold text-foreground">System & Org Health</h1>
@@ -154,12 +153,12 @@ const AdminDashboard = () => {
           <StatCardsSkeleton count={4} />
           <LoadingState label="Loading admin dashboard…" minHeight="sm" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <motion.div
         className="space-y-6"
         variants={containerVariants}
@@ -654,7 +653,7 @@ const AdminDashboard = () => {
           </DashboardSection>
         </motion.div>
       </motion.div>
-    </Layout>
+    </>
   );
 };
 

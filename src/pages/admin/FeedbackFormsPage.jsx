@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -242,7 +241,7 @@ const FeedbackFormsPage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div
         className={
           activeTab === 'forms'
@@ -616,7 +615,7 @@ const FeedbackFormsPage = () => {
           getDesignationName={getDesignationName}
         />
       </div>
-    </Layout>
+    </>
   );
 };
 

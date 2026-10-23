@@ -1,6 +1,5 @@
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'; 
 import React, { useState, useEffect, useRef, useCallback ,useMemo } from 'react';
-import Layout from '@/components/layout/Layout';
 import { useCalendarFormats } from '@/hooks/useCalendarFormats';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import {
@@ -1952,7 +1951,7 @@ const calendarSlotPropGetter = useCallback((date) => {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
 
         {/* Header */}
@@ -3239,7 +3238,7 @@ const calendarSlotPropGetter = useCallback((date) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 };
 
