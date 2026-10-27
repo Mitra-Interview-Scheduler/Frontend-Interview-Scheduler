@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { googleCalendarAPI } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { handleGoogleCalendarOAuthResult } from '@/lib/googleCalendarRedirect';
+import { handleGoogleCalendarOAuthResult, isCalendarUsable } from '@/lib/googleCalendarRedirect';
 import {
   getDefaultDashboardPath,
   getNormalizedRoles,
@@ -14,7 +14,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState, LoadingSwap } from '@/components/ui/loading';
-import Layout from '@/components/layout/Layout';
 
 const ConnectGoogleCalendarPage = () => {
   const navigate = useNavigate();
@@ -23,6 +22,7 @@ const ConnectGoogleCalendarPage = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [grantExpired, setGrantExpired] = useState(false);
 
   const userRoles = useMemo(() => getNormalizedRoles(user), [user]);
   const requiresCalendar = hasInterviewerRole(userRoles);
@@ -47,10 +47,11 @@ const ConnectGoogleCalendarPage = () => {
     const verifyStatus = async () => {
       try {
         const status = await googleCalendarAPI.getStatus();
-        if (status.connected) {
+        if (isCalendarUsable(status)) {
           navigate(returnPath, { replace: true });
           return;
         }
+        setGrantExpired(Boolean(status?.connected));
       } catch (error) {
         console.error('Failed to check Google Calendar status', error);
       } finally {
@@ -81,7 +82,7 @@ const ConnectGoogleCalendarPage = () => {
   }
 
   return (
-    <Layout>
+    <>
       <LoadingSwap loading={loading} fallback={<LoadingState label="Loading…" />}>
       <div className="flex items-center justify-center min-h-[60vh] p-4">
       <motion.div
@@ -95,11 +96,16 @@ const ConnectGoogleCalendarPage = () => {
             <div className="mx-auto w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center">
               <Calendar className="w-7 h-7 text-white" />
             </div>
-            <CardTitle className="text-2xl">Connect Google Calendar</CardTitle>
+            <CardTitle className="text-2xl">
+              {grantExpired ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+            </CardTitle>
             <CardDescription>
-              Your account includes the Interviewer role, so Google Calendar access is required
-              before using Mitra. This syncs your availability slots and interview bookings with
-              Google Meet links.
+              {grantExpired
+                ? 'Your Google Calendar authorization has expired. Reconnect it to keep syncing '
+                  + 'your availability slots and interview bookings.'
+                : 'Your account includes the Interviewer role, so Google Calendar access is required '
+                  + 'before using Mitra. This syncs your availability slots and interview bookings with '
+                  + 'Google Meet links.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -108,14 +114,18 @@ const ConnectGoogleCalendarPage = () => {
               loading={connecting}
               className="w-full"
             >
-              {connecting ? 'Redirecting to Google...' : 'Connect Google Calendar'}
+              {connecting
+                ? 'Redirecting to Google...'
+                : grantExpired
+                  ? 'Reconnect Google Calendar'
+                  : 'Connect Google Calendar'}
             </Button>
           </CardContent>
         </Card>
       </motion.div>
       </div>
       </LoadingSwap>
-    </Layout>
+    </>
   );
 };
 

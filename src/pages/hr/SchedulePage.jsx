@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -213,7 +212,7 @@ const SchedulePage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <motion.div 
@@ -521,7 +520,7 @@ const SchedulePage = () => {
           </DialogContent>
         </Dialog>
       </div>
-    </Layout>
+    </>
   );
 };
 

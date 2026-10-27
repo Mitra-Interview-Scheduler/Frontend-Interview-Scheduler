@@ -44,3 +44,20 @@ export const handleGoogleCalendarOAuthResult = ({
 
   return false;
 };
+
+/**
+ * Milliseconds until the Google OAuth grant in a status response expires
+ * (Infinity when the backend did not send an expiry).
+ */
+export const getCalendarGrantMsLeft = (status) => {
+  if (!status?.grantExpiresAt) return Infinity;
+  const expiresAt = new Date(status.grantExpiresAt).getTime();
+  return Number.isNaN(expiresAt) ? Infinity : expiresAt - Date.now();
+};
+
+/**
+ * True when the calendar is linked and its grant has not expired yet. The status
+ * endpoint keeps reporting `connected` after the grant expires, so check both.
+ */
+export const isCalendarUsable = (status) =>
+  Boolean(status?.connected) && getCalendarGrantMsLeft(status) > 0;

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -233,7 +232,7 @@ const AssessmentsToReviewPage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <PageHeader
           title="Assessments to review"
@@ -294,7 +293,7 @@ const AssessmentsToReviewPage = () => {
           </CardContent>
         </Card>
       </div>
-    </Layout>
+    </>
   );
 };
 

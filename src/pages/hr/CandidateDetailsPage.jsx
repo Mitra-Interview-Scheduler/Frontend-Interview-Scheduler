@@ -7,7 +7,6 @@ import { LoadingState } from '@/components/ui/loading';
 import { useFormattedDateTime } from '@/hooks/useFormattedDateTime';
 import { motion } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import Layout from '@/components/layout/Layout';
 import StepProgressIndicator from '@/components/StepProgressIndicator';
 import { CandidateAvatar } from '@/components/CandidateAvatar';
 import CandidateNextStepsCard from './components/CandidateNextStepsCard';
@@ -22,6 +21,7 @@ import { createDocumentObjectUrl, downloadBlobResponse, revokeObjectUrl } from '
 import { useCandidateSteps } from '@/hooks/useCandidateSteps';
 import { useCandidateInterviews } from '@/hooks/useCandidateInterviews';
 import { isFinalClosingStage } from '@/lib/nextStepsConfig';
+import { useLayoutOptions } from '@/components/layout/Layout';
 function CandidateDetailsPage() {
   const navigate = useNavigate();
   const { formatDate } = useFormattedDateTime();
@@ -38,6 +38,10 @@ function CandidateDetailsPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [departments, setDepartments] = useState([]);
   const [editOpening, setEditOpening] = useState(false);
+
+  // Full-bleed content except for the error state, which keeps the default padding
+  const isFullBleed = loading || (!error && Boolean(candidate));
+  useLayoutOptions(isFullBleed ? { hasPadding: false, className: 'overflow-hidden' } : {});
   const { candidateSteps, closingSteps, refreshSteps, loading: stepsLoading } = useCandidateSteps(candidate);
   const { interviewRequests, interviews, panels, loading: interviewsLoading, error: interviewsError } = useCandidateInterviews(
     candidate?.id,
@@ -160,7 +164,7 @@ function CandidateDetailsPage() {
 
   if (loading) {
     return (
-      <Layout hasPadding={false} className="overflow-hidden">
+      <>
         <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
           <div className="border-blue-200 px-4 py-3 shadow-sm flex-shrink-0">
             <div className="flex items-center gap-4">
@@ -181,13 +185,13 @@ function CandidateDetailsPage() {
           </div>
           <LoadingState label="Loading candidate details..." className="flex-1" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (error || !candidate) {
     return (
-      <Layout>
+      <>
         <div className="h-[calc(100vh-4rem)] flex justify-center items-center">
           <div className="text-center">
             <p className="text-red-500 text-lg mb-4">{error || 'Candidate not found'}</p>
@@ -197,12 +201,12 @@ function CandidateDetailsPage() {
             </Button>
           </div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout hasPadding={false} className="overflow-hidden">
+    <>
       <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -417,7 +421,7 @@ function CandidateDetailsPage() {
           onSaveSuccess={handleCandidateUpdated}
         />
       </div>
-    </Layout>
+    </>
   );
 }
 

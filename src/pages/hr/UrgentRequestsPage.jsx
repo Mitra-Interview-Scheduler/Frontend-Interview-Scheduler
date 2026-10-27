@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +68,7 @@ const UrgentRequestsPage = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -248,7 +247,7 @@ const UrgentRequestsPage = () => {
           ))}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

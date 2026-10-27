@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -519,7 +518,7 @@ export default function UsersPage() {
   ];
 
   return (
-    <Layout>
+    <>
       <div  className="space-y-6">
 
         <PageHeader
@@ -847,6 +846,6 @@ export default function UsersPage() {
         onConfirm={handleConfirm}
         loading={isMutating}
       />
-    </Layout>
+    </>
   );
 }

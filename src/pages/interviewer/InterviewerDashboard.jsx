@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Settings,
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LoadingState } from '@/components/ui/loading';
@@ -182,7 +181,7 @@ const InterviewerDashboard = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="space-y-6">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">My Week</h1>
@@ -191,12 +190,12 @@ const InterviewerDashboard = () => {
           <StatCardsSkeleton count={3} />
           <LoadingState label="Loading your week…" minHeight="sm" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <motion.div
         className="space-y-6"
         variants={containerVariants}
@@ -523,7 +522,7 @@ const InterviewerDashboard = () => {
           </DashboardSection>
         </motion.div>
       </motion.div>
-    </Layout>
+    </>
   );
 };
 

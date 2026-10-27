@@ -8,7 +8,6 @@ import {
   BarChart3, TrendingUp, Award, Target, Star, FileText,
   Video, MessageSquare, ThumbsUp, ThumbsDown, Timer
 } from 'lucide-react';
-import Layout from '@/components/layout/Layout';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -346,7 +345,7 @@ const RequestsPage = () => {
   );
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">My Interviews</h1>
@@ -706,7 +705,7 @@ const RequestsPage = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
+    </>
   );
 };
 

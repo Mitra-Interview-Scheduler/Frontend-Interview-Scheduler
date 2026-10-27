@@ -8,6 +8,7 @@ import { Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
 import { googleCalendarAPI } from '@/services/api';
+import { isCalendarUsable } from '@/lib/googleCalendarRedirect';
 import {
   getDefaultDashboardPath,
   getNormalizedRoles,
@@ -54,7 +55,7 @@ const Login = () => {
     if (hasInterviewerRole(roles)) {
       try {
         const status = await googleCalendarAPI.getStatus();
-        if (!status.connected) {
+        if (!isCalendarUsable(status)) {
           navigate('/interviewer/connect-calendar', { replace: true });
           return;
         }
