@@ -18,7 +18,6 @@ import DomainsPage from "./pages/admin/DomainsPage";
 import InterviewTypesPage from "./pages/admin/InterviewTypesPage";
 import CatalogTypesPage from "./pages/admin/CatalogTypesPage";
 import RulesPage from "./pages/admin/RulesPage";
-import AnalyticsPage from "./pages/admin/AnalyticsPage";
 import EmailLogsPage from "./pages/admin/EmailLogsPage";
 import FeedbackQuestionsPage from "./pages/admin/FeedbackQuestionsPage";
 import FeedbackFormsPage from "./pages/admin/FeedbackFormsPage";
@@ -128,11 +127,7 @@ const App = () => (
             />
             <Route
               path="/admin/analytics"
-              element={
-                <PrivateRoute allowedRoles={['ADMIN']}>
-                  <AnalyticsPage />
-                </PrivateRoute>
-              }
+              element={<Navigate to="/admin/dashboard" replace />}
             />
             <Route
               path="/admin/email-logs"
