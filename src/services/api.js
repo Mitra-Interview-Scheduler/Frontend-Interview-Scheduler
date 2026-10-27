@@ -227,6 +227,11 @@ export const usersAPI = {
     const response = await api.get(queryString ? `/admin/users?${queryString}` : '/admin/users');
     return response.data; // expects List<UserDto>
   },
+  // Admin-only create; unlike authAPI.register it does not replace the admin's session.
+  create: async (userData) => {
+    const response = await api.post('/admin/users', userData);
+    return response.data;
+  },
   updateProfessionalDetails: async (id, professionalData) => {
     const response = await api.put(`/admin/users/${id}/professional-details`, professionalData);
     return response.data;

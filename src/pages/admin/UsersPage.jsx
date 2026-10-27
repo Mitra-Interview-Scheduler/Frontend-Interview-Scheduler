@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/hooks/use-toast';
-import { authAPI, usersAPI } from '@/services/api'; 
+import { usersAPI } from '@/services/api';
 import UserRoleStatusDialog from './components/UserRoleStatusDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -144,10 +144,7 @@ function RegisterDialog({ open, onOpenChange, onSuccess }) {
 
     setSubmit(true);
     try {
-      const registered = await authAPI.register({ email, password, firstName, lastName });
-      if (role && role !== 'INTERVIEWER' && registered?.id) {
-        await usersAPI.updateRoles(registered.id, [role]);
-      }
+      await usersAPI.create({ email, password, firstName, lastName, roles: [role] });
       toast({ title: 'User registered', description: `${firstName} ${lastName} added successfully.` });
       handleClose();
       onSuccess();

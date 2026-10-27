@@ -22,7 +22,7 @@ const adminLinks = [
   // { icon: FileText, label: 'Custom Rules', path: '/admin/rules' },
   // { icon: MessageSquare, label: 'Feedback Questions', path: '/admin/feedback-questions' },
   // { icon: MessageSquare, label: 'Feedback Forms', path: '/admin/feedback-forms' },
-  { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
+  // { icon: BarChart3, label: 'Analytics', path: '/admin/analytics' },
   { icon: Mail, label: 'Email Logs', path: '/admin/email-logs' },
 ];
 
